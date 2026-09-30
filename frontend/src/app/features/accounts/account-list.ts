@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, LowerCasePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,18 +13,23 @@ import { MatSortModule } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
 import { Router, RouterLink } from '@angular/router';
 import { stableValue } from '../../core/api';
+import { AuthService } from '../../core/auth.service';
+import { MetadataService } from '../../core/metadata.service';
 import { AccountDetail, AccountListItem, PagedResult } from '../../core/models';
+import { CfFilters, CfValue } from '../../shared/custom-fields';
 import { ListState, inputValue } from '../../shared/list';
 import { AccountFormDialog } from './account-form-dialog';
 
 @Component({
   selector: 'app-account-list',
-  imports: [DatePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule],
+  imports: [DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters],
   template: `
     <div class="page-header">
-      <h1>Accounts</h1>
+      <h1>{{ meta.label('account', true) }}</h1>
       <span class="spacer"></span>
-      <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New account</button>
+      @if (auth.can('account', 'create')) {
+        <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('account') | lowercase }}</button>
+      }
     </div>
     <div class="filters">
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
@@ -32,7 +37,8 @@ import { AccountFormDialog } from './account-form-dialog';
         <input matInput [value]="state.search()" (input)="state.setSearch(inputValue($event))" />
         <mat-icon matSuffix>search</mat-icon>
       </mat-form-field>
-      <mat-slide-toggle [checked]="state.mine()" (change)="state.setMine($event.checked)">My accounts</mat-slide-toggle>
+      <app-cf-filters objectKey="account" [state]="state" />
+      <mat-slide-toggle [checked]="state.mine()" (change)="state.setMine($event.checked)">Mine only</mat-slide-toggle>
     </div>
     <div class="table-wrap">
       @if (data.isLoading()) { <mat-progress-bar mode="indeterminate" /> }
@@ -61,13 +67,19 @@ import { AccountFormDialog } from './account-form-dialog';
           <th mat-header-cell *matHeaderCellDef>Owner</th>
           <td mat-cell *matCellDef="let a">{{ a.ownerName }}</td>
         </ng-container>
+        @for (f of cfFields(); track f.key) {
+          <ng-container [matColumnDef]="'cf.' + f.key">
+            <th mat-header-cell *matHeaderCellDef>{{ f.label }}</th>
+            <td mat-cell *matCellDef="let a"><app-cf-value [field]="f" [value]="a.customFields[f.key]" /></td>
+          </ng-container>
+        }
         <ng-container matColumnDef="createdAt">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Created</th>
           <td mat-cell *matCellDef="let a">{{ a.createdAt | date: 'mediumDate' }}</td>
         </ng-container>
-        <tr mat-header-row *matHeaderRowDef="columns"></tr>
-        <tr mat-row *matRowDef="let row; columns: columns" class="clickable" (click)="open(row)"></tr>
-        <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell empty" [attr.colspan]="columns.length">No accounts found.</td></tr>
+        <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns()" class="clickable" (click)="open(row)"></tr>
+        <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell empty" [attr.colspan]="columns().length">No records found.</td></tr>
       </table>
       <mat-paginator [length]="total()" [pageIndex]="state.page()" [pageSize]="state.pageSize()" [pageSizeOptions]="[10, 20, 50, 100]"
         (page)="state.onPage($event)" />
@@ -77,9 +89,14 @@ import { AccountFormDialog } from './account-form-dialog';
 export class AccountList {
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
+  readonly auth = inject(AuthService);
+  readonly meta = inject(MetadataService);
   readonly inputValue = inputValue;
   readonly state = new ListState();
-  readonly columns = ['name', 'industry', 'city', 'phone', 'counts', 'owner', 'createdAt'];
+  readonly cfFields = computed(() => this.meta.listFields('account'));
+  readonly columns = computed(() => [
+    'name', 'industry', 'city', 'phone', 'counts', ...this.cfFields().map((f) => `cf.${f.key}`), 'owner', 'createdAt',
+  ]);
 
   readonly data = httpResource<PagedResult<AccountListItem>>(() => ({ url: '/api/accounts', params: this.state.params() }));
   private readonly value = stableValue(this.data);

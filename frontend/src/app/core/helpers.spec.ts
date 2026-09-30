@@ -30,6 +30,7 @@ describe('helpers', () => {
   it('errorMessage maps common statuses', () => {
     expect(errorMessage(new HttpErrorResponse({ status: 0 }))).toContain('Cannot reach');
     expect(errorMessage(new HttpErrorResponse({ status: 403 }))).toContain('permission');
+    expect(errorMessage(new HttpErrorResponse({ status: 403, error: { detail: 'Your organisation\'s account is suspended.' } }))).toContain('suspended');
     expect(errorMessage(new HttpErrorResponse({ status: 409, error: 'Account has opportunities.' }))).toBe('Account has opportunities.');
   });
 

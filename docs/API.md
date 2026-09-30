@@ -1,29 +1,27 @@
-# CRM: API Reference
+# CRM Platform: API Reference
 
-- Base URL: `/api`. In development it's proxied from `http://localhost:4200`. The API listens on `http://localhost:5290` and `https://localhost:7185`.
-- Interactive docs (Development): **Scalar UI** at `/scalar` and the OpenAPI JSON at `/openapi/v1.json`.
-- Format: JSON (camelCase). Enums are strings. Timestamps are ISO-8601 UTC. Dates (`expectedCloseDate`) use `yyyy-MM-dd`.
-- Auth: `Authorization: Bearer <accessToken>` on every endpoint except login, refresh and logout.
-- Errors: [RFC 7807 ProblemDetails](https://www.rfc-editor.org/rfc/rfc7807). Validation errors return `400` with an `errors` map, for example `{ "errors": { "name": ["The Name field is required."] } }`.
+- **Base URL:** `/api`. In development it's proxied from `http://localhost:4200`; the API itself listens on `http://localhost:5290`.
+- **Interactive docs (Development):** Scalar UI at `/scalar`, OpenAPI JSON at `/openapi/v1.json`.
+- **Format:** JSON (camelCase). Enums are strings. Timestamps are ISO-8601 UTC. Dates use `yyyy-MM-dd`.
+- **Auth:** `Authorization: Bearer <accessToken>` on everything except login, refresh and logout. The token carries the user (`sub`) and tenant (`tid`), so every request is automatically scoped to the caller's tenant.
+- **Errors:** [RFC 7807 ProblemDetails](https://www.rfc-editor.org/rfc/rfc7807). Validation returns `400` with an `errors` map. Custom-field errors are keyed `customFields.<key>`.
 
-## Common conventions
+## Conventions
 
-**Paged lists** accept `page` (1-based), `pageSize` (1–100, default 20), `search`, `sortBy`, `sortDir` (`asc`/`desc`) and `mine` (`true` = records you own), and return:
+**Paged lists** accept `page` (1-based), `pageSize` (1–100, default 20), `search`, `sortBy`, `sortDir` (`asc`/`desc`) and `mine=true`, and return `{ items, totalCount, page, pageSize }`. Every list is also filtered by the caller's **read scope**: Own, Group or All.
 
-```json
-{ "items": [ ... ], "totalCount": 123, "page": 1, "pageSize": 20 }
-```
+**Custom-field filters:** any list of an object with custom fields accepts `cf.<fieldKey>=<value>` (exact match; numbers and `true`/`false` are typed), e.g. `GET /api/records/ticket?cf.priority=High&cf.vip=true`.
 
-**Status codes:**
+**Permissions:** each endpoint below lists the permission it needs, e.g. `account:update`. `*` means any authenticated user. A record the caller can't **read** returns `404`. A readable record the caller can't modify returns `403`.
 
 | Code | Meaning |
 |---|---|
-| 200 / 201 / 204 | OK / Created (with `Location`) / No Content |
+| 200 / 201 / 204 | OK / Created / No Content |
 | 400 | Validation failed |
-| 401 | Missing, invalid or expired token, or bad credentials |
-| 403 | Authenticated but not allowed (not owner, wrong role) |
-| 404 | Not found |
-| 409 | Business rule conflict (e.g. account has opportunities, lead already converted) |
+| 401 | Missing, invalid or expired token; bad credentials; token without tenant |
+| 403 | Not permitted (scope, admin area or escalation), or the tenant is suspended (sign-in) |
+| 404 | Not found, or not visible to you |
+| 409 | Business rule conflict (in use, already converted, stage has records…) |
 | 423 | Account locked out |
 | 429 | Rate limit exceeded |
 
@@ -31,118 +29,198 @@
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| POST | `/login` | `{ email, password }` | `AuthResponse` · 401 · 423 · 429 |
+| POST | `/login` | `{ email, password }` | `AuthResponse` · 401 · 403 (tenant suspended) · 423 · 429 |
 | POST | `/refresh` | `{ refreshToken }` | `AuthResponse` (rotated) · 401 |
 | POST | `/logout` | `{ refreshToken }` | 204 |
 | GET | `/me` | none | `UserInfo` |
-| POST | `/change-password` | `{ currentPassword, newPassword }` | 204 (all sessions revoked) · 400 |
+| POST | `/change-password` | `{ currentPassword, newPassword }` | 204 (all sessions revoked) |
 
-```json
-// AuthResponse
+```jsonc
+// UserInfo (inside AuthResponse.user)
 {
-  "accessToken": "eyJ...",
-  "expiresAt": "2026-09-30T06:00:00Z",
-  "refreshToken": "base64...",
-  "user": { "id": "0199...", "email": "admin@crm.local", "firstName": "System", "lastName": "Administrator",
-            "fullName": "System Administrator", "roles": ["Admin"] }
+  "id": "0199…", "email": "rep@crm.local", "fullName": "Sam Seller",
+  "roles": ["Standard User"],
+  "tenant": { "id": "0199a000-…-000000000001", "name": "Default", "slug": "default", "currency": "AUD", "template": "sales" },
+  "isAdministrator": false, "isPlatformAdmin": false,
+  // Resolved scopes for "*" and every resource any of the user's roles mentions.
+  // Anything else follows "*" (business objects) or is None (admin areas).
+  "permissions": { "*": { "read": "All", "create": "All", "update": "Own" }, "support_case": { "read": "Own", "create": "All", "update": "Own" } },
+  "teamUserIds": ["0199…"]   // the user plus members of their groups (Group scope)
 }
 ```
 
+## Metadata and settings
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/metadata` | * | `{ tenant, objects[], picklists }`. Each object includes `fields[]` and `stages[]`, and inactive objects are included with `isActive: false`. |
+| GET | `/api/settings` | * | `TenantInfo` |
+| PUT | `/api/settings` | settings:manage | `{ name, currency }` (ISO 4217) |
+
 ## Dashboard
 
-| Method | Path | Query | Response |
+| Method | Path | Permission | Notes |
 |---|---|---|---|
-| GET | `/api/dashboard` | `mine` | `DashboardSummary`: KPIs, `pipelineByStage[]`, `leadsBySource[]`, `wonByMonth[]` (6 months), `upcomingActivities[]` (current user, next 7 days, including overdue) |
+| GET | `/api/dashboard?mine=` | * | KPIs, `pipelineByStage[]` (`stage`, `label`, `color`, `count`, `amount`), `leadsBySource[]`, `wonByMonth[]`, `upcomingActivities[]`, `customPipelines[]` (per custom object with a pipeline). `sections[]` lists the object keys the caller can read; other sections are zero or empty. |
 
-## Accounts (`/api/accounts`)
+## Standard objects
 
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/` | Filters: `search` (name/email/city), `industry`, `ownerId`, `mine`. Sort by: `name` (default), `industry`, `city`, `createdAt` |
-| GET | `/{id}` | `AccountDetail` including `contactCount`, `openOpportunityCount`, `openPipelineAmount` |
-| POST | `/` | `AccountRequest`, returns 201 |
-| PUT | `/{id}` | Owner, Manager or Admin. Returns 403 otherwise. |
-| DELETE | `/{id}` | Manager or Admin. Returns **409** if the account has opportunities. |
+All request bodies accept `customFields: { <key>: value | null }`. Omitted keys keep their stored value, and `null` clears it. `ownerId` is optional; omit it for "me", and any other owner must be within your update scope.
 
-`AccountRequest`: `name*` (≤200), `industry`, `website` (http/https URL), `phone`, `email`, `street`, `city`, `state`, `postalCode`, `country`, `annualRevenue` (≥0), `employeeCount` (≥0), `description` (≤4000), `ownerId`.
-
-## Contacts (`/api/contacts`)
-
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/` | Filters: `search` (name/email/account), `accountId`, `ownerId`, `mine`. Sort by: `lastName` (default), `firstName`, `email`, `account`, `createdAt` |
-| GET | `/{id}` | `ContactDetail` |
-| POST | `/` | `ContactRequest` |
-| PUT | `/{id}` | Owner, Manager or Admin |
-| DELETE | `/{id}` | Manager or Admin |
-
-`ContactRequest`: `firstName*`, `lastName*`, `email`, `phone`, `mobile`, `jobTitle`, `department`, `description`, `accountId` (must exist), `ownerId`.
-
-## Leads (`/api/leads`)
-
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/` | Filters: `search`, `status`, `source`, `ownerId`, `mine`. Sort by: `createdAt` (default, desc), `name`, `company`, `status`, `estimatedValue` |
-| GET | `/{id}` | `LeadDetail` (includes `converted*Id` links) |
-| POST | `/` | `LeadRequest`. `status` can't be `Converted`. |
-| PUT | `/{id}` | Returns 409 if the lead is already converted |
-| POST | `/{id}/convert` | `LeadConvertRequest`, returns `{ accountId, contactId, opportunityId? }`. Returns 409 if already converted. |
-| DELETE | `/{id}` | Manager or Admin |
-
-`LeadRequest`: `firstName*`, `lastName*`, `company*`, `email`, `phone`, `jobTitle`, `source` (`Web|Referral|Event|ColdCall|Advertisement|Partner|Other`), `status` (`New|Contacted|Qualified|Unqualified`), `estimatedValue`, `description`, `ownerId`.
-
-`LeadConvertRequest`: `existingAccountId?` (omit to create an account from `company`), `createOpportunity`, `opportunityName?`, `amount?` (defaults to `estimatedValue`), `expectedCloseDate?` (defaults to today + 30 days).
-
-## Opportunities (`/api/opportunities`)
-
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/` | Filters: `search` (name/account), `stage`, `accountId`, `contactId`, `open` (true/false), `ownerId`, `mine`. Sort by: `expectedCloseDate` (default), `name`, `amount`, `stage`, `account`, `createdAt` |
-| GET | `/pipeline` | All open deals plus deals closed in the last 30 days (max 500), for the Kanban board. Query: `mine` |
-| GET | `/{id}` | `OpportunityDetail` |
-| POST | `/` | `OpportunityRequest` |
-| PUT | `/{id}` | Owner, Manager or Admin |
-| PATCH | `/{id}/stage` | `{ stage, lossReason? }`. Resets probability to the stage default and sets or clears `closedAt`. |
-| DELETE | `/{id}` | Manager or Admin |
-
-`OpportunityRequest`: `name*`, `accountId*`, `contactId`, `amount*` (≥0), `stage` (`Prospecting|Qualification|Proposal|Negotiation|ClosedWon|ClosedLost`), `probability?` (0–100; null means the stage default), `expectedCloseDate*`, `lossReason` (kept only for ClosedLost), `description`, `ownerId`.
-
-## Activities (`/api/activities`)
-
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/` | Filters: `search` (subject), `type`, `status` (`Open|Completed|Overdue`), `accountId`, `contactId`, `leadId`, `opportunityId`, `dueFrom`, `dueTo`, `ownerId`, `mine`. Sort by: `dueAt` (default; nulls last), `subject`, `priority`, `createdAt` |
-| GET | `/{id}` | `ActivityItem` |
-| POST | `/` | `ActivityRequest` |
-| PUT | `/{id}` | Owner, Manager or Admin |
-| POST | `/{id}/complete` | Sets `completedAt` |
-| POST | `/{id}/reopen` | Clears `completedAt` |
-| DELETE | `/{id}` | Owner, Manager or Admin |
-
-`ActivityRequest`: `type` (`Task|Call|Meeting|Email|Note`), `subject*`, `description`, `dueAt`, `priority` (`Low|Normal|High`), `accountId`, `contactId`, `leadId`, `opportunityId`, `ownerId`.
-
-## Users (`/api/users`)
-
-| Method | Path | Role | Notes |
+### Accounts (`/api/accounts`)
+| Method | Path | Permission | Notes |
 |---|---|---|---|
-| GET | `/lookup` | any | Active users `{ id, fullName, email }`, used by owner pickers |
-| GET | `/` | Admin | All users with roles, status and lockout |
-| POST | `/` | Admin | `{ email, firstName, lastName, password, roles[] }` |
-| PUT | `/{id}` | Admin | `{ firstName, lastName, isActive, roles[] }`. You can't deactivate yourself or drop your own Admin role. Deactivating a user revokes their sessions. |
-| POST | `/{id}/reset-password` | Admin | `{ newPassword }`. Revokes sessions and clears lockout. |
+| GET | `/` | account:read | `search` (name/email/city), `industry`, `ownerId`, `mine`, `cf.*`. Sort: `name`, `industry`, `city`, `createdAt`. |
+| GET | `/{id}` | account:read | includes `contactCount`, `openOpportunityCount`, `openPipelineAmount`, `customFields` |
+| POST | `/` | account:create | `AccountRequest` → 201 |
+| PUT | `/{id}` | account:update (scope) | |
+| DELETE | `/{id}` | account:delete (scope) | **409** if the account has opportunities |
+
+`AccountRequest`: `name*`, `industry` (must be in the `account.industry` picklist if it has options; the record's current value always stays valid), `website`, `phone`, `email`, `street`, `city`, `state`, `postalCode`, `country`, `annualRevenue`, `employeeCount`, `description`, `ownerId`, `customFields`.
+
+### Contacts (`/api/contacts`)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/` | contact:read | `search`, `accountId`, `ownerId`, `mine`, `cf.*` |
+| GET / POST / PUT / DELETE | `/`, `/{id}` | contact:read/create/update/delete | `ContactRequest`: `firstName*`, `lastName*`, `email`, `phone`, `mobile`, `jobTitle`, `department`, `description`, `accountId`, `ownerId`, `customFields` |
+
+### Leads (`/api/leads`)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/` | lead:read | `search`, `status`, `source`, `ownerId`, `mine`, `cf.*` |
+| GET / POST / PUT / DELETE | `/`, `/{id}` | lead:* | `source` validated against the `lead.source` picklist. `status` can't be set to `Converted`. |
+| POST | `/{id}/convert` | lead:update + contact:create (+ account:create when creating one, + opportunity:create when creating one) | `{ existingAccountId?, createOpportunity, opportunityName?, amount?, expectedCloseDate? }` → `{ accountId, contactId, opportunityId? }` · 409 if already converted |
+
+### Opportunities (`/api/opportunities`)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/` | opportunity:read | `search`, `stage` (key), `accountId`, `contactId`, `open`, `ownerId`, `mine`, `cf.*` |
+| GET | `/pipeline?mine=` | opportunity:read | open deals, plus those closed in the last 30 days (max 500) |
+| GET / POST / PUT / DELETE | `/`, `/{id}` | opportunity:* | `stage` must be a key from the tenant's opportunity stages. `probability` null means the stage default. |
+| PATCH | `/{id}/stage` | opportunity:update | `{ stage, lossReason? }`. Sets the default probability, and sets or clears `closedAt` from the stage category. |
+
+### Activities (`/api/activities`)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/` | activity:read | `search`, `type`, `status` (`Open`/`Completed`/`Overdue`), `accountId`, `contactId`, `leadId`, `opportunityId`, `customRecordId`, `dueFrom`, `dueTo`, `ownerId`, `mine` |
+| GET / POST / PUT / DELETE | `/`, `/{id}` | activity:* | `ActivityRequest`: `type`, `subject*`, `description`, `dueAt`, `priority`, `accountId`, `contactId`, `leadId`, `opportunityId`, `customRecordId`, `ownerId`, `customFields` |
+| POST | `/{id}/complete`, `/{id}/reopen` | activity:update | |
+
+Activity items include `customRecordId`, `customRecordName` and `customObjectKey` when linked to a custom record.
+
+## Custom objects (`/api/records/{objectKey}`)
+
+The permission resource is the object key, e.g. `ticket:read`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | `search` (name), `stage`, `open`, `ownerId`, `mine`, `cf.*`. Sort: `name`, `stage`, `updatedAt`, `createdAt`. |
+| GET | `/board?mine=` | Pipeline objects only: open records plus those closed in the last 30 days (max 500) |
+| GET | `/{id}` | `RecordItem { id, objectKey, name, stage, closedAt, ownerId, ownerName, createdAt, updatedAt, customFields }` |
+| POST | `/` | `{ name*, stage?, ownerId?, customFields }` (stage defaults to the first open stage) |
+| PUT | `/{id}` | same body |
+| PATCH | `/{id}/stage` | `{ stage }` |
+| DELETE | `/{id}` | Linked activities are deleted too |
+
+Unknown or inactive object keys return 404.
+
+## Administration
+
+### Users (`/api/users`)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/lookup` | * | Active users in the tenant `{ id, fullName, email }` |
+| GET | `/` | users:manage | Users with `roles[]`, `groups[]`, status, lockout, `isPlatformAdmin` |
+| POST | `/` | users:manage | `{ email, firstName, lastName, password, roleIds[], groupIds[] }` |
+| PUT | `/{id}` | users:manage | `{ firstName, lastName, isActive, roleIds[], groupIds[] }` |
+| POST | `/{id}/reset-password` | users:manage | `{ newPassword }`. Revokes sessions and clears lockout. |
+
+Assignments are checked for escalation: you can't hand out access you don't hold, and only administrators can grant the Administrator role.
+
+### Roles (`/api/admin/roles`) and groups (`/api/admin/groups`)
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/admin/roles` | users, groups or roles:manage | `RoleItem { id, name, description, isSystem, isAdministrator, permissions[], userCount, groupCount }` |
+| POST / PUT | `/admin/roles`, `/admin/roles/{id}` | roles:manage | `{ name, description, permissions: [{ resource, action, scope }] }`. The Administrator role can't be edited. |
+| DELETE | `/admin/roles/{id}` | roles:manage | System roles can't be deleted |
+| GET | `/admin/groups` | users, groups or roles:manage | `GroupItem { id, name, description, members[], roles[] }` |
+| POST / PUT / DELETE | `/admin/groups[/{id}]` | groups:manage | `{ name, description, memberIds[], roleIds[] }` |
+
+**Grants:**
+- `resource`: an object key, `*`, or one of `users`, `groups`, `roles`, `customization`, `settings` (action `manage`) or `audit` (action `read`).
+- Record actions: `read`, `create`, `update`, `delete`.
+- `scope`: `None`, `Own`, `Group` or `All`.
+
+**Semantics:**
+- In each role, an explicit object grant overrides that role's `*` grant for the action, and `None` denies.
+- Across roles the widest scope wins.
+- Create and manage are all-or-nothing: any scope becomes `All`.
+
+### Customization (`/api/admin`, customization:manage)
+| Method | Path | Body / notes |
+|---|---|---|
+| POST | `/objects` | `{ key, label, pluralLabel, icon, description, nameLabel, hasPipeline, isActive, sortOrder }`. The key must match `^[a-z][a-z0-9_]{1,39}$`, and reserved keys are rejected. Pipeline objects get default stages. |
+| PUT | `/objects/{key}` | same (key immutable). Standard objects can't change `hasPipeline`. |
+| DELETE | `/objects/{key}` | Custom objects only. **409** if records exist. |
+| POST | `/objects/{key}/fields` | `{ key, label, type, isRequired, options[], lookupObjectKey, maxLength, min, max, helpText, showInList, sortOrder }` |
+| PUT / DELETE | `/objects/{key}/fields/{fieldKey}` | The type can't change. Deleting a field keeps stored values but hides them. |
+| PUT | `/objects/{key}/stages` | `{ stages: [{ key, label, probability, category: Open\|Won\|Lost, color: #RRGGBB }] }` replaces the list (order matters). Needs at least one open stage. **409** if removed stages still have records. |
+| PUT | `/picklists/{key}` | `{ options[] }` for `account.industry` or `lead.source` |
+
+Field types: `Text`, `TextArea`, `Number`, `Currency`, `Date`, `DateTime`, `Boolean`, `Picklist`, `MultiPicklist`, `Email`, `Phone`, `Url`, `Lookup`.
+
+### Automation (`/api/admin/automation`, customization:manage)
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | Rules with `runCount`, `lastRunAt` |
+| GET | `/fields/{objectKey}` | Fields usable in conditions, with `settable` for Set-field actions (includes `cf.*`) |
+| POST / PUT / DELETE | `/`, `/{id}` | `RuleRequest` |
+
+```jsonc
+{
+  "name": "Urgent ticket alert", "objectKey": "ticket", "trigger": "Created", "isActive": true,  // Created | Updated | StageChanged
+  "conditions": [ { "field": "cf.priority", "operator": "Equals", "value": "Urgent" } ],
+  // operators: Equals, NotEquals, GreaterThan, LessThan, Contains, IsEmpty, IsNotEmpty, Changed
+  "actions": [
+    { "type": "CreateTask", "subject": "Respond to {{name}}", "dueInDays": 0, "priority": "High", "assignTo": "owner" },
+    { "type": "Notify", "message": "Urgent: {{name}}", "assignTo": "<userId>" },
+    { "type": "SetField", "field": "cf.escalated", "value": "true" }
+  ]
+}
+```
+
+### Audit and notifications
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/admin/audit` | audit:read | `entityType`, `entityId`, `userId`, `action`, `search` (record name), `from`, `to`, paging (default 50) |
+| GET | `/api/audit/{objectKey}/{id}` | read access to that record | Up to 200 latest entries: `{ action, userName, timestamp, changes: { field: [old, new] } }` |
+| GET | `/api/notifications` | * | `{ unreadCount, items[] }`: your latest notifications |
+| POST | `/api/notifications/{id}/read`, `/api/notifications/read-all` | * | |
+
+## Platform (`/api/platform`, platform admins only)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/templates` | `sales`, `helpdesk`, `recruitment`, `blank` |
+| GET | `/tenants` | `TenantItem { id, name, slug, status, currency, template, createdAt, userCount }` |
+| POST | `/tenants` | `{ name, slug, template, currency, adminEmail, adminFirstName, adminLastName, adminPassword, seedDemoData }`. Slug: `^[a-z0-9][a-z0-9-]{1,62}$`. Runs in a transaction. |
+| PUT | `/tenants/{id}` | `{ name, currency, status: Active\|Suspended }`. You can't suspend your own tenant. |
+| DELETE | `/tenants/{id}` | Only when suspended, and not the default tenant. Deletes all of its data. |
 
 ## Health
 
-| Path | Auth | Meaning |
-|---|---|---|
-| `/health/live` | none | The process is up |
-| `/health/ready` | none | The database is reachable |
+| Path | Meaning |
+|---|---|
+| `/health/live` | The process is up (anonymous) |
+| `/health/ready` | The database is reachable (anonymous) |
 
 ## Example (PowerShell)
 
 ```powershell
-$login = Invoke-RestMethod -Method Post -Uri http://localhost:5290/api/auth/login `
-  -ContentType 'application/json' -Body (@{ email = 'admin@crm.local'; password = Read-Host -AsSecureString | ConvertFrom-SecureString -AsPlainText } | ConvertTo-Json)
+$pw = Read-Host -AsSecureString 'Password' | ConvertFrom-SecureString -AsPlainText
+$login = Invoke-RestMethod -Method Post -Uri http://localhost:5290/api/auth/login -ContentType 'application/json' `
+  -Body (@{ email = 'admin@crm.local'; password = $pw } | ConvertTo-Json)
 $h = @{ Authorization = "Bearer $($login.accessToken)" }
-Invoke-RestMethod -Uri 'http://localhost:5290/api/accounts?search=acme' -Headers $h
+Invoke-RestMethod -Uri 'http://localhost:5290/api/metadata' -Headers $h | Select-Object -ExpandProperty objects | Select-Object key, pluralLabel, isActive
+Invoke-RestMethod -Uri 'http://localhost:5290/api/accounts?cf.tier=Gold' -Headers $h
 ```

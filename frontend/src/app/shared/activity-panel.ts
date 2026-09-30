@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { CrmApi, stableValue, toParams } from '../core/api';
 import { AuthService } from '../core/auth.service';
+import { MetadataService } from '../core/metadata.service';
 import { ActivityItem, ActivityLinks, ActivityType, PagedResult } from '../core/models';
 import { ActivityFormDialog, ActivityFormData } from '../features/activities/activity-form-dialog';
 
@@ -29,18 +30,20 @@ export function isOverdue(a: ActivityItem): boolean {
   imports: [DatePipe, MatButtonModule, MatCheckboxModule, MatIconModule, MatTooltipModule],
   template: `
     <div class="panel-header">
-      <h3>Activities</h3>
+      <h3>{{ meta.label('activity', true) }}</h3>
       <span class="spacer"></span>
-      <button mat-stroked-button (click)="add('Call')"><mat-icon>call</mat-icon> Log call</button>
-      <button mat-stroked-button (click)="add('Note')"><mat-icon>sticky_note_2</mat-icon> Note</button>
-      <button mat-flat-button (click)="add('Task')"><mat-icon>add</mat-icon> Task</button>
+      @if (auth.can('activity', 'create')) {
+        <button mat-stroked-button (click)="add('Call')"><mat-icon>call</mat-icon> Log call</button>
+        <button mat-stroked-button (click)="add('Note')"><mat-icon>sticky_note_2</mat-icon> Note</button>
+        <button mat-flat-button (click)="add('Task')"><mat-icon>add</mat-icon> Task</button>
+      }
     </div>
     @for (a of items(); track a.id) {
       <div class="activity-row" [class.done]="a.completedAt" [class.overdue]="overdue(a)">
         @if (a.type === 'Note') {
           <mat-icon class="type-icon">{{ icons[a.type] }}</mat-icon>
         } @else {
-          <mat-checkbox [checked]="!!a.completedAt" [disabled]="!auth.canModify(a.ownerId)" (change)="toggle(a, $event.checked)"
+          <mat-checkbox [checked]="!!a.completedAt" [disabled]="!auth.canModify('activity', a.ownerId)" (change)="toggle(a, $event.checked)"
             [matTooltip]="a.completedAt ? 'Reopen' : 'Mark complete'" />
         }
         <div class="body" (click)="edit(a)" (keydown.enter)="edit(a)" tabindex="0" role="button">
@@ -74,7 +77,10 @@ export class ActivityPanel {
   readonly links = input.required<ActivityLinks>();
   /** Which link identifies the page's record; the others only pre-fill new activities. */
   readonly filterBy = input.required<keyof ActivityLinks>();
+  /** Object key when the panel is on a custom record page. */
+  readonly customObjectKey = input<string | null>(null);
   readonly auth = inject(AuthService);
+  readonly meta = inject(MetadataService);
   private readonly api = inject(CrmApi);
   private readonly dialog = inject(MatDialog);
   readonly icons = ACTIVITY_ICONS;
@@ -88,11 +94,11 @@ export class ActivityPanel {
   readonly items = computed(() => this.value()?.items ?? []);
 
   add(type: ActivityType): void {
-    this.open({ links: this.links(), type });
+    this.open({ links: this.links(), type, customObjectKey: this.customObjectKey() });
   }
 
   edit(item: ActivityItem): void {
-    if (this.auth.canModify(item.ownerId)) this.open({ item });
+    if (this.auth.canModify('activity', item.ownerId)) this.open({ item });
   }
 
   toggle(item: ActivityItem, completed: boolean): void {

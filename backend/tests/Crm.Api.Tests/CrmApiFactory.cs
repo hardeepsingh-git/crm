@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Crm.Api.Auth;
 using Crm.Api.Data;
+using Crm.Api.Features.Security;
+using Crm.Api.Features.Users;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -11,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Crm.Api.Tests;
 
@@ -37,6 +40,7 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Seed:AdminPassword", AdminPassword);
         builder.UseSetting("Seed:DemoData", "false");
         builder.UseSetting("RateLimiting:AuthPermitPerMinute", "10000");
+        builder.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Error).AddConsole());
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<CrmDbContext>>();
@@ -60,16 +64,21 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
         return (await response.Content.ReadFromJsonAsync<AuthResponse>(Json))!;
     }
 
-    /// <summary>Creates a user via the admin API and returns an authenticated client for it.</summary>
-    public async Task<HttpClient> CreateUserClientAsync(string role)
+    /// <summary>Creates a user holding the named role(s) via the admin API and returns an authenticated client for it.</summary>
+    public async Task<HttpClient> CreateUserClientAsync(params string[] roleNames) => (await CreateUserAsync(roleNames)).Client;
+
+    public async Task<(HttpClient Client, Guid UserId)> CreateUserAsync(string[] roleNames, Guid[]? groupIds = null, HttpClient? admin = null)
     {
-        var admin = await CreateAuthenticatedClientAsync();
-        var email = $"{role.ToLowerInvariant()}-{Guid.NewGuid():N}@test.local";
+        admin ??= await CreateAuthenticatedClientAsync();
+        var roles = await (await admin.GetAsync("/api/admin/roles")).ReadAsync<List<RoleItem>>();
+        var roleIds = roleNames.Select(n => roles.Single(r => r.Name == n).Id).ToArray();
+        var email = $"user-{Guid.NewGuid():N}@test.local";
         const string password = "User#Pass12345";
-        var response = await admin.PostAsJsonAsync("/api/users",
-            new { email, firstName = role, lastName = "User", password, roles = new[] { role } }, Json);
+        var response = await admin.PostJsonAsync("/api/users",
+            new { email, firstName = "Test", lastName = string.Join(" ", roleNames), password, roleIds, groupIds = groupIds ?? [] });
         response.EnsureSuccessStatusCode();
-        return await CreateAuthenticatedClientAsync(email, password);
+        var user = await response.ReadAsync<UserItem>();
+        return (await CreateAuthenticatedClientAsync(email, password), user.Id);
     }
 
     protected override void Dispose(bool disposing)

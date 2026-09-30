@@ -1,3 +1,4 @@
+import { LowerCasePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,16 +7,18 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { CrmApi } from '../../core/api';
-import { LEAD_SOURCES, LEAD_STATUSES, LeadDetail, LeadRequest, LeadSource, LeadStatus } from '../../core/models';
+import { MetadataService } from '../../core/metadata.service';
+import { LEAD_STATUSES, LeadDetail, LeadRequest, LeadStatus } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
-import { HumanizePipe } from '../../shared/list';
+import { CustomFieldsEditor, customFieldsGroup, customFieldsValue } from '../../shared/custom-fields';
+import { HumanizePipe, withCurrent } from '../../shared/list';
 import { OwnerField } from '../../shared/owner-field';
 
 @Component({
   selector: 'app-lead-form-dialog',
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, OwnerField, HumanizePipe],
+  imports: [LowerCasePipe, ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, OwnerField, HumanizePipe, CustomFieldsEditor],
   template: `
-    <h2 mat-dialog-title>{{ item ? 'Edit lead' : 'New lead' }}</h2>
+    <h2 mat-dialog-title>{{ item ? 'Edit' : 'New' }} {{ meta.label('lead') | lowercase }}</h2>
     <mat-dialog-content>
       <form [formGroup]="form" class="form-grid" id="lead-form" (ngSubmit)="save()">
         <mat-form-field appearance="outline">
@@ -49,7 +52,8 @@ import { OwnerField } from '../../shared/owner-field';
           </mat-select>
         </mat-form-field>
         <mat-form-field appearance="outline"><mat-label>Estimated value</mat-label><input matInput type="number" min="0" formControlName="estimatedValue" /></mat-form-field>
-        <app-owner-field [control]="form.controls.ownerId" />
+        <app-owner-field resource="lead" [control]="form.controls.ownerId" />
+        <app-custom-fields-editor [fields]="fields" [group]="cf" />
         <mat-form-field appearance="outline" class="span-2">
           <mat-label>Description</mat-label><textarea matInput rows="3" formControlName="description" maxlength="4000"></textarea>
         </mat-form-field>
@@ -66,9 +70,12 @@ export class LeadFormDialog {
   private readonly ref = inject(MatDialogRef<LeadFormDialog, LeadDetail>);
   private readonly api = inject(CrmApi);
   private readonly notify = inject(NotifyService);
-  readonly sources = LEAD_SOURCES;
+  readonly meta = inject(MetadataService);
+  readonly sources = withCurrent(this.meta.picklist('lead.source'), this.item?.source);
   readonly statuses = LEAD_STATUSES.filter((s) => s !== 'Converted');
   readonly saving = signal(false);
+  readonly fields = this.meta.fields('lead');
+  readonly cf = customFieldsGroup(this.fields, this.item?.customFields);
 
   readonly form = inject(FormBuilder).group({
     firstName: [this.item?.firstName ?? '', [Validators.required, Validators.maxLength(100)]],
@@ -77,7 +84,7 @@ export class LeadFormDialog {
     email: [this.item?.email ?? null, Validators.email],
     phone: [this.item?.phone ?? null],
     jobTitle: [this.item?.jobTitle ?? null],
-    source: [this.item?.source ?? ('Web' as LeadSource)],
+    source: [this.item?.source ?? this.sources[0] ?? 'Other'],
     status: [this.item?.status ?? ('New' as LeadStatus)],
     estimatedValue: [this.item?.estimatedValue ?? null as number | null, Validators.min(0)],
     description: [this.item?.description ?? null],
@@ -85,12 +92,16 @@ export class LeadFormDialog {
   });
 
   save(): void {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.cf.invalid) {
       this.form.markAllAsTouched();
+      this.cf.markAllAsTouched();
       return;
     }
     const v = this.form.getRawValue();
-    const body: LeadRequest = { ...v, firstName: v.firstName!, lastName: v.lastName!, company: v.company!, source: v.source!, status: v.status! };
+    const body: LeadRequest = {
+      ...v, firstName: v.firstName!, lastName: v.lastName!, company: v.company!, source: v.source!, status: v.status!,
+      customFields: customFieldsValue(this.fields, this.cf),
+    };
     this.saving.set(true);
     (this.item ? this.api.leads.update(this.item.id, body) : this.api.leads.create(body)).subscribe({
       next: (saved) => {

@@ -501,3 +501,705 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP INDEX "IX_Opportunities_Stage";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP INDEX "IX_Leads_Status";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP INDEX "IX_Contacts_LastName";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP INDEX "IX_Activities_DueAt";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP INDEX "IX_Accounts_Name";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Opportunities" ALTER COLUMN "Stage" TYPE character varying(64);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Opportunities" ADD "CustomFields" jsonb NOT NULL DEFAULT ('{}');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Opportunities" ADD "TenantId" uuid NOT NULL DEFAULT '0199a000-0000-7000-8000-000000000001';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Leads" ALTER COLUMN "Source" TYPE character varying(64);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Leads" ADD "CustomFields" jsonb NOT NULL DEFAULT ('{}');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Leads" ADD "TenantId" uuid NOT NULL DEFAULT '0199a000-0000-7000-8000-000000000001';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Contacts" ADD "CustomFields" jsonb NOT NULL DEFAULT ('{}');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Contacts" ADD "TenantId" uuid NOT NULL DEFAULT '0199a000-0000-7000-8000-000000000001';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "AspNetUsers" ADD "IsPlatformAdmin" boolean NOT NULL DEFAULT FALSE;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "AspNetUsers" ADD "TenantId" uuid NOT NULL DEFAULT '0199a000-0000-7000-8000-000000000001';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Activities" ADD "CustomFields" jsonb NOT NULL DEFAULT ('{}');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Activities" ADD "CustomRecordId" uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Activities" ADD "TenantId" uuid NOT NULL DEFAULT '0199a000-0000-7000-8000-000000000001';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Accounts" ADD "CustomFields" jsonb NOT NULL DEFAULT ('{}');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Accounts" ADD "TenantId" uuid NOT NULL DEFAULT '0199a000-0000-7000-8000-000000000001';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "AuditLogs" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "EntityType" character varying(64) NOT NULL,
+        "EntityId" uuid NOT NULL,
+        "EntityName" character varying(300),
+        "Action" character varying(16) NOT NULL,
+        "UserId" uuid,
+        "UserName" character varying(200),
+        "Timestamp" timestamp with time zone NOT NULL,
+        "Changes" jsonb NOT NULL DEFAULT ('{}'),
+        CONSTRAINT "PK_AuditLogs" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "AutomationRules" (
+        "Id" uuid NOT NULL,
+        "Name" character varying(200) NOT NULL,
+        "ObjectKey" character varying(40) NOT NULL,
+        "Trigger" character varying(32) NOT NULL,
+        "Conditions" jsonb NOT NULL DEFAULT ('[]'),
+        "Actions" jsonb NOT NULL DEFAULT ('[]'),
+        "IsActive" boolean NOT NULL,
+        "RunCount" integer NOT NULL,
+        "LastRunAt" timestamp with time zone,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_AutomationRules" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "FieldDefinitions" (
+        "Id" uuid NOT NULL,
+        "ObjectKey" character varying(40) NOT NULL,
+        "Key" character varying(40) NOT NULL,
+        "Label" character varying(100) NOT NULL,
+        "Type" character varying(32) NOT NULL,
+        "IsRequired" boolean NOT NULL,
+        "Options" jsonb NOT NULL DEFAULT ('[]'),
+        "LookupObjectKey" character varying(40),
+        "MaxLength" integer,
+        "Min" numeric(18,2),
+        "Max" numeric(18,2),
+        "HelpText" character varying(500),
+        "ShowInList" boolean NOT NULL,
+        "SortOrder" integer NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_FieldDefinitions" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "Groups" (
+        "Id" uuid NOT NULL,
+        "Name" character varying(100) NOT NULL,
+        "Description" character varying(500),
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Groups" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "Notifications" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "UserId" uuid NOT NULL,
+        "Title" character varying(200) NOT NULL,
+        "Message" character varying(1000) NOT NULL,
+        "Link" character varying(300),
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "ReadAt" timestamp with time zone,
+        CONSTRAINT "PK_Notifications" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "ObjectDefinitions" (
+        "Id" uuid NOT NULL,
+        "Key" character varying(40) NOT NULL,
+        "Label" character varying(100) NOT NULL,
+        "PluralLabel" character varying(100) NOT NULL,
+        "Icon" character varying(64) NOT NULL,
+        "Description" character varying(1000),
+        "NameLabel" character varying(100) NOT NULL,
+        "IsStandard" boolean NOT NULL,
+        "IsActive" boolean NOT NULL,
+        "HasPipeline" boolean NOT NULL,
+        "SortOrder" integer NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_ObjectDefinitions" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "Picklists" (
+        "Id" uuid NOT NULL,
+        "Key" character varying(64) NOT NULL,
+        "Options" jsonb NOT NULL DEFAULT ('[]'),
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Picklists" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "PipelineStages" (
+        "Id" uuid NOT NULL,
+        "ObjectKey" character varying(40) NOT NULL,
+        "Key" character varying(64) NOT NULL,
+        "Label" character varying(100) NOT NULL,
+        "SortOrder" integer NOT NULL,
+        "Probability" integer NOT NULL,
+        "Category" character varying(16) NOT NULL,
+        "Color" character varying(16) NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_PipelineStages" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "Roles" (
+        "Id" uuid NOT NULL,
+        "Name" character varying(100) NOT NULL,
+        "Description" character varying(500),
+        "IsSystem" boolean NOT NULL,
+        "IsAdministrator" boolean NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Roles" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "Tenants" (
+        "Id" uuid NOT NULL,
+        "Name" character varying(200) NOT NULL,
+        "Slug" character varying(64) NOT NULL,
+        "Status" character varying(32) NOT NULL,
+        "Currency" character varying(3) NOT NULL,
+        "Template" character varying(32) NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Tenants" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    INSERT INTO "Tenants" ("Id", "Name", "Slug", "Status", "Currency", "Template", "CreatedAt")
+    VALUES ('0199a000-0000-7000-8000-000000000001', 'Default', 'default', 'Active', 'AUD', 'sales', now());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "GroupMembers" (
+        "GroupId" uuid NOT NULL,
+        "UserId" uuid NOT NULL,
+        CONSTRAINT "PK_GroupMembers" PRIMARY KEY ("GroupId", "UserId"),
+        CONSTRAINT "FK_GroupMembers_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE,
+        CONSTRAINT "FK_GroupMembers_Groups_GroupId" FOREIGN KEY ("GroupId") REFERENCES "Groups" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "CustomRecords" (
+        "Id" uuid NOT NULL,
+        "ObjectDefinitionId" uuid NOT NULL,
+        "Name" character varying(200) NOT NULL,
+        "Stage" character varying(64) NOT NULL,
+        "ClosedAt" timestamp with time zone,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        "OwnerId" uuid NOT NULL,
+        "CustomFields" jsonb NOT NULL DEFAULT ('{}'),
+        CONSTRAINT "PK_CustomRecords" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_CustomRecords_AspNetUsers_OwnerId" FOREIGN KEY ("OwnerId") REFERENCES "AspNetUsers" ("Id") ON DELETE RESTRICT,
+        CONSTRAINT "FK_CustomRecords_ObjectDefinitions_ObjectDefinitionId" FOREIGN KEY ("ObjectDefinitionId") REFERENCES "ObjectDefinitions" ("Id") ON DELETE RESTRICT
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "GroupRoles" (
+        "GroupId" uuid NOT NULL,
+        "RoleId" uuid NOT NULL,
+        CONSTRAINT "PK_GroupRoles" PRIMARY KEY ("GroupId", "RoleId"),
+        CONSTRAINT "FK_GroupRoles_Groups_GroupId" FOREIGN KEY ("GroupId") REFERENCES "Groups" ("Id") ON DELETE CASCADE,
+        CONSTRAINT "FK_GroupRoles_Roles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "Roles" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "RolePermissions" (
+        "Id" uuid NOT NULL,
+        "RoleId" uuid NOT NULL,
+        "Resource" character varying(40) NOT NULL,
+        "Action" character varying(16) NOT NULL,
+        "Scope" character varying(16) NOT NULL,
+        CONSTRAINT "PK_RolePermissions" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_RolePermissions_Roles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "Roles" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE TABLE "UserRoles" (
+        "UserId" uuid NOT NULL,
+        "RoleId" uuid NOT NULL,
+        CONSTRAINT "PK_UserRoles" PRIMARY KEY ("UserId", "RoleId"),
+        CONSTRAINT "FK_UserRoles_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE,
+        CONSTRAINT "FK_UserRoles_Roles_RoleId" FOREIGN KEY ("RoleId") REFERENCES "Roles" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Opportunities_TenantId_OwnerId" ON "Opportunities" ("TenantId", "OwnerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Opportunities_TenantId_Stage" ON "Opportunities" ("TenantId", "Stage");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Leads_TenantId_OwnerId" ON "Leads" ("TenantId", "OwnerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Leads_TenantId_Status" ON "Leads" ("TenantId", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Contacts_TenantId_LastName" ON "Contacts" ("TenantId", "LastName");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Contacts_TenantId_OwnerId" ON "Contacts" ("TenantId", "OwnerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_AspNetUsers_TenantId" ON "AspNetUsers" ("TenantId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Activities_CustomRecordId" ON "Activities" ("CustomRecordId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Activities_TenantId_DueAt" ON "Activities" ("TenantId", "DueAt");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Activities_TenantId_OwnerId" ON "Activities" ("TenantId", "OwnerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Accounts_TenantId_Name" ON "Accounts" ("TenantId", "Name");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Accounts_TenantId_OwnerId" ON "Accounts" ("TenantId", "OwnerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_AuditLogs_TenantId_EntityId" ON "AuditLogs" ("TenantId", "EntityId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_AuditLogs_TenantId_Timestamp" ON "AuditLogs" ("TenantId", "Timestamp");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_AutomationRules_TenantId_ObjectKey" ON "AutomationRules" ("TenantId", "ObjectKey");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_CustomRecords_ObjectDefinitionId" ON "CustomRecords" ("ObjectDefinitionId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_CustomRecords_OwnerId" ON "CustomRecords" ("OwnerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_CustomRecords_TenantId_ObjectDefinitionId_Name" ON "CustomRecords" ("TenantId", "ObjectDefinitionId", "Name");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_CustomRecords_TenantId_ObjectDefinitionId_Stage" ON "CustomRecords" ("TenantId", "ObjectDefinitionId", "Stage");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_CustomRecords_TenantId_OwnerId" ON "CustomRecords" ("TenantId", "OwnerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_FieldDefinitions_TenantId_ObjectKey_Key" ON "FieldDefinitions" ("TenantId", "ObjectKey", "Key");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_GroupMembers_UserId" ON "GroupMembers" ("UserId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_GroupRoles_RoleId" ON "GroupRoles" ("RoleId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_Groups_TenantId_Name" ON "Groups" ("TenantId", "Name");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_Notifications_TenantId_UserId_ReadAt" ON "Notifications" ("TenantId", "UserId", "ReadAt");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_ObjectDefinitions_TenantId_Key" ON "ObjectDefinitions" ("TenantId", "Key");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_Picklists_TenantId_Key" ON "Picklists" ("TenantId", "Key");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_PipelineStages_TenantId_ObjectKey_Key" ON "PipelineStages" ("TenantId", "ObjectKey", "Key");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_RolePermissions_RoleId_Resource_Action" ON "RolePermissions" ("RoleId", "Resource", "Action");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_Roles_TenantId_Name" ON "Roles" ("TenantId", "Name");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE UNIQUE INDEX "IX_Tenants_Slug" ON "Tenants" ("Slug");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    CREATE INDEX "IX_UserRoles_RoleId" ON "UserRoles" ("RoleId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "Activities" ADD CONSTRAINT "FK_Activities_CustomRecords_CustomRecordId" FOREIGN KEY ("CustomRecordId") REFERENCES "CustomRecords" ("Id") ON DELETE CASCADE;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    ALTER TABLE "AspNetUsers" ADD CONSTRAINT "FK_AspNetUsers_Tenants_TenantId" FOREIGN KEY ("TenantId") REFERENCES "Tenants" ("Id") ON DELETE RESTRICT;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    INSERT INTO "Roles" ("Id", "TenantId", "Name", "Description", "IsSystem", "IsAdministrator", "CreatedAt", "UpdatedAt") VALUES
+      ('0199a000-0000-7000-8000-00000000a001', '0199a000-0000-7000-8000-000000000001', 'Administrator', 'Full access to all data and settings.', true, true, now(), now()),
+      ('0199a000-0000-7000-8000-00000000a002', '0199a000-0000-7000-8000-000000000001', 'Manager', 'Full access to all records; can manage users and groups.', true, false, now(), now()),
+      ('0199a000-0000-7000-8000-00000000a003', '0199a000-0000-7000-8000-000000000001', 'Standard User', 'Sees all records, edits their own, cannot delete.', true, false, now(), now());
+
+    INSERT INTO "UserRoles" ("UserId", "RoleId")
+    SELECT DISTINCT ur."UserId",
+           CASE r."Name" WHEN 'Admin' THEN '0199a000-0000-7000-8000-00000000a001'::uuid WHEN 'Manager' THEN '0199a000-0000-7000-8000-00000000a002'::uuid ELSE '0199a000-0000-7000-8000-00000000a003'::uuid END
+    FROM "AspNetUserRoles" ur JOIN "AspNetRoles" r ON r."Id" = ur."RoleId"
+    ON CONFLICT DO NOTHING;
+
+    UPDATE "AspNetUsers" u SET "IsPlatformAdmin" = true
+    WHERE EXISTS (SELECT 1 FROM "AspNetUserRoles" ur JOIN "AspNetRoles" r ON r."Id" = ur."RoleId"
+                  WHERE ur."UserId" = u."Id" AND r."Name" = 'Admin');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP TABLE "AspNetRoleClaims";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP TABLE "AspNetUserRoles";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    DROP TABLE "AspNetRoles";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930080943_MultiTenantPlatform') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260930080943_MultiTenantPlatform', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

@@ -1,17 +1,37 @@
-export type LeadSource = 'Web' | 'Referral' | 'Event' | 'ColdCall' | 'Advertisement' | 'Partner' | 'Other';
 export type LeadStatus = 'New' | 'Contacted' | 'Qualified' | 'Unqualified' | 'Converted';
-export type OpportunityStage = 'Prospecting' | 'Qualification' | 'Proposal' | 'Negotiation' | 'ClosedWon' | 'ClosedLost';
 export type ActivityType = 'Task' | 'Call' | 'Meeting' | 'Email' | 'Note';
 export type ActivityPriority = 'Low' | 'Normal' | 'High';
-export type Role = 'Admin' | 'Manager' | 'SalesRep';
+export type PermissionScope = 'None' | 'Own' | 'Group' | 'All';
+export type StageCategory = 'Open' | 'Won' | 'Lost';
+export type FieldType =
+  | 'Text' | 'TextArea' | 'Number' | 'Currency' | 'Date' | 'DateTime' | 'Boolean'
+  | 'Picklist' | 'MultiPicklist' | 'Email' | 'Phone' | 'Url' | 'Lookup';
+export type AutomationTrigger = 'Created' | 'Updated' | 'StageChanged';
+export type ConditionOperator = 'Equals' | 'NotEquals' | 'GreaterThan' | 'LessThan' | 'Contains' | 'IsEmpty' | 'IsNotEmpty' | 'Changed';
+export type AutomationActionType = 'CreateTask' | 'Notify' | 'SetField';
+export type TenantStatus = 'Active' | 'Suspended';
+export type AuditAction = 'Created' | 'Updated' | 'Deleted';
+export type RecordAction = 'read' | 'create' | 'update' | 'delete';
+export type AdminResource = 'users' | 'roles' | 'groups' | 'customization' | 'settings' | 'audit';
 
-export const LEAD_SOURCES: LeadSource[] = ['Web', 'Referral', 'Event', 'ColdCall', 'Advertisement', 'Partner', 'Other'];
 export const LEAD_STATUSES: LeadStatus[] = ['New', 'Contacted', 'Qualified', 'Unqualified', 'Converted'];
-export const OPEN_STAGES: OpportunityStage[] = ['Prospecting', 'Qualification', 'Proposal', 'Negotiation'];
-export const STAGES: OpportunityStage[] = [...OPEN_STAGES, 'ClosedWon', 'ClosedLost'];
 export const ACTIVITY_TYPES: ActivityType[] = ['Task', 'Call', 'Meeting', 'Email', 'Note'];
 export const PRIORITIES: ActivityPriority[] = ['Low', 'Normal', 'High'];
-export const ROLES: Role[] = ['Admin', 'Manager', 'SalesRep'];
+export const FIELD_TYPES: FieldType[] = [
+  'Text', 'TextArea', 'Number', 'Currency', 'Date', 'DateTime', 'Boolean', 'Picklist', 'MultiPicklist', 'Email', 'Phone', 'Url', 'Lookup',
+];
+export const SCOPES: PermissionScope[] = ['None', 'Own', 'Group', 'All'];
+export const RECORD_ACTIONS: RecordAction[] = ['read', 'create', 'update', 'delete'];
+export const ADMIN_RESOURCES: { key: AdminResource; label: string; action: 'manage' | 'read' }[] = [
+  { key: 'users', label: 'Manage users', action: 'manage' },
+  { key: 'groups', label: 'Manage groups', action: 'manage' },
+  { key: 'roles', label: 'Manage roles & permissions', action: 'manage' },
+  { key: 'customization', label: 'Customize objects, fields & automation', action: 'manage' },
+  { key: 'settings', label: 'Organisation settings', action: 'manage' },
+  { key: 'audit', label: 'View audit log', action: 'read' },
+];
+
+export type CustomFields = Record<string, unknown>;
 
 export interface PagedResult<T> {
   items: T[];
@@ -20,13 +40,26 @@ export interface PagedResult<T> {
   pageSize: number;
 }
 
+export interface TenantInfo {
+  id: string;
+  name: string;
+  slug: string;
+  currency: string;
+  template: string;
+}
+
 export interface UserInfo {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   fullName: string;
-  roles: Role[];
+  roles: string[];
+  tenant: TenantInfo;
+  isAdministrator: boolean;
+  isPlatformAdmin: boolean;
+  permissions: Record<string, Record<string, PermissionScope>>;
+  teamUserIds: string[];
 }
 
 export interface AuthResponse {
@@ -36,11 +69,61 @@ export interface AuthResponse {
   user: UserInfo;
 }
 
+// ---------- Metadata ----------
+
+export interface FieldDef {
+  id: string;
+  key: string;
+  label: string;
+  type: FieldType;
+  isRequired: boolean;
+  options: string[];
+  lookupObjectKey: string | null;
+  maxLength: number | null;
+  min: number | null;
+  max: number | null;
+  helpText: string | null;
+  showInList: boolean;
+  sortOrder: number;
+}
+
+export interface StageDef {
+  key: string;
+  label: string;
+  probability: number;
+  category: StageCategory;
+  color: string;
+}
+
+export interface ObjectDef {
+  key: string;
+  label: string;
+  pluralLabel: string;
+  icon: string;
+  description: string | null;
+  nameLabel: string;
+  isStandard: boolean;
+  isActive: boolean;
+  hasPipeline: boolean;
+  sortOrder: number;
+  fields: FieldDef[];
+  stages: StageDef[];
+}
+
+export interface Metadata {
+  tenant: TenantInfo;
+  objects: ObjectDef[];
+  picklists: Record<string, string[]>;
+}
+
+// ---------- Records ----------
+
 interface Owned {
   id: string;
   ownerId: string;
   ownerName: string;
   createdAt: string;
+  customFields: CustomFields;
 }
 
 export interface AccountListItem extends Owned {
@@ -98,6 +181,7 @@ export interface ContactRequest {
   description: string | null;
   accountId: string | null;
   ownerId: string | null;
+  customFields: CustomFields;
 }
 
 export interface LeadListItem extends Owned {
@@ -108,7 +192,7 @@ export interface LeadListItem extends Owned {
   email: string | null;
   phone: string | null;
   status: LeadStatus;
-  source: LeadSource;
+  source: string;
   estimatedValue: number | null;
 }
 
@@ -129,11 +213,12 @@ export interface LeadRequest {
   email: string | null;
   phone: string | null;
   jobTitle: string | null;
-  source: LeadSource;
+  source: string;
   status: LeadStatus;
   estimatedValue: number | null;
   description: string | null;
   ownerId: string | null;
+  customFields: CustomFields;
 }
 
 export interface LeadConvertRequest {
@@ -157,7 +242,7 @@ export interface OpportunityListItem extends Owned {
   contactId: string | null;
   contactName: string | null;
   amount: number;
-  stage: OpportunityStage;
+  stage: string;
   probability: number;
   expectedCloseDate: string;
 }
@@ -174,12 +259,13 @@ export interface OpportunityRequest {
   accountId: string;
   contactId: string | null;
   amount: number;
-  stage: OpportunityStage;
+  stage: string;
   probability: number | null;
   expectedCloseDate: string;
   lossReason: string | null;
   description: string | null;
   ownerId: string | null;
+  customFields: CustomFields;
 }
 
 export interface ActivityItem extends Owned {
@@ -197,6 +283,9 @@ export interface ActivityItem extends Owned {
   leadName: string | null;
   opportunityId: string | null;
   opportunityName: string | null;
+  customRecordId: string | null;
+  customRecordName: string | null;
+  customObjectKey: string | null;
   updatedAt: string;
 }
 
@@ -210,7 +299,9 @@ export interface ActivityRequest {
   contactId: string | null;
   leadId: string | null;
   opportunityId: string | null;
+  customRecordId: string | null;
   ownerId: string | null;
+  customFields?: CustomFields;
 }
 
 export interface ActivityLinks {
@@ -218,9 +309,39 @@ export interface ActivityLinks {
   contactId?: string | null;
   leadId?: string | null;
   opportunityId?: string | null;
+  customRecordId?: string | null;
+}
+
+export interface RecordItem {
+  id: string;
+  objectKey: string;
+  name: string;
+  stage: string;
+  closedAt: string | null;
+  ownerId: string;
+  ownerName: string;
+  createdAt: string;
+  updatedAt: string;
+  customFields: CustomFields;
+}
+
+export interface RecordRequest {
+  name: string;
+  stage: string | null;
+  ownerId: string | null;
+  customFields: CustomFields;
+}
+
+export interface StageSummary {
+  stage: string;
+  label: string;
+  color: string;
+  count: number;
+  amount: number;
 }
 
 export interface DashboardSummary {
+  sections: string[];
   accountCount: number;
   contactCount: number;
   openLeadCount: number;
@@ -231,10 +352,18 @@ export interface DashboardSummary {
   wonThisMonthAmount: number;
   winRate: number;
   overdueActivityCount: number;
-  pipelineByStage: { stage: OpportunityStage; count: number; amount: number }[];
-  leadsBySource: { source: LeadSource; count: number }[];
+  pipelineByStage: StageSummary[];
+  leadsBySource: { source: string; count: number }[];
   wonByMonth: { year: number; month: number; count: number; amount: number }[];
   upcomingActivities: ActivityItem[];
+  customPipelines: { objectKey: string; label: string; icon: string; openCount: number; stages: StageSummary[] }[];
+}
+
+// ---------- Security & administration ----------
+
+export interface NamedRef {
+  id: string;
+  name: string;
 }
 
 export interface UserLookup {
@@ -250,7 +379,112 @@ export interface UserItem {
   lastName: string;
   fullName: string;
   isActive: boolean;
-  roles: Role[];
+  isPlatformAdmin: boolean;
+  roles: NamedRef[];
+  groups: NamedRef[];
   createdAt: string;
   lockoutEnd: string | null;
+}
+
+export interface Grant {
+  resource: string;
+  action: string;
+  scope: PermissionScope;
+}
+
+export interface RoleItem {
+  id: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  isAdministrator: boolean;
+  permissions: Grant[];
+  userCount: number;
+  groupCount: number;
+}
+
+export interface GroupItem {
+  id: string;
+  name: string;
+  description: string | null;
+  members: NamedRef[];
+  roles: NamedRef[];
+}
+
+export interface AutomationCondition {
+  field: string;
+  operator: ConditionOperator;
+  value: string | null;
+}
+
+export interface AutomationAction {
+  type: AutomationActionType;
+  subject?: string | null;
+  message?: string | null;
+  dueInDays?: number | null;
+  priority?: ActivityPriority | null;
+  assignTo?: string | null;
+  field?: string | null;
+  value?: string | null;
+}
+
+export interface RuleItem {
+  id: string;
+  name: string;
+  objectKey: string;
+  trigger: AutomationTrigger;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+  isActive: boolean;
+  runCount: number;
+  lastRunAt: string | null;
+}
+
+export interface AutomationField {
+  key: string;
+  label: string;
+  settable: boolean;
+}
+
+export interface AuditItem {
+  id: string;
+  entityType: string;
+  entityId: string;
+  entityName: string | null;
+  action: AuditAction;
+  userId: string | null;
+  userName: string | null;
+  timestamp: string;
+  changes: Record<string, [unknown, unknown]>;
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  link: string | null;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export interface NotificationList {
+  unreadCount: number;
+  items: NotificationItem[];
+}
+
+export interface TenantItem {
+  id: string;
+  name: string;
+  slug: string;
+  status: TenantStatus;
+  currency: string;
+  template: string;
+  createdAt: string;
+  userCount: number;
+}
+
+export interface TemplateInfo {
+  key: string;
+  name: string;
+  description: string;
 }

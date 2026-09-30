@@ -3,7 +3,7 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { catchError, switchMap, throwError } from 'rxjs';
 import { AuthService, isTokenRejected } from './auth.service';
-import { Role } from './models';
+import { MetadataService } from './metadata.service';
 import { NotifyService } from './notify.service';
 
 const ANONYMOUS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/logout'];
@@ -48,7 +48,26 @@ export const authGuard: CanActivateFn = async (_, state) => {
   return auth.isAuthenticated() || router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
 };
 
-export const roleGuard =
-  (...roles: Role[]): CanActivateFn =>
+export const permissionGuard =
+  (resource: string, action: string): CanActivateFn =>
   () =>
-    inject(AuthService).hasRole(...roles) || inject(Router).createUrlTree(['/']);
+    inject(AuthService).can(resource, action) || inject(Router).createUrlTree(['/']);
+
+export const adminAreaGuard: CanActivateFn = () => inject(AuthService).hasAdminAccess() || inject(Router).createUrlTree(['/']);
+
+export const platformGuard: CanActivateFn = () => inject(AuthService).isPlatformAdmin() || inject(Router).createUrlTree(['/']);
+
+/** Loads the tenant's metadata (objects, fields, stages) before any page that renders records. */
+export const metadataGuard: CanActivateFn = async () => {
+  const metadata = inject(MetadataService);
+  if (!metadata.data()) await metadata.load();
+  return true;
+};
+
+/** Record pages: the object must be switched on for the tenant and readable by the user. Runs after metadataGuard. */
+export const objectGuard =
+  (objectKey?: string): CanActivateFn =>
+  (route) => {
+    const key = objectKey ?? route.paramMap.get('objectKey') ?? '';
+    return (inject(MetadataService).isActive(key) && inject(AuthService).can(key, 'read')) || inject(Router).createUrlTree(['/']);
+  };

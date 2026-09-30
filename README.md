@@ -1,57 +1,60 @@
-# CRM
+# CRM Platform
 
-A full-stack Customer Relationship Management system: accounts, contacts, leads (with conversion), opportunities (list and Kanban pipeline), activities, a dashboard with forecast and win rate, and role-based user administration.
+A configurable, **multi-tenant** relationship-management platform. It ships as a full sales CRM (accounts, contacts, leads with conversion, opportunity pipeline, activities, dashboard), and each organisation can reshape it into a help desk, an applicant-tracking system or anything else built on records moving through stages.
+
+- **Multi-tenancy**: isolated organisations in one deployment. Platform admins provision tenants from templates (Sales, Help Desk, Recruitment, Blank), and can suspend or delete them.
+- **Authorization**: roles as permission matrices (object × read/create/update/delete × None/Own/Group/All), groups (teams) that grant roles and share records, per-object overrides, admin-area permissions and anti-escalation.
+- **Customization**: rename or disable standard objects, create custom objects with their own pipelines, add 13 types of custom fields, and edit stages and picklists. Lists, forms, filters, boards and dashboards adapt automatically.
+- **Automation**: no-code rules that create tasks, send notifications or set fields.
+- **Governance**: field-level audit trail, per-record history and in-app notifications.
 
 | Layer | Stack |
 |---|---|
-| UI | Angular 22 (standalone, signals, `httpResource`, zoneless), Angular Material 3, CDK drag-drop, Vitest |
-| API | ASP.NET Core 10 Minimal APIs, built-in validation, OpenAPI 3.1 + Scalar, ASP.NET Identity, JWT + rotating refresh tokens, rate limiting |
-| Data | PostgreSQL + EF Core 10 (Npgsql), migrations |
-| Delivery | Dockerfiles (API and nginx), docker-compose, GitHub Actions CI |
+| UI | Angular 22 (standalone, zoneless, signals, `httpResource`), Angular Material 3, CDK drag-drop, Vitest |
+| API | ASP.NET Core 10 Minimal APIs, built-in validation, OpenAPI 3.1 + Scalar, ASP.NET Identity + JWT with rotating refresh tokens, custom tenant-scoped RBAC |
+| Data | PostgreSQL + EF Core 10 (Npgsql): global tenant filters, `jsonb` custom fields |
 
 ## Quick start (local)
 
-One-time secrets (stored in your Windows profile, not the repo). The connection string (`Database=CRM`) and JWT key are already set:
+The secrets are already configured (connection string `Database=CRM`, JWT key, admin email, demo data). If you're on a new machine:
 ```powershell
 cd backend\src\Crm.Api
 dotnet user-secrets set "Database:Password" "<postgres password>"
 dotnet user-secrets set "Seed:AdminPassword" "<admin password: 10+ chars, Aa1!>"
 ```
 
-Start everything (pick one):
-- VS Code: *Tasks: Run Task* → **CRM: Start all**
-- PowerShell: `./scripts/start-dev.ps1`
+Start it with *Tasks: Run Task* → **CRM: Start all** in VS Code, or run `./scripts/start-dev.ps1`. Then open http://localhost:4200. API docs are at http://localhost:5290/scalar.
 
-Then open http://localhost:4200. The API applies migrations and seeds data on start; its docs are at http://localhost:5290/scalar.
-
-| User | Role | Password |
+| User | Access | Password |
 |---|---|---|
-| `admin@crm.local` | Admin | `Seed:AdminPassword` |
+| `admin@crm.local` | Administrator of the Default tenant + platform admin | `Seed:AdminPassword` |
 | `manager@crm.local` | Manager (demo) | `Seed:DemoUserPassword` |
-| `rep@crm.local` | Sales Rep (demo) | `Seed:DemoUserPassword` |
+| `rep@crm.local` | Standard User (demo) | `Seed:DemoUserPassword` |
+
+To look up a password: `dotnet user-secrets list` in `backend/src/Crm.Api`. Don't share the output.
 
 ## Tests
 ```powershell
-cd backend;  dotnet test                    # 16 API integration tests
-cd frontend; npx ng test --watch=false      # 13 UI unit tests
-./scripts/smoke-test.ps1                    # 35 live end-to-end checks (API running)
+cd backend;  dotnet test                    # 29 API integration tests (stop the API first)
+cd frontend; npx ng test --watch=false      # 25 UI unit tests
+./scripts/smoke-test.ps1                    # 44 live end-to-end checks against PostgreSQL (API running)
 ```
 
 ## Documentation
 | Doc | Contents |
 |---|---|
-| [docs/PRD.md](docs/PRD.md) | Product requirements, scope, NFRs, release criteria |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design, auth flow, security controls, decisions |
-| [docs/API.md](docs/API.md) | REST endpoint reference |
-| [docs/DATA-MODEL.md](docs/DATA-MODEL.md) | ERD, tables, indexes, conventions |
-| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Configuration, local setup, deployment, troubleshooting |
-| [docs/TESTING.md](docs/TESTING.md) | Test strategy, traceability, UAT checklist |
-| [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | End-user guide |
+| [docs/PRD.md](docs/PRD.md) | Requirements: tenancy, RBAC, customization, automation, audit, NFRs, release criteria |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Tenancy enforcement, permission resolution, metadata, automation pipeline, security, ADRs |
+| [docs/API.md](docs/API.md) | REST reference, including admin, customization, automation and platform endpoints |
+| [docs/DATA-MODEL.md](docs/DATA-MODEL.md) | Tables, JSON columns, indexes, v1 → v2 migration |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | Configuration, local setup, tenant operations, deployment, troubleshooting |
+| [docs/TESTING.md](docs/TESTING.md) | Test inventory and traceability, UAT checklist |
+| [docs/USER-GUIDE.md](docs/USER-GUIDE.md) | End users, administrators and platform operators |
 
 ## Structure
 ```
-backend/   ASP.NET Core API (src/Crm.Api), tests, database/crm-schema.sql
-frontend/  Angular app, nginx config
+backend/   ASP.NET Core API (src/Crm.Api), integration tests, database/crm-schema.sql
+frontend/  Angular app (metadata-driven UI, settings hub, platform console), nginx config
 scripts/   start-dev.ps1 (run locally), smoke-test.ps1 (live end-to-end test)
 docs/      Documentation
 ```

@@ -1,3 +1,4 @@
+import { LowerCasePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -5,8 +6,10 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { CrmApi } from '../../core/api';
+import { MetadataService } from '../../core/metadata.service';
 import { ContactDetail, ContactRequest } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
+import { CustomFieldsEditor, customFieldsGroup, customFieldsValue } from '../../shared/custom-fields';
 import { EntityPicker } from '../../shared/entity-picker';
 import { OwnerField } from '../../shared/owner-field';
 
@@ -17,9 +20,9 @@ export interface ContactFormData {
 
 @Component({
   selector: 'app-contact-form-dialog',
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, EntityPicker, OwnerField],
+  imports: [LowerCasePipe, ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, EntityPicker, OwnerField, CustomFieldsEditor],
   template: `
-    <h2 mat-dialog-title>{{ item ? 'Edit contact' : 'New contact' }}</h2>
+    <h2 mat-dialog-title>{{ item ? 'Edit' : 'New' }} {{ meta.label('contact') | lowercase }}</h2>
     <mat-dialog-content>
       <form [formGroup]="form" class="form-grid" id="contact-form" (ngSubmit)="save()">
         <mat-form-field appearance="outline">
@@ -38,8 +41,9 @@ export interface ContactFormData {
         <mat-form-field appearance="outline"><mat-label>Mobile</mat-label><input matInput formControlName="mobile" maxlength="50" /></mat-form-field>
         <mat-form-field appearance="outline"><mat-label>Job title</mat-label><input matInput formControlName="jobTitle" maxlength="100" /></mat-form-field>
         <mat-form-field appearance="outline"><mat-label>Department</mat-label><input matInput formControlName="department" maxlength="100" /></mat-form-field>
-        <app-entity-picker label="Account" kind="accounts" formControlName="accountId" />
-        <app-owner-field class="span-2" [control]="form.controls.ownerId" />
+        <app-entity-picker [label]="meta.label('account')" kind="account" formControlName="accountId" />
+        <app-owner-field class="span-2" resource="contact" [control]="form.controls.ownerId" />
+        <app-custom-fields-editor [fields]="fields" [group]="cf" />
         <mat-form-field appearance="outline" class="span-2">
           <mat-label>Notes</mat-label><textarea matInput rows="3" formControlName="description" maxlength="4000"></textarea>
         </mat-form-field>
@@ -57,7 +61,10 @@ export class ContactFormDialog {
   private readonly ref = inject(MatDialogRef<ContactFormDialog, ContactDetail>);
   private readonly api = inject(CrmApi);
   private readonly notify = inject(NotifyService);
+  readonly meta = inject(MetadataService);
   readonly saving = signal(false);
+  readonly fields = this.meta.fields('contact');
+  readonly cf = customFieldsGroup(this.fields, this.item?.customFields);
 
   readonly form = inject(FormBuilder).group({
     firstName: [this.item?.firstName ?? '', [Validators.required, Validators.maxLength(100)]],
@@ -73,12 +80,13 @@ export class ContactFormDialog {
   });
 
   save(): void {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.cf.invalid) {
       this.form.markAllAsTouched();
+      this.cf.markAllAsTouched();
       return;
     }
     const v = this.form.getRawValue();
-    const body: ContactRequest = { ...v, firstName: v.firstName!, lastName: v.lastName! };
+    const body: ContactRequest = { ...v, firstName: v.firstName!, lastName: v.lastName!, customFields: customFieldsValue(this.fields, this.cf) };
     this.saving.set(true);
     (this.item ? this.api.contacts.update(this.item.id, body) : this.api.contacts.create(body)).subscribe({
       next: (saved) => {

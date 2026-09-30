@@ -1,20 +1,33 @@
 import { HttpClient, HttpParams, httpResource } from '@angular/common/http';
 import { Injectable, Resource, inject, linkedSignal } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map, of, shareReplay } from 'rxjs';
 import {
   AccountDetail,
   AccountRequest,
   ActivityItem,
   ActivityRequest,
+  AuditItem,
+  AutomationField,
   ContactDetail,
   ContactRequest,
+  FieldDef,
+  Grant,
+  GroupItem,
   LeadConvertRequest,
   LeadConvertResult,
   LeadDetail,
   LeadRequest,
+  ObjectDef,
   OpportunityDetail,
   OpportunityRequest,
-  OpportunityStage,
+  RecordItem,
+  RecordRequest,
+  RoleItem,
+  RuleItem,
+  StageDef,
+  TemplateInfo,
+  TenantInfo,
+  TenantItem,
   UserItem,
   UserLookup,
 } from './models';
@@ -61,6 +74,42 @@ class ResourceApi<TDetail, TRequest> {
   }
 }
 
+export interface UserRequest {
+  email?: string;
+  password?: string;
+  firstName: string;
+  lastName: string;
+  isActive?: boolean;
+  roleIds: string[];
+  groupIds: string[];
+}
+
+export interface ObjectRequest {
+  key?: string;
+  label: string;
+  pluralLabel: string;
+  icon: string;
+  description: string | null;
+  nameLabel: string;
+  hasPipeline: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export type FieldRequest = Omit<FieldDef, 'id'>;
+
+export interface CreateTenantRequest {
+  name: string;
+  slug: string;
+  template: string;
+  currency: string;
+  adminEmail: string;
+  adminFirstName: string;
+  adminLastName: string;
+  adminPassword: string;
+  seedDemoData: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CrmApi {
   private readonly http = inject(HttpClient);
@@ -71,32 +120,154 @@ export class CrmApi {
   readonly opportunities = new ResourceApi<OpportunityDetail, OpportunityRequest>(this.http, '/api/opportunities');
   readonly activities = new ResourceApi<ActivityItem, ActivityRequest>(this.http, '/api/activities');
 
+  records(objectKey: string): ResourceApi<RecordItem, RecordRequest> {
+    return new ResourceApi<RecordItem, RecordRequest>(this.http, `/api/records/${objectKey}`);
+  }
+
   convertLead(id: string, body: LeadConvertRequest): Observable<LeadConvertResult> {
     return this.http.post<LeadConvertResult>(`/api/leads/${id}/convert`, body);
   }
 
-  changeStage(id: string, stage: OpportunityStage, lossReason: string | null = null): Observable<OpportunityDetail> {
+  changeStage(id: string, stage: string, lossReason: string | null = null): Observable<OpportunityDetail> {
     return this.http.patch<OpportunityDetail>(`/api/opportunities/${id}/stage`, { stage, lossReason });
+  }
+
+  changeRecordStage(objectKey: string, id: string, stage: string): Observable<RecordItem> {
+    return this.http.patch<RecordItem>(`/api/records/${objectKey}/${id}/stage`, { stage });
   }
 
   setActivityCompleted(id: string, completed: boolean): Observable<ActivityItem> {
     return this.http.post<ActivityItem>(`/api/activities/${id}/${completed ? 'complete' : 'reopen'}`, null);
   }
 
-  createUser(body: { email: string; firstName: string; lastName: string; password: string; roles: string[] }): Observable<UserItem> {
+  // ---------- Users, roles, groups ----------
+
+  createUser(body: UserRequest): Observable<UserItem> {
     return this.http.post<UserItem>('/api/users', body);
   }
 
-  updateUser(id: string, body: { firstName: string; lastName: string; isActive: boolean; roles: string[] }): Observable<UserItem> {
+  updateUser(id: string, body: UserRequest): Observable<UserItem> {
     return this.http.put<UserItem>(`/api/users/${id}`, body);
   }
 
   resetPassword(id: string, newPassword: string): Observable<void> {
     return this.http.post<void>(`/api/users/${id}/reset-password`, { newPassword });
   }
+
+  saveRole(id: string | null, body: { name: string; description: string | null; permissions: Grant[] }): Observable<RoleItem> {
+    return id ? this.http.put<RoleItem>(`/api/admin/roles/${id}`, body) : this.http.post<RoleItem>('/api/admin/roles', body);
+  }
+
+  deleteRole(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/admin/roles/${id}`);
+  }
+
+  saveGroup(id: string | null, body: { name: string; description: string | null; memberIds: string[]; roleIds: string[] }): Observable<GroupItem> {
+    return id ? this.http.put<GroupItem>(`/api/admin/groups/${id}`, body) : this.http.post<GroupItem>('/api/admin/groups', body);
+  }
+
+  deleteGroup(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/admin/groups/${id}`);
+  }
+
+  // ---------- Customization ----------
+
+  saveObject(key: string | null, body: ObjectRequest): Observable<ObjectDef> {
+    return key ? this.http.put<ObjectDef>(`/api/admin/objects/${key}`, body) : this.http.post<ObjectDef>('/api/admin/objects', body);
+  }
+
+  deleteObject(key: string): Observable<void> {
+    return this.http.delete<void>(`/api/admin/objects/${key}`);
+  }
+
+  saveField(objectKey: string, existingKey: string | null, body: FieldRequest): Observable<FieldDef> {
+    return existingKey
+      ? this.http.put<FieldDef>(`/api/admin/objects/${objectKey}/fields/${existingKey}`, body)
+      : this.http.post<FieldDef>(`/api/admin/objects/${objectKey}/fields`, body);
+  }
+
+  deleteField(objectKey: string, fieldKey: string): Observable<void> {
+    return this.http.delete<void>(`/api/admin/objects/${objectKey}/fields/${fieldKey}`);
+  }
+
+  saveStages(objectKey: string, stages: StageDef[]): Observable<ObjectDef> {
+    return this.http.put<ObjectDef>(`/api/admin/objects/${objectKey}/stages`, { stages });
+  }
+
+  savePicklist(key: string, options: string[]): Observable<string[]> {
+    return this.http.put<string[]>(`/api/admin/picklists/${key}`, { options });
+  }
+
+  automationFields(objectKey: string): Observable<AutomationField[]> {
+    return this.http.get<AutomationField[]>(`/api/admin/automation/fields/${objectKey}`);
+  }
+
+  saveRule(id: string | null, body: Omit<RuleItem, 'id' | 'runCount' | 'lastRunAt'>): Observable<RuleItem> {
+    return id ? this.http.put<RuleItem>(`/api/admin/automation/${id}`, body) : this.http.post<RuleItem>('/api/admin/automation', body);
+  }
+
+  deleteRule(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/admin/automation/${id}`);
+  }
+
+  saveSettings(body: { name: string; currency: string }): Observable<TenantInfo> {
+    return this.http.put<TenantInfo>('/api/settings', body);
+  }
+
+  recordHistory(entityType: string, id: string): Observable<AuditItem[]> {
+    return this.http.get<AuditItem[]>(`/api/audit/${entityType}/${id}`);
+  }
+
+  // ---------- Notifications ----------
+
+  markNotificationRead(id: string): Observable<void> {
+    return this.http.post<void>(`/api/notifications/${id}/read`, null);
+  }
+
+  markAllNotificationsRead(): Observable<void> {
+    return this.http.post<void>('/api/notifications/read-all', null);
+  }
+
+  // ---------- Platform ----------
+
+  templates(): Observable<TemplateInfo[]> {
+    return this.http.get<TemplateInfo[]>('/api/platform/templates');
+  }
+
+  createTenant(body: CreateTenantRequest): Observable<TenantItem> {
+    return this.http.post<TenantItem>('/api/platform/tenants', body);
+  }
+
+  updateTenant(id: string, body: { name: string; currency: string; status: string }): Observable<TenantItem> {
+    return this.http.put<TenantItem>(`/api/platform/tenants/${id}`, body);
+  }
+
+  deleteTenant(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/platform/tenants/${id}`);
+  }
 }
 
 @Injectable({ providedIn: 'root' })
 export class UserLookupService {
   readonly users = httpResource<UserLookup[]>(() => '/api/users/lookup', { defaultValue: [] });
+}
+
+/** Resolves record ids (lookup fields) to display names, cached for the session. */
+@Injectable({ providedIn: 'root' })
+export class RecordNameService {
+  private readonly http = inject(HttpClient);
+  private readonly cache = new Map<string, Observable<string>>();
+
+  name(url: string | null): Observable<string> {
+    if (!url) return of('');
+    let cached = this.cache.get(url);
+    if (!cached) {
+      cached = this.http.get<{ name?: string; fullName?: string; subject?: string }>(url).pipe(
+        map((r) => r.name ?? r.fullName ?? r.subject ?? ''),
+        shareReplay(1),
+      );
+      this.cache.set(url, cached);
+    }
+    return cached;
+  }
 }

@@ -51,7 +51,8 @@ function Get-DemoPassword {
     $id = ([xml](Get-Content $csproj)).Project.PropertyGroup.UserSecretsId | Where-Object { $_ } | Select-Object -First 1
     $path = Join-Path $env:APPDATA "Microsoft\UserSecrets\$id\secrets.json"
     if (Test-Path $path) {
-        $value = (Get-Content $path -Raw | ConvertFrom-Json).'Seed:DemoUserPassword'
+        $script:secrets = Get-Content $path -Raw | ConvertFrom-Json
+        $value = $script:secrets.'Seed:DemoUserPassword'
         if ($value) { return $value }
     }
     $secure = Read-Host -AsSecureString 'Demo user password'
@@ -176,6 +177,80 @@ if (-not $Keep) {
         $left = (Api GET "/api/accounts?search=$([uri]::EscapeDataString($tag))").totalCount
         Assert ($left -eq 0) "$left accounts remain"; 'removed'
     }
+}
+
+$adminEmail = $script:secrets.'Seed:AdminEmail'
+$adminPassword = $script:secrets.'Seed:AdminPassword'
+if ($adminEmail -and $adminPassword) {
+    Write-Host "`n6. Platform: tenants, templates, custom objects, automation, audit (PostgreSQL)" -ForegroundColor Cyan
+    $slug = "e2e-$(Get-Date -Format 'HHmmss')"
+    Check 'Platform admin sign-in' {
+        $script:adminToken = (Api POST '/api/auth/login' @{ email = $adminEmail; password = $adminPassword } -Token $null).accessToken
+        $me = Api GET '/api/auth/me' -Token $script:adminToken
+        Assert $me.isPlatformAdmin 'not a platform admin'; $me.email
+    }
+    Check 'Provision Help Desk tenant from template (with demo data)' {
+        $script:tenant = Api POST '/api/platform/tenants' @{
+            name = "E2E Help Desk $slug"; slug = $slug; template = 'helpdesk'; currency = 'USD'
+            adminEmail = "admin@$slug.test"; adminFirstName = 'Helen'; adminLastName = 'Desk'; adminPassword = 'Tenant#Pass123'; seedDemoData = $true
+        } -Token $script:adminToken
+        $script:hdToken = (Api POST '/api/auth/login' @{ email = "admin@$slug.test"; password = 'Tenant#Pass123' } -Token $null).accessToken
+        $script:tenant.slug
+    }
+    Check 'Tenant has its own configuration' {
+        $m = Api GET '/api/metadata' -Token $script:hdToken
+        $ticket = $m.objects | Where-Object key -eq 'ticket'
+        Assert ($null -ne $ticket -and $ticket.hasPipeline) 'ticket object missing'
+        Assert (($m.objects | Where-Object key -eq 'account').pluralLabel -eq 'Customers') 'account not relabelled'
+        "ticket: $($ticket.fields.Count) fields, $($ticket.stages.Count) stages; accounts shown as Customers"
+    }
+    Check 'Custom-field filter uses JSONB containment' {
+        $all = Api GET '/api/records/ticket?pageSize=100' -Token $script:hdToken
+        $high = Api GET '/api/records/ticket?cf.priority=High&pageSize=100' -Token $script:hdToken
+        Assert ($all.totalCount -eq 8) "expected 8 demo tickets, got $($all.totalCount)"
+        Assert (@($high.items | Where-Object { $_.customFields.priority -ne 'High' }).Count -eq 0) 'filter leaked other priorities'
+        "$($high.totalCount) of $($all.totalCount) tickets are High"
+    }
+    Check 'Automation: urgent ticket creates task and notification' {
+        $before = (Api GET '/api/notifications' -Token $script:hdToken).unreadCount
+        $t = Api POST '/api/records/ticket' @{ name = 'Production outage'; customFields = @{ priority = 'Urgent'; category = 'Incident' } } -Token $script:hdToken
+        $after = (Api GET '/api/notifications' -Token $script:hdToken).unreadCount
+        $tasks = Api GET "/api/activities?customRecordId=$($t.id)" -Token $script:hdToken
+        Assert ($after -eq $before + 1) 'no notification'
+        Assert ($tasks.totalCount -eq 1) 'no task'
+        $script:ticketId = $t.id
+        "task: $($tasks.items[0].subject)"
+    }
+    Check 'Stage change and audit history' {
+        Api PATCH "/api/records/ticket/$($script:ticketId)/stage" @{ stage = 'resolved' } -Token $script:hdToken | Out-Null
+        $h = Api GET "/api/audit/ticket/$($script:ticketId)" -Token $script:hdToken
+        Assert (@($h | Where-Object { $_.changes.stage }).Count -ge 1) 'stage change not audited'
+        "$(@($h).Count) audit entries"
+    }
+    Check 'Tenant isolation' {
+        $defaultAccount = (Api GET '/api/accounts?pageSize=1').items[0].id
+        $s = StatusOf { Api GET "/api/accounts/$defaultAccount" -Token $script:hdToken }
+        Assert ($s -eq 404) "got $s"
+        $s2 = StatusOf { Api GET '/api/records/ticket' }
+        Assert ($s2 -eq 404) "default tenant sees tickets: $s2"; 'records invisible across tenants'
+    }
+    Check 'Custom field on standard object (default tenant)' {
+        $a = Api POST '/api/accounts' @{ name = "$tag Tiered"; customFields = @{ tier = 'Gold' } }
+        $f = Api GET '/api/accounts?cf.tier=Gold&pageSize=100'
+        Api DELETE "/api/accounts/$($a.id)" | Out-Null
+        Assert (@($f.items | Where-Object id -eq $a.id).Count -eq 1) 'not found by custom field'; 'filter by cf.tier works'
+    }
+    if (-not $Keep) {
+        Check 'Suspend and delete the test tenant' {
+            Api PUT "/api/platform/tenants/$($script:tenant.id)" @{ name = $script:tenant.name; currency = 'USD'; status = 'Suspended' } -Token $script:adminToken | Out-Null
+            $s = StatusOf { Api POST '/api/auth/login' @{ email = "admin@$slug.test"; password = 'Tenant#Pass123' } -Token $null }
+            Assert ($s -eq 403) "suspended login returned $s"
+            Api DELETE "/api/platform/tenants/$($script:tenant.id)" -Token $script:adminToken | Out-Null
+            'suspended (login blocked) and deleted'
+        }
+    }
+} else {
+    Write-Host "`n6. Platform checks skipped (Seed:AdminEmail / Seed:AdminPassword not in user-secrets)" -ForegroundColor Yellow
 }
 
 Write-Host "`nResult: $script:passed passed, $script:failed failed`n" -ForegroundColor ($script:failed ? 'Red' : 'Green')

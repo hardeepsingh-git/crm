@@ -12,10 +12,13 @@ export class ListState {
   readonly page = signal(0);
   readonly pageSize = signal(20);
   readonly sort = signal<Sort>({ active: '', direction: '' });
+  /** Custom-field filters, sent as ?cf.key=value. */
+  readonly cf = signal<Record<string, string>>({});
   private readonly debouncedSearch = toSignal(toObservable(this.search).pipe(debounceTime(300)), { initialValue: '' });
 
   params(extra: QueryParams = {}) {
     const sort = this.sort();
+    const cf = Object.fromEntries(Object.entries(this.cf()).map(([k, v]) => [`cf.${k}`, v]));
     return toParams({
       search: this.debouncedSearch(),
       mine: this.mine(),
@@ -23,8 +26,19 @@ export class ListState {
       pageSize: this.pageSize(),
       sortBy: sort.direction ? sort.active : null,
       sortDir: sort.direction || null,
+      ...cf,
       ...extra,
     });
+  }
+
+  setCf(key: string, value: string | null): void {
+    this.cf.update((current) => {
+      const next = { ...current };
+      if (value) next[key] = value;
+      else delete next[key];
+      return next;
+    });
+    this.page.set(0);
   }
 
   setSearch(value: string): void {
@@ -82,4 +96,7 @@ export function todayPlus(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export const CURRENCY = 'AUD';
+/** Picklist options plus the record's current value, so values removed from the picklist stay selectable. */
+export function withCurrent(options: string[], current: string | null | undefined): string[] {
+  return current && !options.includes(current) ? [...options, current] : options;
+}

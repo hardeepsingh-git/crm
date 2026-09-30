@@ -1,17 +1,25 @@
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Crm.Api.Auth;
+using Crm.Api.Automation;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
 using Crm.Api.Features.Accounts;
 using Crm.Api.Features.Activities;
 using Crm.Api.Features.Contacts;
+using Crm.Api.Features.Customization;
 using Crm.Api.Features.Dashboard;
+using Crm.Api.Features.Governance;
 using Crm.Api.Features.Leads;
 using Crm.Api.Features.Opportunities;
+using Crm.Api.Features.Records;
+using Crm.Api.Features.Security;
 using Crm.Api.Features.Users;
 using Crm.Api.Infrastructure;
+using Crm.Api.Metadata;
+using Crm.Api.Platform;
+using Crm.Api.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -26,6 +34,14 @@ var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
 
 services.AddSingleton(TimeProvider.System);
+services.AddMemoryCache();
+services.AddScoped<TenantContext>();
+services.AddScoped<PermissionService>();
+services.AddScoped<Access>();
+services.AddScoped<MetadataService>();
+services.AddScoped<CustomFieldValidator>();
+services.AddScoped<AutomationEngine>();
+services.AddScoped<TenantService>();
 services.AddDbContext<CrmDbContext>((sp, options) =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -46,7 +62,6 @@ services.AddIdentityCore<AppUser>(o =>
         o.Lockout.MaxFailedAccessAttempts = 5;
         o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     })
-    .AddRoles<IdentityRole<Guid>>()
     .AddEntityFrameworkStores<CrmDbContext>()
     .AddDefaultTokenProviders();
 
@@ -67,15 +82,12 @@ services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwt.Value.Audience,
             IssuerSigningKey = jwt.Value.GetKey(),
             ValidateIssuerSigningKey = true,
-            NameClaimType = "name",
-            RoleClaimType = "role",
+            NameClaimType = Claims.Name,
             ClockSkew = TimeSpan.FromSeconds(30),
         };
     });
 
-services.AddAuthorizationBuilder()
-    .AddPolicy(Policies.AdminOnly, p => p.RequireRole(Roles.Admin))
-    .AddPolicy(Policies.ManagerOrAdmin, p => p.RequireRole(Roles.Admin, Roles.Manager));
+services.AddAuthorization();
 
 services.AddRateLimiter(o =>
 {
@@ -121,6 +133,7 @@ if (!app.Environment.IsDevelopment()) app.UseHsts();
 app.UseSecurityHeaders();
 app.UseCors();
 app.UseAuthentication();
+app.UseMiddleware<TenantMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 
@@ -142,7 +155,13 @@ secured.MapContacts();
 secured.MapLeads();
 secured.MapOpportunities();
 secured.MapActivities();
+secured.MapRecords();
 secured.MapUsers();
+secured.MapSecurity();
+secured.MapCustomization();
+secured.MapAutomation();
+secured.MapGovernance();
+secured.MapPlatform();
 
 await DbInitializer.InitializeAsync(app.Services, app.Configuration, app.Logger);
 await app.RunAsync();

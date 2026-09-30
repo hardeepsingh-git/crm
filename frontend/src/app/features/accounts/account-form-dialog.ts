@@ -1,27 +1,42 @@
+import { LowerCasePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { CrmApi } from '../../core/api';
+import { MetadataService } from '../../core/metadata.service';
 import { AccountDetail, AccountRequest } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
+import { CustomFieldsEditor, customFieldsGroup, customFieldsValue } from '../../shared/custom-fields';
 import { OwnerField } from '../../shared/owner-field';
+import { withCurrent } from '../../shared/list';
 
 @Component({
   selector: 'app-account-form-dialog',
-  imports: [ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, OwnerField],
+  imports: [LowerCasePipe, ReactiveFormsModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, OwnerField, CustomFieldsEditor],
   template: `
-    <h2 mat-dialog-title>{{ item ? 'Edit account' : 'New account' }}</h2>
+    <h2 mat-dialog-title>{{ item ? 'Edit' : 'New' }} {{ meta.label('account') | lowercase }}</h2>
     <mat-dialog-content>
       <form [formGroup]="form" class="form-grid" id="account-form" (ngSubmit)="save()">
         <mat-form-field appearance="outline" class="span-2">
-          <mat-label>Account name</mat-label>
+          <mat-label>{{ meta.object('account')?.nameLabel ?? 'Name' }}</mat-label>
           <input matInput formControlName="name" maxlength="200" required />
           @if (form.controls.name.hasError('required')) { <mat-error>Name is required</mat-error> }
         </mat-form-field>
-        <mat-form-field appearance="outline"><mat-label>Industry</mat-label><input matInput formControlName="industry" maxlength="100" /></mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Industry</mat-label>
+          @if (industries.length) {
+            <mat-select formControlName="industry">
+              <mat-option [value]="null">None</mat-option>
+              @for (i of industries; track i) { <mat-option [value]="i">{{ i }}</mat-option> }
+            </mat-select>
+          } @else {
+            <input matInput formControlName="industry" maxlength="100" />
+          }
+        </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Website</mat-label><input matInput formControlName="website" placeholder="https://" maxlength="300" />
           @if (form.controls.website.hasError('pattern')) { <mat-error>Must start with http:// or https://</mat-error> }
@@ -38,7 +53,8 @@ import { OwnerField } from '../../shared/owner-field';
         <mat-form-field appearance="outline"><mat-label>Country</mat-label><input matInput formControlName="country" maxlength="100" /></mat-form-field>
         <mat-form-field appearance="outline"><mat-label>Annual revenue</mat-label><input matInput type="number" min="0" formControlName="annualRevenue" /></mat-form-field>
         <mat-form-field appearance="outline"><mat-label>Employees</mat-label><input matInput type="number" min="0" formControlName="employeeCount" /></mat-form-field>
-        <app-owner-field class="span-2" [control]="form.controls.ownerId" />
+        <app-owner-field class="span-2" resource="account" [control]="form.controls.ownerId" />
+        <app-custom-fields-editor [fields]="fields" [group]="cf" />
         <mat-form-field appearance="outline" class="span-2">
           <mat-label>Description</mat-label><textarea matInput rows="3" formControlName="description" maxlength="4000"></textarea>
         </mat-form-field>
@@ -55,7 +71,11 @@ export class AccountFormDialog {
   private readonly ref = inject(MatDialogRef<AccountFormDialog, AccountDetail>);
   private readonly api = inject(CrmApi);
   private readonly notify = inject(NotifyService);
+  readonly meta = inject(MetadataService);
   readonly saving = signal(false);
+  readonly fields = this.meta.fields('account');
+  readonly cf = customFieldsGroup(this.fields, this.item?.customFields);
+  readonly industries = withCurrent(this.meta.picklist('account.industry'), this.item?.industry);
 
   readonly form = inject(FormBuilder).group({
     name: [this.item?.name ?? '', [Validators.required, Validators.maxLength(200)]],
@@ -75,12 +95,13 @@ export class AccountFormDialog {
   });
 
   save(): void {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.cf.invalid) {
       this.form.markAllAsTouched();
+      this.cf.markAllAsTouched();
       return;
     }
     const v = this.form.getRawValue();
-    const body = { ...v, name: v.name! } as AccountRequest;
+    const body = { ...v, name: v.name!, customFields: customFieldsValue(this.fields, this.cf) } as AccountRequest;
     this.saving.set(true);
     (this.item ? this.api.accounts.update(this.item.id, body) : this.api.accounts.create(body)).subscribe({
       next: (saved) => {

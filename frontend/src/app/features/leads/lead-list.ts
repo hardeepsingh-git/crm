@@ -1,4 +1,4 @@
-import { CurrencyPipe, DatePipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, LowerCasePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,18 +14,23 @@ import { MatSortModule } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
 import { Router, RouterLink } from '@angular/router';
 import { stableValue } from '../../core/api';
-import { LEAD_SOURCES, LEAD_STATUSES, LeadDetail, LeadListItem, LeadSource, LeadStatus, PagedResult } from '../../core/models';
-import { CURRENCY, HumanizePipe, ListState, inputValue } from '../../shared/list';
+import { AuthService } from '../../core/auth.service';
+import { MetadataService } from '../../core/metadata.service';
+import { LEAD_STATUSES, LeadDetail, LeadListItem, LeadStatus, PagedResult } from '../../core/models';
+import { CfFilters, CfValue } from '../../shared/custom-fields';
+import { HumanizePipe, ListState, inputValue } from '../../shared/list';
 import { LeadFormDialog } from './lead-form-dialog';
 
 @Component({
   selector: 'app-lead-list',
-  imports: [CurrencyPipe, DatePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule, HumanizePipe],
+  imports: [CurrencyPipe, DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule, HumanizePipe, CfValue, CfFilters],
   template: `
     <div class="page-header">
-      <h1>Leads</h1>
+      <h1>{{ meta.label('lead', true) }}</h1>
       <span class="spacer"></span>
-      <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New lead</button>
+      @if (auth.can('lead', 'create')) {
+        <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('lead') | lowercase }}</button>
+      }
     </div>
     <div class="filters">
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
@@ -44,10 +49,11 @@ import { LeadFormDialog } from './lead-form-dialog';
         <mat-label>Source</mat-label>
         <mat-select [value]="source()" (selectionChange)="source.set($event.value); state.resetPage()">
           <mat-option [value]="null">All</mat-option>
-          @for (s of sources; track s) { <mat-option [value]="s">{{ s | humanize }}</mat-option> }
+          @for (s of sources(); track s) { <mat-option [value]="s">{{ s | humanize }}</mat-option> }
         </mat-select>
       </mat-form-field>
-      <mat-slide-toggle [checked]="state.mine()" (change)="state.setMine($event.checked)">My leads</mat-slide-toggle>
+      <app-cf-filters objectKey="lead" [state]="state" />
+      <mat-slide-toggle [checked]="state.mine()" (change)="state.setMine($event.checked)">Mine only</mat-slide-toggle>
     </div>
     <div class="table-wrap">
       @if (data.isLoading()) { <mat-progress-bar mode="indeterminate" /> }
@@ -70,19 +76,25 @@ import { LeadFormDialog } from './lead-form-dialog';
         </ng-container>
         <ng-container matColumnDef="estimatedValue">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Est. value</th>
-          <td mat-cell *matCellDef="let l">{{ l.estimatedValue | currency: currency : 'symbol' : '1.0-0' }}</td>
+          <td mat-cell *matCellDef="let l">{{ l.estimatedValue | currency: meta.currency() : 'symbol' : '1.0-0' }}</td>
         </ng-container>
         <ng-container matColumnDef="owner">
           <th mat-header-cell *matHeaderCellDef>Owner</th>
           <td mat-cell *matCellDef="let l">{{ l.ownerName }}</td>
         </ng-container>
+        @for (f of cfFields(); track f.key) {
+          <ng-container [matColumnDef]="'cf.' + f.key">
+            <th mat-header-cell *matHeaderCellDef>{{ f.label }}</th>
+            <td mat-cell *matCellDef="let l"><app-cf-value [field]="f" [value]="l.customFields[f.key]" /></td>
+          </ng-container>
+        }
         <ng-container matColumnDef="createdAt">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Created</th>
           <td mat-cell *matCellDef="let l">{{ l.createdAt | date: 'mediumDate' }}</td>
         </ng-container>
-        <tr mat-header-row *matHeaderRowDef="columns"></tr>
-        <tr mat-row *matRowDef="let row; columns: columns" class="clickable" (click)="open(row)"></tr>
-        <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell empty" [attr.colspan]="columns.length">No leads found.</td></tr>
+        <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns()" class="clickable" (click)="open(row)"></tr>
+        <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell empty" [attr.colspan]="columns().length">No records found.</td></tr>
       </table>
       <mat-paginator [length]="total()" [pageIndex]="state.page()" [pageSize]="state.pageSize()" [pageSizeOptions]="[10, 20, 50, 100]"
         (page)="state.onPage($event)" />
@@ -92,14 +104,18 @@ import { LeadFormDialog } from './lead-form-dialog';
 export class LeadList {
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
-  readonly currency = CURRENCY;
+  readonly auth = inject(AuthService);
+  readonly meta = inject(MetadataService);
   readonly inputValue = inputValue;
   readonly statuses = LEAD_STATUSES;
-  readonly sources = LEAD_SOURCES;
+  readonly sources = computed(() => this.meta.picklist('lead.source'));
   readonly state = new ListState();
   readonly status = signal<LeadStatus | null>(null);
-  readonly source = signal<LeadSource | null>(null);
-  readonly columns = ['name', 'company', 'status', 'source', 'estimatedValue', 'owner', 'createdAt'];
+  readonly source = signal<string | null>(null);
+  readonly cfFields = computed(() => this.meta.listFields('lead'));
+  readonly columns = computed(() => [
+    'name', 'company', 'status', 'source', 'estimatedValue', ...this.cfFields().map((f) => `cf.${f.key}`), 'owner', 'createdAt',
+  ]);
 
   readonly data = httpResource<PagedResult<LeadListItem>>(() => ({
     url: '/api/leads',

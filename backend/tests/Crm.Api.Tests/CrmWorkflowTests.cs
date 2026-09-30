@@ -7,6 +7,7 @@ using Crm.Api.Features.Contacts;
 using Crm.Api.Features.Dashboard;
 using Crm.Api.Features.Leads;
 using Crm.Api.Features.Opportunities;
+using Crm.Api.Features.Security;
 using Crm.Api.Features.Users;
 
 namespace Crm.Api.Tests;
@@ -123,7 +124,7 @@ public class CrmWorkflowTests(CrmApiFactory factory) : IClassFixture<CrmApiFacto
         var patched = await client.PatchJsonAsync($"/api/opportunities/{created.Id}/stage", new { stage = "ClosedWon" });
         Assert.Equal(HttpStatusCode.OK, patched.StatusCode);
         var won = await patched.ReadAsync<OpportunityDetail>();
-        Assert.Equal(OpportunityStage.ClosedWon, won.Stage);
+        Assert.Equal("ClosedWon", won.Stage);
         Assert.Equal(100, won.Probability);
         Assert.NotNull(won.ClosedAt);
 
@@ -159,7 +160,7 @@ public class CrmWorkflowTests(CrmApiFactory factory) : IClassFixture<CrmApiFacto
     public async Task Sales_rep_permissions_are_enforced()
     {
         var admin = await factory.CreateAuthenticatedClientAsync();
-        var rep = await factory.CreateUserClientAsync(Roles.SalesRep);
+        var rep = await factory.CreateUserClientAsync("Standard User");
         var adminAccount = await CreateAccountAsync(admin, $"Admin owned {Guid.NewGuid():N}");
 
         Assert.Equal(HttpStatusCode.Forbidden,
@@ -178,21 +179,23 @@ public class CrmWorkflowTests(CrmApiFactory factory) : IClassFixture<CrmApiFacto
     public async Task Admin_can_manage_users()
     {
         var admin = await factory.CreateAuthenticatedClientAsync();
+        var managerRole = (await (await admin.GetAsync("/api/admin/roles")).ReadAsync<List<RoleItem>>()).Single(r => r.Name == "Manager").Id;
         var email = $"new-{Guid.NewGuid():N}@test.local";
         var create = await admin.PostJsonAsync("/api/users", new
         {
-            email, firstName = "New", lastName = "Person", password = "Str0ng#Password", roles = new[] { "Manager" },
+            email, firstName = "New", lastName = "Person", password = "Str0ng#Password", roleIds = new[] { managerRole },
         });
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         var user = await create.ReadAsync<UserItem>();
+        Assert.Equal("Manager", Assert.Single(user.Roles).Name);
 
         var weak = await admin.PostJsonAsync("/api/users", new
         {
-            email = $"weak-{Guid.NewGuid():N}@test.local", firstName = "W", lastName = "P", password = "weakpassword", roles = new[] { "Manager" },
+            email = $"weak-{Guid.NewGuid():N}@test.local", firstName = "W", lastName = "P", password = "weakpassword", roleIds = new[] { managerRole },
         });
         Assert.Equal(HttpStatusCode.BadRequest, weak.StatusCode);
 
-        var deactivate = await admin.PutJsonAsync($"/api/users/{user.Id}", new { firstName = "New", lastName = "Person", isActive = false, roles = new[] { "Manager" } });
+        var deactivate = await admin.PutJsonAsync($"/api/users/{user.Id}", new { firstName = "New", lastName = "Person", isActive = false, roleIds = new[] { managerRole } });
         Assert.Equal(HttpStatusCode.OK, deactivate.StatusCode);
 
         var login = await factory.CreateClient().PostJsonAsync("/api/auth/login", new { email, password = "Str0ng#Password" });

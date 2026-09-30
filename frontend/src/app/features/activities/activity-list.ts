@@ -18,6 +18,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { CrmApi, stableValue } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
+import { MetadataService } from '../../core/metadata.service';
 import { ACTIVITY_TYPES, ActivityItem, ActivityType, PagedResult } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ACTIVITY_ICONS, isOverdue } from '../../shared/activity-panel';
@@ -32,9 +33,11 @@ type StatusFilter = 'Open' | 'Overdue' | 'Completed' | null;
   imports: [DatePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatCheckboxModule, MatSlideToggleModule, MatProgressBarModule, MatTooltipModule],
   template: `
     <div class="page-header">
-      <h1>Activities</h1>
+      <h1>{{ meta.label('activity', true) }}</h1>
       <span class="spacer"></span>
-      <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New activity</button>
+      @if (auth.can('activity', 'create')) {
+        <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('activity').toLowerCase() }}</button>
+      }
     </div>
     <div class="filters">
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
@@ -64,7 +67,7 @@ type StatusFilter = 'Open' | 'Overdue' | 'Completed' | null;
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let a">
             @if (a.type !== 'Note') {
-              <mat-checkbox [checked]="!!a.completedAt" [disabled]="!auth.canModify(a.ownerId)" (change)="toggle(a, $event.checked)"
+              <mat-checkbox [checked]="!!a.completedAt" [disabled]="!auth.canModify('activity', a.ownerId)" (change)="toggle(a, $event.checked)"
                 [matTooltip]="a.completedAt ? 'Reopen' : 'Mark complete'" />
             }
           </td>
@@ -86,7 +89,8 @@ type StatusFilter = 'Open' | 'Overdue' | 'Completed' | null;
         <ng-container matColumnDef="related">
           <th mat-header-cell *matHeaderCellDef>Related to</th>
           <td mat-cell *matCellDef="let a">
-            @if (a.opportunityId) { <a [routerLink]="['/opportunities', a.opportunityId]">{{ a.opportunityName }}</a> }
+            @if (a.customRecordId) { <a [routerLink]="meta.route(a.customObjectKey!, a.customRecordId)">{{ a.customRecordName }}</a> }
+            @else if (a.opportunityId) { <a [routerLink]="['/opportunities', a.opportunityId]">{{ a.opportunityName }}</a> }
             @else if (a.contactId) { <a [routerLink]="['/contacts', a.contactId]">{{ a.contactName }}</a> }
             @else if (a.leadId) { <a [routerLink]="['/leads', a.leadId]">{{ a.leadName }}</a> }
             @else if (a.accountId) { <a [routerLink]="['/accounts', a.accountId]">{{ a.accountName }}</a> }
@@ -99,8 +103,10 @@ type StatusFilter = 'Open' | 'Overdue' | 'Completed' | null;
         <ng-container matColumnDef="actions">
           <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let a" class="actions">
-            @if (auth.canModify(a.ownerId)) {
+            @if (auth.canModify('activity', a.ownerId)) {
               <button mat-icon-button (click)="edit(a)" aria-label="Edit"><mat-icon>edit</mat-icon></button>
+            }
+            @if (auth.canDelete('activity', a.ownerId)) {
               <button mat-icon-button (click)="remove(a)" aria-label="Delete"><mat-icon>delete</mat-icon></button>
             }
           </td>
@@ -123,6 +129,7 @@ export class ActivityList {
   /** Bound from the `?status=` query param (e.g. dashboard "Overdue" link). */
   readonly status = input<StatusFilter>();
   readonly auth = inject(AuthService);
+  readonly meta = inject(MetadataService);
   private readonly api = inject(CrmApi);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotifyService);

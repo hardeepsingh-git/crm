@@ -1,9 +1,11 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using Crm.Api.Common;
+using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 namespace Crm.Api.Auth;
 
@@ -30,7 +32,7 @@ public static class AuthEndpoints
     }
 
     private static async Task<Results<Ok<AuthResponse>, ProblemHttpResult>> Login(
-        LoginRequest req, UserManager<AppUser> users, TokenService tokens, CancellationToken ct)
+        LoginRequest req, UserManager<AppUser> users, CrmDbContext db, TokenService tokens, CancellationToken ct)
     {
         var invalid = TypedResults.Problem("Invalid email or password.", statusCode: StatusCodes.Status401Unauthorized);
         var user = await users.FindByEmailAsync(req.Email);
@@ -44,6 +46,10 @@ public static class AuthEndpoints
             await users.AccessFailedAsync(user);
             return invalid;
         }
+
+        var tenantStatus = await db.Tenants.Where(t => t.Id == user.TenantId).Select(t => t.Status).SingleAsync(ct);
+        if (tenantStatus != TenantStatus.Active)
+            return TypedResults.Problem("Your organisation's account is suspended. Contact your administrator.", statusCode: StatusCodes.Status403Forbidden);
 
         await users.ResetAccessFailedCountAsync(user);
         return TypedResults.Ok(await tokens.IssueAsync(user, ct));
@@ -63,18 +69,16 @@ public static class AuthEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<Results<Ok<UserInfo>, NotFound>> Me(ClaimsPrincipal principal, UserManager<AppUser> users)
+    private static async Task<Results<Ok<UserInfo>, NotFound>> Me(Access access, TokenService tokens, CancellationToken ct)
     {
-        var user = await users.FindByIdAsync(principal.GetUserId().ToString());
-        if (user is null) return TypedResults.NotFound();
-        var roles = (await users.GetRolesAsync(user)).ToList();
-        return TypedResults.Ok(TokenService.ToUserInfo(user, roles));
+        var info = await tokens.DescribeAsync(access.UserId, ct);
+        return info is null ? TypedResults.NotFound() : TypedResults.Ok(info);
     }
 
     private static async Task<Results<NoContent, ValidationProblem, NotFound>> ChangePassword(
-        ChangePasswordRequest req, ClaimsPrincipal principal, UserManager<AppUser> users, TokenService tokens, CancellationToken ct)
+        ChangePasswordRequest req, Access access, UserManager<AppUser> users, TokenService tokens, CancellationToken ct)
     {
-        var user = await users.FindByIdAsync(principal.GetUserId().ToString());
+        var user = await users.FindByIdAsync(access.UserId.ToString());
         if (user is null) return TypedResults.NotFound();
 
         var result = await users.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);

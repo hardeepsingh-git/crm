@@ -1,4 +1,4 @@
-import { CurrencyPipe, DatePipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, LowerCasePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
@@ -15,19 +15,25 @@ import { MatSortModule } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
 import { Router, RouterLink } from '@angular/router';
 import { stableValue } from '../../core/api';
-import { OpportunityDetail, OpportunityListItem, OpportunityStage, PagedResult, STAGES } from '../../core/models';
-import { CURRENCY, HumanizePipe, ListState, inputValue } from '../../shared/list';
+import { AuthService } from '../../core/auth.service';
+import { MetadataService } from '../../core/metadata.service';
+import { OpportunityDetail, OpportunityListItem, PagedResult } from '../../core/models';
+import { CfFilters, CfValue } from '../../shared/custom-fields';
+import { ListState, inputValue } from '../../shared/list';
+import { StageChip } from '../../shared/record-widgets';
 import { OpportunityFormDialog } from './opportunity-form-dialog';
 
 @Component({
   selector: 'app-opportunity-list',
-  imports: [CurrencyPipe, DatePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatSlideToggleModule, MatProgressBarModule, HumanizePipe],
+  imports: [CurrencyPipe, DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters, StageChip],
   template: `
     <div class="page-header">
-      <h1>Opportunities</h1>
+      <h1>{{ meta.label('opportunity', true) }}</h1>
       <span class="spacer"></span>
-      <a mat-stroked-button routerLink="/pipeline"><mat-icon>view_kanban</mat-icon> Pipeline board</a>
-      <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New opportunity</button>
+      <a mat-stroked-button routerLink="/pipeline"><mat-icon>view_kanban</mat-icon> Board</a>
+      @if (auth.can('opportunity', 'create')) {
+        <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('opportunity') | lowercase }}</button>
+      }
     </div>
     <div class="filters">
       <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search">
@@ -43,10 +49,11 @@ import { OpportunityFormDialog } from './opportunity-form-dialog';
         <mat-label>Stage</mat-label>
         <mat-select [value]="stage()" (selectionChange)="stage.set($event.value); state.resetPage()">
           <mat-option [value]="null">All</mat-option>
-          @for (s of stages; track s) { <mat-option [value]="s">{{ s | humanize }}</mat-option> }
+          @for (s of stages(); track s.key) { <mat-option [value]="s.key">{{ s.label }}</mat-option> }
         </mat-select>
       </mat-form-field>
-      <mat-slide-toggle [checked]="state.mine()" (change)="state.setMine($event.checked)">My deals</mat-slide-toggle>
+      <app-cf-filters objectKey="opportunity" [state]="state" />
+      <mat-slide-toggle [checked]="state.mine()" (change)="state.setMine($event.checked)">Mine only</mat-slide-toggle>
     </div>
     <div class="table-wrap">
       @if (data.isLoading()) { <mat-progress-bar mode="indeterminate" /> }
@@ -61,11 +68,11 @@ import { OpportunityFormDialog } from './opportunity-form-dialog';
         </ng-container>
         <ng-container matColumnDef="stage">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Stage</th>
-          <td mat-cell *matCellDef="let o"><span class="chip" [attr.data-v]="o.stage">{{ o.stage | humanize }}</span></td>
+          <td mat-cell *matCellDef="let o"><app-stage-chip objectKey="opportunity" [stage]="o.stage" /></td>
         </ng-container>
         <ng-container matColumnDef="amount">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Amount</th>
-          <td mat-cell *matCellDef="let o">{{ o.amount | currency: currency : 'symbol' : '1.0-0' }}</td>
+          <td mat-cell *matCellDef="let o">{{ o.amount | currency: meta.currency() : 'symbol' : '1.0-0' }}</td>
         </ng-container>
         <ng-container matColumnDef="probability">
           <th mat-header-cell *matHeaderCellDef>Prob.</th>
@@ -79,9 +86,15 @@ import { OpportunityFormDialog } from './opportunity-form-dialog';
           <th mat-header-cell *matHeaderCellDef>Owner</th>
           <td mat-cell *matCellDef="let o">{{ o.ownerName }}</td>
         </ng-container>
-        <tr mat-header-row *matHeaderRowDef="columns"></tr>
-        <tr mat-row *matRowDef="let row; columns: columns" class="clickable" (click)="openRow(row)"></tr>
-        <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell empty" [attr.colspan]="columns.length">No opportunities found.</td></tr>
+        @for (f of cfFields(); track f.key) {
+          <ng-container [matColumnDef]="'cf.' + f.key">
+            <th mat-header-cell *matHeaderCellDef>{{ f.label }}</th>
+            <td mat-cell *matCellDef="let o"><app-cf-value [field]="f" [value]="o.customFields[f.key]" /></td>
+          </ng-container>
+        }
+        <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns()" class="clickable" (click)="openRow(row)"></tr>
+        <tr class="mat-mdc-row" *matNoDataRow><td class="mat-mdc-cell empty" [attr.colspan]="columns().length">No records found.</td></tr>
       </table>
       <mat-paginator [length]="total()" [pageIndex]="state.page()" [pageSize]="state.pageSize()" [pageSizeOptions]="[10, 20, 50, 100]"
         (page)="state.onPage($event)" />
@@ -91,13 +104,17 @@ import { OpportunityFormDialog } from './opportunity-form-dialog';
 export class OpportunityList {
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
-  readonly currency = CURRENCY;
+  readonly auth = inject(AuthService);
+  readonly meta = inject(MetadataService);
   readonly inputValue = inputValue;
-  readonly stages = STAGES;
+  readonly stages = computed(() => this.meta.stages('opportunity'));
   readonly state = new ListState();
-  readonly stage = signal<OpportunityStage | null>(null);
+  readonly stage = signal<string | null>(null);
   readonly open = signal<boolean | null>(true);
-  readonly columns = ['name', 'account', 'stage', 'amount', 'probability', 'expectedCloseDate', 'owner'];
+  readonly cfFields = computed(() => this.meta.listFields('opportunity'));
+  readonly columns = computed(() => [
+    'name', 'account', 'stage', 'amount', 'probability', 'expectedCloseDate', ...this.cfFields().map((f) => `cf.${f.key}`), 'owner',
+  ]);
 
   readonly data = httpResource<PagedResult<OpportunityListItem>>(() => ({
     url: '/api/opportunities',

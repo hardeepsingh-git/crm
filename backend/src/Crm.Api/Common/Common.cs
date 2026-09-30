@@ -1,34 +1,72 @@
 using System.Linq.Expressions;
 using System.Security.Claims;
-using Crm.Api.Data;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
 namespace Crm.Api.Common;
 
-public static class Roles
+/// <summary>The tenant and user the current request (or background operation) acts for.</summary>
+public sealed class TenantContext
 {
-    public const string Admin = "Admin";
-    public const string Manager = "Manager";
-    public const string SalesRep = "SalesRep";
-    public static readonly string[] All = [Admin, Manager, SalesRep];
+    public Guid? TenantId { get; private set; }
+    public Guid? UserId { get; private set; }
+    public string? UserName { get; private set; }
+
+    public void Set(Guid tenantId, Guid? userId = null, string? userName = null)
+    {
+        TenantId = tenantId;
+        UserId = userId;
+        UserName = userName;
+    }
+
+    /// <summary>Temporarily acts inside another tenant, e.g. when a platform admin provisions a new tenant.</summary>
+    public IDisposable Use(Guid tenantId, Guid? userId = null, string? userName = null)
+    {
+        var previous = (TenantId, UserId, UserName);
+        Set(tenantId, userId ?? UserId, userName ?? UserName);
+        return new Restore(() => (TenantId, UserId, UserName) = previous);
+    }
+
+    private sealed class Restore(Action action) : IDisposable
+    {
+        public void Dispose() => action();
+    }
 }
 
-public static class Policies
+public static class Claims
 {
-    public const string AdminOnly = "AdminOnly";
-    public const string ManagerOrAdmin = "ManagerOrAdmin";
+    public const string Subject = "sub";
+    public const string Tenant = "tid";
+    public const string Name = "name";
+    public const string Email = "email";
 }
 
 public static class ClaimsPrincipalExtensions
 {
     public static Guid GetUserId(this ClaimsPrincipal user) =>
-        Guid.Parse(user.FindFirstValue("sub") ?? throw new InvalidOperationException("Missing sub claim."));
+        Guid.Parse(user.FindFirstValue(Claims.Subject) ?? throw new InvalidOperationException("Missing sub claim."));
+}
 
-    public static bool IsManagerOrAdmin(this ClaimsPrincipal user) =>
-        user.IsInRole(Roles.Admin) || user.IsInRole(Roles.Manager);
-
-    public static bool CanModify(this ClaimsPrincipal user, Guid ownerId) =>
-        user.IsManagerOrAdmin() || user.GetUserId() == ownerId;
+/// <summary>Populates <see cref="TenantContext"/> from the access token. Tokens without a tenant claim are rejected.</summary>
+public sealed class TenantMiddleware(RequestDelegate next)
+{
+    public async Task InvokeAsync(HttpContext context, TenantContext tenant)
+    {
+        var user = context.User;
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            if (!Guid.TryParse(user.FindFirstValue(Claims.Tenant), out var tenantId) ||
+                !Guid.TryParse(user.FindFirstValue(Claims.Subject), out var userId))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return;
+            }
+            tenant.Set(tenantId, userId, user.FindFirstValue(Claims.Name));
+        }
+        await next(context);
+    }
 }
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int Page, int PageSize);
@@ -57,19 +95,38 @@ public static class QueryableExtensions
 
 public static class Errors
 {
-    public static Microsoft.AspNetCore.Http.HttpResults.ValidationProblem Validation(string field, string message) =>
+    public static ValidationProblem Validation(string field, string message) =>
         TypedResults.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });
+
+    public static ValidationProblem Validation(IDictionary<string, string[]> errors) => TypedResults.ValidationProblem(errors);
 }
 
-public static class Ownership
+/// <summary>Helpers for the JSON object stored in <c>CustomFields</c> columns.</summary>
+public static class Cf
 {
-    /// <summary>Returns an error message if the caller may not assign <paramref name="requested"/> as owner.</summary>
-    public static async Task<string?> ValidateAsync(Guid? requested, Guid currentOwner, ClaimsPrincipal user, CrmDbContext db, CancellationToken ct)
+    public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    public static JsonObject Parse(string? json)
     {
-        if (requested is null || requested == currentOwner) return null;
-        if (!user.IsManagerOrAdmin() && requested != user.GetUserId())
-            return "Only managers and admins can assign records to other users.";
-        var exists = await db.Users.AnyAsync(u => u.Id == requested && u.IsActive, ct);
-        return exists ? null : "Owner does not exist or is inactive.";
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try { return JsonNode.Parse(json) as JsonObject ?? []; }
+        catch (JsonException) { return []; }
     }
+
+    public static string[] ParseStrings(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try { return JsonSerializer.Deserialize<string[]>(json) ?? []; }
+        catch (JsonException) { return []; }
+    }
+
+    public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Json);
+
+    public static string? AsText(JsonNode? node) => node switch
+    {
+        null => null,
+        JsonValue v when v.TryGetValue<string>(out var s) => s,
+        JsonArray a => string.Join(", ", a.Select(AsText)),
+        _ => node.ToJsonString(),
+    };
 }

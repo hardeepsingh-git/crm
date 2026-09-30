@@ -40,7 +40,10 @@ public class AuthTests(CrmApiFactory factory) : IClassFixture<CrmApiFactory>
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
         var me = await (await client.GetAsync("/api/auth/me")).ReadAsync<UserInfo>();
         Assert.Equal(CrmApiFactory.AdminEmail, me.Email);
-        Assert.Contains("Admin", me.Roles);
+        Assert.Contains("Administrator", me.Roles);
+        Assert.True(me.IsAdministrator);
+        Assert.True(me.IsPlatformAdmin);
+        Assert.Equal("default", me.Tenant.Slug);
     }
 
     [Fact]

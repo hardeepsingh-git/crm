@@ -2,15 +2,18 @@ import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from './auth.service';
 import { authGuard, authInterceptor } from './http';
 import { AuthResponse } from './models';
+import { MetadataService } from './metadata.service';
+import { testUser } from './testing';
 
 const response = (token: string, refresh: string): AuthResponse => ({
   accessToken: token,
   refreshToken: refresh,
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
-  user: { id: 'u1', email: 'a@b.c', firstName: 'Ada', lastName: 'Lovelace', fullName: 'Ada Lovelace', roles: ['SalesRep'] },
+  user: testUser(),
 });
 
 describe('AuthService + authInterceptor', () => {
@@ -43,8 +46,19 @@ describe('AuthService + authInterceptor', () => {
     login();
     expect(auth.isAuthenticated()).toBe(true);
     expect(auth.user()?.fullName).toBe('Ada Lovelace');
-    expect(auth.isManager()).toBe(false);
+    expect(auth.isAdmin()).toBe(false);
     expect(localStorage.getItem('crm.refreshToken')).toBe('refresh-1');
+  });
+
+  it('clears tenant metadata when the session ends', () => {
+    login();
+    const meta = TestBed.inject(MetadataService);
+    meta.data.set({ tenant: testUser().tenant, objects: [], picklists: {} });
+    http.get('/api/accounts').subscribe({ error: () => undefined });
+    backend.expectOne('/api/accounts').flush(null, { status: 401, statusText: 'Unauthorized' });
+    backend.expectOne('/api/auth/refresh').flush(null, { status: 401, statusText: 'Unauthorized' });
+
+    expect(meta.data()).toBeNull();
   });
 
   it('adds the bearer token to API calls', () => {
@@ -109,6 +123,29 @@ describe('AuthService + authInterceptor', () => {
 
     expect(await result).toBe(true);
     expect(auth.token).toBe('access-9');
+  });
+
+  it('serializes refresh across tabs and sends the latest stored token', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const request = (_name: string, callback: () => Promise<unknown>) => gate.then(callback);
+    Object.defineProperty(navigator, 'locks', { value: { request }, configurable: true });
+    try {
+      localStorage.setItem('crm.refreshToken', 'stored');
+      const done = firstValueFrom(auth.refresh());
+      backend.expectNone('/api/auth/refresh'); // waiting for the lock held by another tab
+      localStorage.setItem('crm.refreshToken', 'rotated-by-other-tab');
+      release();
+      await gate;
+      await Promise.resolve();
+      const req = backend.expectOne('/api/auth/refresh');
+      expect(req.request.body).toEqual({ refreshToken: 'rotated-by-other-tab' });
+      req.flush(response('access-3', 'refresh-3'));
+      await done;
+      expect(localStorage.getItem('crm.refreshToken')).toBe('refresh-3');
+    } finally {
+      delete (navigator as { locks?: unknown }).locks;
+    }
   });
 
   it('does not send tokens to non-API URLs', () => {

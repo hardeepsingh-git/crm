@@ -32,13 +32,13 @@ export class NotifyService {
 
 export function errorMessage(err: unknown): string {
   if (!(err instanceof HttpErrorResponse)) return 'Something went wrong.';
+  const problem = typeof err.error === 'object' ? (err.error as ProblemDetails | null) : null;
   if (err.status === 0) return 'Cannot reach the server. Check your connection.';
-  if (err.status === 403) return 'You do not have permission to do that.';
+  if (err.status === 403) return problem?.detail ?? 'You do not have permission to do that.';
   if (err.status === 404) return 'The record was not found. It may have been deleted.';
   if (err.status === 429) return 'Too many attempts. Please wait a minute and try again.';
   if (typeof err.error === 'string' && err.error) return err.error;
 
-  const problem = err.error as ProblemDetails | null;
   if (problem?.errors) return Object.values(problem.errors).flat().join(' ');
   return problem?.detail ?? problem?.title ?? `Request failed (${err.status}).`;
 }

@@ -2,11 +2,40 @@ using Microsoft.AspNetCore.Identity;
 
 namespace Crm.Api.Domain;
 
-public class AppUser : IdentityUser<Guid>
+/// <summary>Rows that belong to exactly one tenant. Isolation is enforced centrally by the DbContext.</summary>
+public interface ITenantEntity
 {
+    Guid TenantId { get; set; }
+}
+
+/// <summary>Entities carrying tenant-defined custom field values as a JSON object.</summary>
+public interface IHasCustomFields
+{
+    string CustomFields { get; set; }
+}
+
+public class Tenant
+{
+    public static readonly Guid DefaultId = Guid.Parse("0199a000-0000-7000-8000-000000000001");
+
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public string Name { get; set; } = "";
+    public string Slug { get; set; } = "";
+    public TenantStatus Status { get; set; } = TenantStatus.Active;
+    public string Currency { get; set; } = "AUD";
+    public string Template { get; set; } = "sales";
+    public DateTime CreatedAt { get; set; }
+}
+
+public class AppUser : IdentityUser<Guid>, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Tenant? Tenant { get; set; }
     public string FirstName { get; set; } = "";
     public string LastName { get; set; } = "";
     public bool IsActive { get; set; } = true;
+    /// <summary>Can manage tenants across the whole platform.</summary>
+    public bool IsPlatformAdmin { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string FullName => $"{FirstName} {LastName}".Trim();
 }
@@ -22,17 +51,19 @@ public class RefreshToken
     public DateTime? RevokedAt { get; set; }
 }
 
-public abstract class AuditableEntity
+public abstract class AuditableEntity : ITenantEntity
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid TenantId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
-public abstract class OwnedEntity : AuditableEntity
+public abstract class OwnedEntity : AuditableEntity, IHasCustomFields
 {
     public Guid OwnerId { get; set; }
     public AppUser? Owner { get; set; }
+    public string CustomFields { get; set; } = "{}";
 }
 
 public class Account : OwnedEntity
@@ -76,7 +107,7 @@ public class Lead : OwnedEntity
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public string? JobTitle { get; set; }
-    public LeadSource Source { get; set; } = LeadSource.Other;
+    public string Source { get; set; } = "Other";
     public LeadStatus Status { get; set; } = LeadStatus.New;
     public decimal? EstimatedValue { get; set; }
     public string? Description { get; set; }
@@ -89,7 +120,13 @@ public class Lead : OwnedEntity
     public Opportunity? ConvertedOpportunity { get; set; }
 }
 
-public class Opportunity : OwnedEntity
+public interface IStaged
+{
+    string Stage { get; set; }
+    DateTime? ClosedAt { get; set; }
+}
+
+public class Opportunity : OwnedEntity, IStaged
 {
     public string Name { get; set; } = "";
     public Guid AccountId { get; set; }
@@ -97,25 +134,23 @@ public class Opportunity : OwnedEntity
     public Guid? ContactId { get; set; }
     public Contact? Contact { get; set; }
     public decimal Amount { get; set; }
-    public OpportunityStage Stage { get; set; } = OpportunityStage.Prospecting;
-    public int Probability { get; set; } = 10;
+    public string Stage { get; set; } = "";
+    public int Probability { get; set; }
     public DateOnly ExpectedCloseDate { get; set; }
     public DateTime? ClosedAt { get; set; }
     public string? LossReason { get; set; }
     public string? Description { get; set; }
 
-    public bool IsClosed => Stage is OpportunityStage.ClosedWon or OpportunityStage.ClosedLost;
-
-    public void MoveToStage(OpportunityStage stage, DateTime now, int? probability = null)
+    public void MoveToStage(PipelineStage stage, DateTime now, int? probability = null)
     {
-        if (stage != Stage)
+        if (stage.Key != Stage)
         {
-            Stage = stage;
-            ClosedAt = IsClosed ? now : null;
-            Probability = StageDefaults.Probability(stage);
+            Stage = stage.Key;
+            ClosedAt = stage.Category == StageCategory.Open ? null : now;
+            Probability = stage.Probability;
         }
-        if (probability is not null && !IsClosed) Probability = probability.Value;
-        if (stage != OpportunityStage.ClosedLost) LossReason = null;
+        if (probability is not null && stage.Category == StageCategory.Open) Probability = probability.Value;
+        if (stage.Category != StageCategory.Lost) LossReason = null;
     }
 }
 
@@ -135,4 +170,202 @@ public class Activity : OwnedEntity
     public Lead? Lead { get; set; }
     public Guid? OpportunityId { get; set; }
     public Opportunity? Opportunity { get; set; }
+    public Guid? CustomRecordId { get; set; }
+    public CustomRecord? CustomRecord { get; set; }
+}
+
+/// <summary>A row of a tenant-defined object type; its fields live in <see cref="OwnedEntity.CustomFields"/>.</summary>
+public class CustomRecord : OwnedEntity, IStaged
+{
+    public Guid ObjectDefinitionId { get; set; }
+    public ObjectDefinition? ObjectDefinition { get; set; }
+    public string Name { get; set; } = "";
+    public string Stage { get; set; } = "";
+    public DateTime? ClosedAt { get; set; }
+}
+
+// ---------- Metadata (configuration) ----------
+
+public static class ObjectKeys
+{
+    public const string Account = "account";
+    public const string Contact = "contact";
+    public const string Lead = "lead";
+    public const string Opportunity = "opportunity";
+    public const string Activity = "activity";
+    public static readonly string[] Standard = [Account, Contact, Lead, Opportunity, Activity];
+}
+
+public class ObjectDefinition : AuditableEntity
+{
+    public string Key { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string PluralLabel { get; set; } = "";
+    public string Icon { get; set; } = "category";
+    public string? Description { get; set; }
+    public string NameLabel { get; set; } = "Name";
+    public bool IsStandard { get; set; }
+    public bool IsActive { get; set; } = true;
+    public bool HasPipeline { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public class FieldDefinition : AuditableEntity
+{
+    public string ObjectKey { get; set; } = "";
+    public string Key { get; set; } = "";
+    public string Label { get; set; } = "";
+    public FieldType Type { get; set; }
+    public bool IsRequired { get; set; }
+    /// <summary>JSON array of allowed values for Picklist / MultiPicklist.</summary>
+    public string Options { get; set; } = "[]";
+    public string? LookupObjectKey { get; set; }
+    public int? MaxLength { get; set; }
+    public decimal? Min { get; set; }
+    public decimal? Max { get; set; }
+    public string? HelpText { get; set; }
+    public bool ShowInList { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public class PipelineStage : AuditableEntity
+{
+    public string ObjectKey { get; set; } = "";
+    public string Key { get; set; } = "";
+    public string Label { get; set; } = "";
+    public int SortOrder { get; set; }
+    public int Probability { get; set; }
+    public StageCategory Category { get; set; }
+    public string Color { get; set; } = "#6750a4";
+}
+
+/// <summary>Configurable option list for a standard field, e.g. "account.industry" or "lead.source".</summary>
+public class Picklist : AuditableEntity
+{
+    public string Key { get; set; } = "";
+    public string Options { get; set; } = "[]";
+}
+
+public class AutomationRule : AuditableEntity
+{
+    public string Name { get; set; } = "";
+    public string ObjectKey { get; set; } = "";
+    public AutomationTrigger Trigger { get; set; }
+    public string Conditions { get; set; } = "[]";
+    public string Actions { get; set; } = "[]";
+    public bool IsActive { get; set; } = true;
+    public int RunCount { get; set; }
+    public DateTime? LastRunAt { get; set; }
+}
+
+public record AutomationCondition(string Field, ConditionOperator Operator, string? Value);
+
+public record AutomationAction(
+    AutomationActionType Type,
+    string? Subject = null,
+    string? Message = null,
+    int? DueInDays = null,
+    ActivityPriority? Priority = null,
+    string? AssignTo = null,
+    string? Field = null,
+    string? Value = null);
+
+public class Notification : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid TenantId { get; set; }
+    public Guid UserId { get; set; }
+    public string Title { get; set; } = "";
+    public string Message { get; set; } = "";
+    public string? Link { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ReadAt { get; set; }
+}
+
+public class AuditLog : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid TenantId { get; set; }
+    public string EntityType { get; set; } = "";
+    public Guid EntityId { get; set; }
+    public string? EntityName { get; set; }
+    public AuditAction Action { get; set; }
+    public Guid? UserId { get; set; }
+    public string? UserName { get; set; }
+    public DateTime Timestamp { get; set; }
+    /// <summary>JSON object: field name -> [old, new].</summary>
+    public string Changes { get; set; } = "{}";
+}
+
+// ---------- Security ----------
+
+public static class AdminResources
+{
+    public const string Users = "users";
+    public const string Roles = "roles";
+    public const string Groups = "groups";
+    public const string Customization = "customization";
+    public const string Settings = "settings";
+    public const string Audit = "audit";
+    public static readonly string[] All = [Users, Roles, Groups, Customization, Settings, Audit];
+}
+
+public static class PermissionActions
+{
+    public const string Read = "read";
+    public const string Create = "create";
+    public const string Update = "update";
+    public const string Delete = "delete";
+    public const string Manage = "manage";
+    public static readonly string[] Record = [Read, Create, Update, Delete];
+}
+
+public class Role : AuditableEntity
+{
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    /// <summary>System roles are created by templates and cannot be deleted.</summary>
+    public bool IsSystem { get; set; }
+    /// <summary>Grants every permission with All scope; cannot be edited.</summary>
+    public bool IsAdministrator { get; set; }
+    public List<RolePermission> Permissions { get; set; } = [];
+}
+
+/// <summary>Resource is an object key, "*" for every object, or an admin resource.</summary>
+public class RolePermission
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid RoleId { get; set; }
+    public string Resource { get; set; } = "";
+    public string Action { get; set; } = "";
+    public PermissionScope Scope { get; set; } = PermissionScope.All;
+}
+
+public class UserRole
+{
+    public Guid UserId { get; set; }
+    public Guid RoleId { get; set; }
+    public Role? Role { get; set; }
+}
+
+public class Group : AuditableEntity
+{
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public List<GroupMember> Members { get; set; } = [];
+    public List<GroupRole> Roles { get; set; } = [];
+}
+
+public class GroupMember
+{
+    public Guid GroupId { get; set; }
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+}
+
+public class GroupRole
+{
+    public Guid GroupId { get; set; }
+    public Guid RoleId { get; set; }
+    public Role? Role { get; set; }
 }

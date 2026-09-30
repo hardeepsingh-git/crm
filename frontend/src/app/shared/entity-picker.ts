@@ -9,9 +9,15 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { debounceTime, distinctUntilChanged, filter, map, switchMap } from 'rxjs';
 import { toParams } from '../core/api';
+import { MetadataService } from '../core/metadata.service';
 import { PagedResult } from '../core/models';
 
-export type PickerKind = 'accounts' | 'contacts' | 'leads' | 'opportunities';
+const LEGACY_KINDS: Record<string, string> = {
+  accounts: 'account',
+  contacts: 'contact',
+  leads: 'lead',
+  opportunities: 'opportunity',
+};
 
 interface Option {
   id: string;
@@ -54,10 +60,16 @@ const toOption = (x: Named): Option => ({ id: x.id, name: x.name ?? x.fullName ?
 })
 export class EntityPicker implements ControlValueAccessor {
   private readonly http = inject(HttpClient);
+  private readonly meta = inject(MetadataService);
   readonly label = input.required<string>();
-  readonly kind = input.required<PickerKind>();
+  /** Object key (e.g. "account", "ticket"). */
+  readonly kind = input.required<string>();
   readonly required = input(false);
   readonly extraParams = input<Record<string, string | null>>({});
+
+  private url(): string {
+    return this.meta.apiUrl(LEGACY_KINDS[this.kind()] ?? this.kind());
+  }
 
   readonly text = new FormControl<string | Option>('', { nonNullable: true });
   readonly options = signal<Option[]>([]);
@@ -74,7 +86,7 @@ export class EntityPicker implements ControlValueAccessor {
         debounceTime(250),
         distinctUntilChanged(),
         switchMap((search) =>
-          this.http.get<PagedResult<Named>>(`/api/${this.kind()}`, {
+          this.http.get<PagedResult<Named>>(this.url(), {
             params: toParams({ search, pageSize: 10, ...this.extraParams() }),
           }),
         ),
@@ -107,7 +119,7 @@ export class EntityPicker implements ControlValueAccessor {
       this.text.setValue('', { emitEvent: false });
       return;
     }
-    this.http.get<Named>(`/api/${this.kind()}/${id}`).subscribe({
+    this.http.get<Named>(`${this.url()}/${id}`).subscribe({
       next: (item) => this.text.setValue(toOption(item), { emitEvent: false }),
       error: () => this.text.setValue('', { emitEvent: false }),
     });

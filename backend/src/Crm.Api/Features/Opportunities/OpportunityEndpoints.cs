@@ -1,73 +1,77 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
+using System.Text.Json.Nodes;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Metadata;
+using Crm.Api.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using static Crm.Api.Domain.PermissionActions;
 
 namespace Crm.Api.Features.Opportunities;
 
 public record OpportunityListItem(
     Guid Id, string Name, Guid AccountId, string AccountName, Guid? ContactId, string? ContactName,
-    decimal Amount, OpportunityStage Stage, int Probability, DateOnly ExpectedCloseDate,
-    Guid OwnerId, string OwnerName, DateTime CreatedAt);
+    decimal Amount, string Stage, int Probability, DateOnly ExpectedCloseDate,
+    Guid OwnerId, string OwnerName, DateTime CreatedAt, JsonObject CustomFields);
 
 public record OpportunityDetail(
     Guid Id, string Name, Guid AccountId, string AccountName, Guid? ContactId, string? ContactName,
-    decimal Amount, OpportunityStage Stage, int Probability, DateOnly ExpectedCloseDate,
+    decimal Amount, string Stage, int Probability, DateOnly ExpectedCloseDate,
     DateTime? ClosedAt, string? LossReason, string? Description,
-    Guid OwnerId, string OwnerName, DateTime CreatedAt, DateTime UpdatedAt);
+    Guid OwnerId, string OwnerName, DateTime CreatedAt, DateTime UpdatedAt, JsonObject CustomFields);
 
 public record OpportunityRequest(
     [Required, MaxLength(200)] string Name,
     Guid AccountId,
     Guid? ContactId,
     [Range(0, 1_000_000_000_000)] decimal Amount,
-    OpportunityStage Stage,
+    [Required, MaxLength(64)] string Stage,
     [Range(0, 100)] int? Probability,
     DateOnly ExpectedCloseDate,
     [MaxLength(500)] string? LossReason,
     [MaxLength(4000)] string? Description,
-    Guid? OwnerId);
+    Guid? OwnerId,
+    JsonObject? CustomFields = null);
 
-public record StageChangeRequest(OpportunityStage Stage, [MaxLength(500)] string? LossReason);
+public record StageChangeRequest([Required, MaxLength(64)] string Stage, [MaxLength(500)] string? LossReason);
 
 public record OpportunityQuery(
-    string? Search, OpportunityStage? Stage, Guid? AccountId, Guid? ContactId, Guid? OwnerId, bool? Open, bool Mine = false,
+    string? Search, string? Stage, Guid? AccountId, Guid? ContactId, Guid? OwnerId, bool? Open, bool Mine = false,
     int Page = 1, int PageSize = 20, string? SortBy = null, string? SortDir = null);
 
 public static class OpportunityEndpoints
 {
+    private const string R = ObjectKeys.Opportunity;
+
     public static RouteGroupBuilder MapOpportunities(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/opportunities").WithTags("Opportunities");
-        g.MapGet("/", List);
-        g.MapGet("/pipeline", Pipeline);
-        g.MapGet("/{id:guid}", Get);
-        g.MapPost("/", Create);
-        g.MapPut("/{id:guid}", Update);
-        g.MapPatch("/{id:guid}/stage", ChangeStage);
-        g.MapDelete("/{id:guid}", Delete).RequireAuthorization(Policies.ManagerOrAdmin);
+        g.MapGet("/", List).RequirePermission(R, Read);
+        g.MapGet("/pipeline", Pipeline).RequirePermission(R, Read);
+        g.MapGet("/{id:guid}", Get).RequirePermission(R, Read);
+        g.MapPost("/", CreateAsync).RequirePermission(R, Create);
+        g.MapPut("/{id:guid}", UpdateAsync).RequirePermission(R, Update);
+        g.MapPatch("/{id:guid}/stage", ChangeStage).RequirePermission(R, Update);
+        g.MapDelete("/{id:guid}", DeleteAsync).RequirePermission(R, Delete);
         return api;
     }
 
-    private static IQueryable<Opportunity> OpenOnly(this IQueryable<Opportunity> q) =>
-        q.Where(o => o.Stage != OpportunityStage.ClosedWon && o.Stage != OpportunityStage.ClosedLost);
-
     private static async Task<Ok<PagedResult<OpportunityListItem>>> List(
-        [AsParameters] OpportunityQuery q, ClaimsPrincipal user, CrmDbContext db, CancellationToken ct)
+        [AsParameters] OpportunityQuery q, HttpRequest http, Access access, CrmDbContext db, CancellationToken ct)
     {
-        var query = db.Opportunities.AsNoTracking();
+        var p = await access.GetAsync(ct);
+        var query = p.Filter(db.Opportunities.AsNoTracking(), R).WhereCustomFields(http.Query, db);
         var search = QueryableExtensions.NormalizeSearch(q.Search);
         if (search is not null)
             query = query.Where(o => o.Name.ToLower().Contains(search) || o.Account!.Name.ToLower().Contains(search));
-        if (q.Stage is not null) query = query.Where(o => o.Stage == q.Stage);
+        if (!string.IsNullOrWhiteSpace(q.Stage)) query = query.Where(o => o.Stage == q.Stage);
         if (q.AccountId is not null) query = query.Where(o => o.AccountId == q.AccountId);
         if (q.ContactId is not null) query = query.Where(o => o.ContactId == q.ContactId);
-        if (q.Open == true) query = query.OpenOnly();
-        if (q.Open == false) query = query.Where(o => o.Stage == OpportunityStage.ClosedWon || o.Stage == OpportunityStage.ClosedLost);
-        if (q.Mine) query = query.Where(o => o.OwnerId == user.GetUserId());
+        if (q.Open == true) query = query.Where(o => o.ClosedAt == null);
+        if (q.Open == false) query = query.Where(o => o.ClosedAt != null);
+        if (q.Mine) query = query.Where(o => o.OwnerId == p.UserId);
         else if (q.OwnerId is not null) query = query.Where(o => o.OwnerId == q.OwnerId);
 
         var desc = QueryableExtensions.IsDescending(q.SortDir);
@@ -81,112 +85,114 @@ public static class OpportunityEndpoints
             _ => query.OrderByDir(o => o.ExpectedCloseDate, desc),
         };
 
-        var result = await ToListItems(query).ToPagedAsync(q.Page, q.PageSize, ct);
-        return TypedResults.Ok(result);
+        return TypedResults.Ok(await ToListItems(query).ToPagedAsync(q.Page, q.PageSize, ct));
     }
 
     /// <summary>All open deals plus deals closed in the last 30 days, for the Kanban board.</summary>
     private static async Task<Ok<List<OpportunityListItem>>> Pipeline(
-        ClaimsPrincipal user, CrmDbContext db, TimeProvider clock, CancellationToken ct, bool mine = false)
+        Access access, CrmDbContext db, TimeProvider clock, CancellationToken ct, bool mine = false)
     {
+        var p = await access.GetAsync(ct);
         var since = clock.GetUtcNow().UtcDateTime.AddDays(-30);
-        var query = db.Opportunities.AsNoTracking()
-            .Where(o => (o.Stage != OpportunityStage.ClosedWon && o.Stage != OpportunityStage.ClosedLost) || o.ClosedAt >= since);
-        if (mine) query = query.Where(o => o.OwnerId == user.GetUserId());
-        var items = await ToListItems(query.OrderBy(o => o.ExpectedCloseDate)).Take(500).ToListAsync(ct);
-        return TypedResults.Ok(items);
+        var query = p.Filter(db.Opportunities.AsNoTracking(), R).Where(o => o.ClosedAt == null || o.ClosedAt >= since);
+        if (mine) query = query.Where(o => o.OwnerId == p.UserId);
+        return TypedResults.Ok(await ToListItems(query.OrderBy(o => o.ExpectedCloseDate)).Take(500).ToListAsync(ct));
     }
 
-    private static async Task<Results<Ok<OpportunityDetail>, NotFound>> Get(Guid id, CrmDbContext db, CancellationToken ct)
+    private static async Task<Results<Ok<OpportunityDetail>, NotFound>> Get(Guid id, Access access, CrmDbContext db, CancellationToken ct)
     {
-        var detail = await Project(db.Opportunities.AsNoTracking().Where(o => o.Id == id)).SingleOrDefaultAsync(ct);
+        var p = await access.GetAsync(ct);
+        var detail = await Project(p.Filter(db.Opportunities.AsNoTracking(), R).Where(o => o.Id == id)).SingleOrDefaultAsync(ct);
         return detail is null ? TypedResults.NotFound() : TypedResults.Ok(detail);
     }
 
-    private static async Task<Results<Created<OpportunityDetail>, ValidationProblem>> Create(
-        OpportunityRequest req, ClaimsPrincipal user, CrmDbContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<Results<Created<OpportunityDetail>, ValidationProblem>> CreateAsync(
+        OpportunityRequest req, Access access, CrmDbContext db, MetadataService meta, CustomFieldValidator validator, TimeProvider clock, CancellationToken ct)
     {
-        var me = user.GetUserId();
-        if (await ValidateAsync(req, me, user, db, ct) is { } problem) return problem;
+        var p = await access.GetAsync(ct);
+        var opp = new Opportunity { OwnerId = req.OwnerId ?? p.UserId };
+        if (await ValidateAsync(req, opp, p.UserId, p, db, meta, validator, clock.GetUtcNow().UtcDateTime, ct) is { } problem) return problem;
 
-        var opp = new Opportunity { OwnerId = req.OwnerId ?? me, Stage = req.Stage, Probability = StageDefaults.Probability(req.Stage) };
-        Apply(opp, req, clock.GetUtcNow().UtcDateTime);
-        if (opp.IsClosed) opp.ClosedAt = clock.GetUtcNow().UtcDateTime;
         db.Opportunities.Add(opp);
         await db.SaveChangesAsync(ct);
-
-        var detail = await Project(db.Opportunities.AsNoTracking().Where(o => o.Id == opp.Id)).SingleAsync(ct);
-        return TypedResults.Created($"/api/opportunities/{opp.Id}", detail);
+        return TypedResults.Created($"/api/opportunities/{opp.Id}", await Project(db.Opportunities.AsNoTracking().Where(o => o.Id == opp.Id)).SingleAsync(ct));
     }
 
-    private static async Task<Results<Ok<OpportunityDetail>, NotFound, ForbidHttpResult, ValidationProblem>> Update(
-        Guid id, OpportunityRequest req, ClaimsPrincipal user, CrmDbContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<Results<Ok<OpportunityDetail>, NotFound, ForbidHttpResult, ValidationProblem>> UpdateAsync(
+        Guid id, OpportunityRequest req, Access access, CrmDbContext db, MetadataService meta, CustomFieldValidator validator, TimeProvider clock, CancellationToken ct)
     {
+        var p = await access.GetAsync(ct);
         var opp = await db.Opportunities.FindAsync([id], ct);
-        if (opp is null) return TypedResults.NotFound();
-        if (!user.CanModify(opp.OwnerId)) return TypedResults.Forbid();
-        if (await ValidateAsync(req, opp.OwnerId, user, db, ct) is { } problem) return problem;
+        if (opp is null || !p.CanAccess(R, Read, opp.OwnerId)) return TypedResults.NotFound();
+        if (!p.CanAccess(R, Update, opp.OwnerId)) return TypedResults.Forbid();
+        if (await ValidateAsync(req, opp, opp.OwnerId, p, db, meta, validator, clock.GetUtcNow().UtcDateTime, ct) is { } problem) return problem;
 
-        Apply(opp, req, clock.GetUtcNow().UtcDateTime);
-        opp.OwnerId = req.OwnerId ?? opp.OwnerId;
         await db.SaveChangesAsync(ct);
         return TypedResults.Ok(await Project(db.Opportunities.AsNoTracking().Where(o => o.Id == id)).SingleAsync(ct));
     }
 
-    private static async Task<Results<Ok<OpportunityDetail>, NotFound, ForbidHttpResult>> ChangeStage(
-        Guid id, StageChangeRequest req, ClaimsPrincipal user, CrmDbContext db, TimeProvider clock, CancellationToken ct)
+    private static async Task<Results<Ok<OpportunityDetail>, NotFound, ForbidHttpResult, ValidationProblem>> ChangeStage(
+        Guid id, StageChangeRequest req, Access access, CrmDbContext db, MetadataService meta, TimeProvider clock, CancellationToken ct)
     {
+        var p = await access.GetAsync(ct);
         var opp = await db.Opportunities.FindAsync([id], ct);
-        if (opp is null) return TypedResults.NotFound();
-        if (!user.CanModify(opp.OwnerId)) return TypedResults.Forbid();
+        if (opp is null || !p.CanAccess(R, Read, opp.OwnerId)) return TypedResults.NotFound();
+        if (!p.CanAccess(R, Update, opp.OwnerId)) return TypedResults.Forbid();
+        var stage = (await meta.StagesAsync(R, ct)).FirstOrDefault(s => s.Key == req.Stage);
+        if (stage is null) return Errors.Validation("stage", "Unknown stage.");
 
-        opp.MoveToStage(req.Stage, clock.GetUtcNow().UtcDateTime);
-        if (req.Stage == OpportunityStage.ClosedLost) opp.LossReason = req.LossReason;
+        opp.MoveToStage(stage, clock.GetUtcNow().UtcDateTime);
+        if (stage.Category == StageCategory.Lost) opp.LossReason = req.LossReason;
         await db.SaveChangesAsync(ct);
         return TypedResults.Ok(await Project(db.Opportunities.AsNoTracking().Where(o => o.Id == id)).SingleAsync(ct));
     }
 
-    private static async Task<Results<NoContent, NotFound>> Delete(Guid id, CrmDbContext db, CancellationToken ct)
+    private static async Task<Results<NoContent, NotFound, ForbidHttpResult>> DeleteAsync(Guid id, Access access, CrmDbContext db, CancellationToken ct)
     {
+        var p = await access.GetAsync(ct);
         var opp = await db.Opportunities.FindAsync([id], ct);
-        if (opp is null) return TypedResults.NotFound();
+        if (opp is null || !p.CanAccess(R, Read, opp.OwnerId)) return TypedResults.NotFound();
+        if (!p.CanAccess(R, Delete, opp.OwnerId)) return TypedResults.Forbid();
         db.Opportunities.Remove(opp);
         await db.SaveChangesAsync(ct);
         return TypedResults.NoContent();
     }
 
-    private static async Task<ValidationProblem?> ValidateAsync(OpportunityRequest req, Guid currentOwner, ClaimsPrincipal user, CrmDbContext db, CancellationToken ct)
+    private static async Task<ValidationProblem?> ValidateAsync(OpportunityRequest r, Opportunity o, Guid currentOwner, EffectivePermissions p,
+        CrmDbContext db, MetadataService meta, CustomFieldValidator validator, DateTime now, CancellationToken ct)
     {
-        if (!await db.Accounts.AnyAsync(a => a.Id == req.AccountId, ct))
-            return Errors.Validation("accountId", "Account does not exist.");
-        if (req.ContactId is not null && !await db.Contacts.AnyAsync(c => c.Id == req.ContactId, ct))
-            return Errors.Validation("contactId", "Contact does not exist.");
-        if (await Ownership.ValidateAsync(req.OwnerId, currentOwner, user, db, ct) is { } err)
-            return Errors.Validation("ownerId", err);
-        return null;
-    }
+        var errors = new Dictionary<string, string[]>();
+        if (!await db.Accounts.AnyAsync(a => a.Id == r.AccountId, ct)) errors["accountId"] = ["Account does not exist."];
+        if (r.ContactId is not null && !await db.Contacts.AnyAsync(c => c.Id == r.ContactId, ct)) errors["contactId"] = ["Contact does not exist."];
+        if (await Ownership.ValidateAsync(r.OwnerId, currentOwner, R, p, db, ct) is { } ownerError) errors["ownerId"] = [ownerError];
+        var stage = (await meta.StagesAsync(R, ct)).FirstOrDefault(s => s.Key == r.Stage);
+        if (stage is null) errors["stage"] = ["Unknown stage."];
+        var cf = await validator.ValidateAsync(R, r.CustomFields, o.CustomFields, ct);
+        foreach (var (k, v) in cf.Errors) errors[k] = v;
+        if (errors.Count > 0) return Errors.Validation(errors);
 
-    private static void Apply(Opportunity o, OpportunityRequest r, DateTime now)
-    {
         o.Name = r.Name.Trim();
         o.AccountId = r.AccountId;
         o.ContactId = r.ContactId;
         o.Amount = r.Amount;
         o.ExpectedCloseDate = r.ExpectedCloseDate;
         o.Description = r.Description;
-        o.MoveToStage(r.Stage, now, r.Probability);
-        if (r.Stage == OpportunityStage.ClosedLost) o.LossReason = r.LossReason;
+        o.MoveToStage(stage!, now, r.Probability);
+        if (stage!.Category == StageCategory.Lost) o.LossReason = r.LossReason;
+        o.OwnerId = r.OwnerId ?? o.OwnerId;
+        o.CustomFields = cf.Json;
+        return null;
     }
 
     private static IQueryable<OpportunityListItem> ToListItems(IQueryable<Opportunity> q) => q.Select(o => new OpportunityListItem(
         o.Id, o.Name, o.AccountId, o.Account!.Name, o.ContactId,
         o.Contact != null ? o.Contact.FirstName + " " + o.Contact.LastName : null,
         o.Amount, o.Stage, o.Probability, o.ExpectedCloseDate,
-        o.OwnerId, o.Owner!.FirstName + " " + o.Owner.LastName, o.CreatedAt));
+        o.OwnerId, o.Owner!.FirstName + " " + o.Owner.LastName, o.CreatedAt, Cf.Parse(o.CustomFields)));
 
     private static IQueryable<OpportunityDetail> Project(IQueryable<Opportunity> q) => q.Select(o => new OpportunityDetail(
         o.Id, o.Name, o.AccountId, o.Account!.Name, o.ContactId,
         o.Contact != null ? o.Contact.FirstName + " " + o.Contact.LastName : null,
         o.Amount, o.Stage, o.Probability, o.ExpectedCloseDate, o.ClosedAt, o.LossReason, o.Description,
-        o.OwnerId, o.Owner!.FirstName + " " + o.Owner.LastName, o.CreatedAt, o.UpdatedAt));
+        o.OwnerId, o.Owner!.FirstName + " " + o.Owner.LastName, o.CreatedAt, o.UpdatedAt, Cf.Parse(o.CustomFields)));
 }

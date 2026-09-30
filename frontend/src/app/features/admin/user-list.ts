@@ -13,10 +13,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
 import { CrmApi, UserLookupService } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
-import { ROLES, Role, UserItem } from '../../core/models';
+import { GroupItem, NamedRef, RoleItem, UserItem } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { confirm } from '../../shared/confirm-dialog';
 import { PASSWORD_HINT, strongPassword } from '../auth/change-password-dialog';
+import { SettingsBack } from './settings-home';
 
 @Component({
   selector: 'app-user-form-dialog',
@@ -40,9 +41,19 @@ import { PASSWORD_HINT, strongPassword } from '../auth/change-password-dialog';
         }
         <mat-form-field appearance="outline">
           <mat-label>Roles</mat-label>
-          <mat-select formControlName="roles" multiple required>
-            @for (r of roles; track r) { <mat-option [value]="r">{{ r }}</mat-option> }
+          <mat-select formControlName="roleIds" multiple>
+            @for (r of roles.value(); track r.id) {
+              <mat-option [value]="r.id" [disabled]="r.isAdministrator && !auth.isAdmin()">{{ r.name }}</mat-option>
+            }
           </mat-select>
+          <mat-hint>Assigned directly to this user</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Groups</mat-label>
+          <mat-select formControlName="groupIds" multiple>
+            @for (g of groups.value(); track g.id) { <mat-option [value]="g.id">{{ g.name }}</mat-option> }
+          </mat-select>
+          <mat-hint>Users also get every role of their groups</mat-hint>
         </mat-form-field>
         @if (item) { <mat-checkbox formControlName="isActive">Active</mat-checkbox> }
       </form>
@@ -58,7 +69,9 @@ export class UserFormDialog {
   private readonly ref = inject(MatDialogRef<UserFormDialog, UserItem>);
   private readonly api = inject(CrmApi);
   private readonly notify = inject(NotifyService);
-  readonly roles = ROLES;
+  readonly auth = inject(AuthService);
+  readonly roles = httpResource<RoleItem[]>(() => '/api/admin/roles', { defaultValue: [] });
+  readonly groups = httpResource<GroupItem[]>(() => '/api/admin/groups', { defaultValue: [] });
   readonly hint = PASSWORD_HINT;
   readonly saving = signal(false);
 
@@ -67,7 +80,8 @@ export class UserFormDialog {
     lastName: [this.item?.lastName ?? '', Validators.required],
     email: [{ value: this.item?.email ?? '', disabled: !!this.item }, [Validators.required, Validators.email]],
     password: ['', this.item ? [] : [Validators.required, strongPassword]],
-    roles: [this.item?.roles ?? (['SalesRep'] as Role[]), Validators.required],
+    roleIds: [this.item?.roles.map((r) => r.id) ?? ([] as string[])],
+    groupIds: [this.item?.groups.map((g) => g.id) ?? ([] as string[])],
     isActive: [this.item?.isActive ?? true],
   });
 
@@ -78,9 +92,10 @@ export class UserFormDialog {
     }
     const v = this.form.getRawValue();
     this.saving.set(true);
+    const assignments = { roleIds: v.roleIds, groupIds: v.groupIds };
     const request = this.item
-      ? this.api.updateUser(this.item.id, { firstName: v.firstName, lastName: v.lastName, isActive: v.isActive, roles: v.roles })
-      : this.api.createUser({ email: v.email, firstName: v.firstName, lastName: v.lastName, password: v.password, roles: v.roles });
+      ? this.api.updateUser(this.item.id, { firstName: v.firstName, lastName: v.lastName, isActive: v.isActive, ...assignments })
+      : this.api.createUser({ email: v.email, firstName: v.firstName, lastName: v.lastName, password: v.password, ...assignments });
     request.subscribe({
       next: (saved) => {
         this.notify.success('User saved');
@@ -96,19 +111,21 @@ export class UserFormDialog {
 
 @Component({
   selector: 'app-user-list',
-  imports: [DatePipe, MatTableModule, MatButtonModule, MatIconModule, MatProgressBarModule],
+  imports: [DatePipe, MatTableModule, MatButtonModule, MatIconModule, MatProgressBarModule, SettingsBack],
   template: `
     <div class="page-header">
-      <h1>Users</h1>
+      <div><app-settings-back /><h1>Users</h1></div>
       <span class="spacer"></span>
       <button mat-flat-button (click)="create()"><mat-icon>person_add</mat-icon> New user</button>
     </div>
     <div class="table-wrap">
       @if (data.isLoading()) { <mat-progress-bar mode="indeterminate" /> }
       <table mat-table [dataSource]="rows()">
-        <ng-container matColumnDef="name"><th mat-header-cell *matHeaderCellDef>Name</th><td mat-cell *matCellDef="let u">{{ u.fullName }}</td></ng-container>
+        <ng-container matColumnDef="name"><th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let u">{{ u.fullName }} @if (u.isPlatformAdmin) { <span class="chip" title="Platform administrator">Platform</span> }</td></ng-container>
         <ng-container matColumnDef="email"><th mat-header-cell *matHeaderCellDef>Email</th><td mat-cell *matCellDef="let u">{{ u.email }}</td></ng-container>
-        <ng-container matColumnDef="roles"><th mat-header-cell *matHeaderCellDef>Roles</th><td mat-cell *matCellDef="let u">{{ u.roles.join(', ') }}</td></ng-container>
+        <ng-container matColumnDef="roles"><th mat-header-cell *matHeaderCellDef>Roles</th><td mat-cell *matCellDef="let u">{{ names(u.roles) }}</td></ng-container>
+        <ng-container matColumnDef="groups"><th mat-header-cell *matHeaderCellDef>Groups</th><td mat-cell *matCellDef="let u">{{ names(u.groups) }}</td></ng-container>
         <ng-container matColumnDef="status">
           <th mat-header-cell *matHeaderCellDef>Status</th>
           <td mat-cell *matCellDef="let u">
@@ -137,9 +154,13 @@ export class UserList {
   private readonly notify = inject(NotifyService);
   private readonly lookup = inject(UserLookupService);
   readonly auth = inject(AuthService);
-  readonly columns = ['name', 'email', 'roles', 'status', 'createdAt', 'actions'];
+  readonly columns = ['name', 'email', 'roles', 'groups', 'status', 'createdAt', 'actions'];
   readonly data = httpResource<UserItem[]>(() => '/api/users');
   readonly rows = computed(() => (this.data.hasValue() ? this.data.value() : []));
+
+  names(refs: NamedRef[]): string {
+    return refs.map((r) => r.name).join(', ');
+  }
 
   isLocked(u: UserItem): boolean {
     return !!u.lockoutEnd && new Date(u.lockoutEnd) > new Date();
@@ -176,6 +197,7 @@ export class UserList {
       if (!saved) return;
       this.data.reload();
       this.lookup.users.reload();
+      if (saved.id === this.auth.user()?.id) this.auth.reloadUser();
     });
   }
 }
