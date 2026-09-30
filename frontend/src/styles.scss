@@ -1,0 +1,75 @@
+@use '@angular/material' as mat;
+
+html {
+  color-scheme: light;
+  @include mat.theme((
+    color: (primary: mat.$azure-palette, tertiary: mat.$violet-palette),
+    typography: (plain-family: 'Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif', brand-family: 'Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif'),
+    density: -1,
+  ));
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+  background: var(--mat-sys-surface-container-lowest);
+  color: var(--mat-sys-on-surface);
+}
+
+a { color: var(--mat-sys-primary); }
+h1 { font: var(--mat-sys-headline-small); margin: 0; }
+h3 { font: var(--mat-sys-title-medium); margin: 0; }
+
+.spacer { flex: 1 1 auto; }
+.full { width: 100%; }
+.muted { color: var(--mat-sys-on-surface-variant); }
+
+.page-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.page-header h1 { display: flex; align-items: center; gap: 12px; }
+.back { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; font-size: 13px; margin-bottom: 4px; }
+
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+.filters .search { flex: 1 1 280px; max-width: 420px; }
+
+.table-wrap { background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; overflow: auto; }
+.table-wrap table, mat-card table { width: 100%; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: var(--mat-sys-surface-container-low); }
+td.empty { padding: 24px; text-align: center; color: var(--mat-sys-on-surface-variant); }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; padding-top: 8px; }
+.form-grid .span-2 { grid-column: span 2; }
+@media (max-width: 600px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .form-grid .span-2 { grid-column: auto; }
+}
+
+.detail-layout { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .detail-layout { grid-template-columns: 1fr; } }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; }
+.fields dt { color: var(--mat-sys-on-surface-variant); }
+.fields dd { margin: 0; word-break: break-word; }
+.desc { white-space: pre-wrap; border-top: 1px solid var(--mat-sys-outline-variant); padding-top: 12px; }
+.tab-actions { display: flex; justify-content: flex-end; padding: 12px; }
+.tab-body { padding: 16px; }
+.banner { display: flex; align-items: center; gap: 8px; padding: 12px 16px; margin-bottom: 16px; border-radius: 12px;
+  background: var(--mat-sys-tertiary-container); color: var(--mat-sys-on-tertiary-container); }
+
+button.danger { --mat-button-outlined-label-text-color: var(--mat-sys-error); --mat-button-filled-container-color: var(--mat-sys-error); }
+button.success { --mat-button-filled-container-color: #2e7d32; }
+.snack-error { --mat-snack-bar-container-color: var(--mat-sys-error-container); --mat-snack-bar-supporting-text-color: var(--mat-sys-on-error-container); }
+
+// Status chips keyed by enum value via [attr.data-v].
+.chip { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; line-height: 20px;
+  color: var(--chip-fg, var(--mat-sys-on-surface)); background: var(--chip-bg, var(--mat-sys-surface-container-high)); }
+[data-v='New'], [data-v='Prospecting'] { --chip-fg: #1565c0; --chip-bg: #e3f2fd; }
+[data-v='Contacted'], [data-v='Qualification'] { --chip-fg: #6a1b9a; --chip-bg: #f3e5f5; }
+[data-v='Qualified'], [data-v='Proposal'] { --chip-fg: #ef6c00; --chip-bg: #fff3e0; }
+[data-v='Negotiation'] { --chip-fg: #00838f; --chip-bg: #e0f7fa; }
+[data-v='Converted'], [data-v='ClosedWon'], [data-v='Active'] { --chip-fg: #2e7d32; --chip-bg: #e8f5e9; }
+[data-v='Unqualified'], [data-v='ClosedLost'], [data-v='Inactive'], [data-v='Locked'] { --chip-fg: #c62828; --chip-bg: #ffebee; }
+[data-v='High'] { --chip-fg: #c62828; --chip-bg: #ffebee; }
+[data-v='Normal'] { --chip-fg: #455a64; --chip-bg: #eceff1; }
+[data-v='Low'] { --chip-fg: #607d8b; --chip-bg: #f5f5f5; }

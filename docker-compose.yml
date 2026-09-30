@@ -1,0 +1,41 @@
+# Full local stack: PostgreSQL + API + Web (nginx).
+# Usage: copy .env.example to .env, fill in secrets, then `docker compose up --build`.
+# To use an existing PostgreSQL server instead, remove the `db` service and set CRM_DB_HOST.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: crm
+      POSTGRES_USER: ${CRM_DB_USER:-crm}
+      POSTGRES_PASSWORD: ${CRM_DB_PASSWORD:?set CRM_DB_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d crm"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Crm: Host=${CRM_DB_HOST:-db};Port=5432;Database=crm;Username=${CRM_DB_USER:-crm}
+      Database__Password: ${CRM_DB_PASSWORD}
+      Jwt__SigningKey: ${CRM_JWT_SIGNING_KEY:?set CRM_JWT_SIGNING_KEY in .env}
+      Seed__AdminEmail: ${CRM_ADMIN_EMAIL:-admin@crm.local}
+      Seed__AdminPassword: ${CRM_ADMIN_PASSWORD:?set CRM_ADMIN_PASSWORD in .env}
+      Seed__DemoData: ${CRM_DEMO_DATA:-false}
+      ForwardedHeaders__Enabled: "true"
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
