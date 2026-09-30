@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using Crm.Api.Auth;
+using Microsoft.AspNetCore.Hosting;
 
 namespace Crm.Api.Tests;
 
@@ -58,6 +59,26 @@ public class AuthTests(CrmApiFactory factory) : IClassFixture<CrmApiFactory>
 
         var afterReuse = await client.PostJsonAsync("/api/auth/refresh", new { refreshToken = second.RefreshToken });
         Assert.Equal(HttpStatusCode.Unauthorized, afterReuse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_has_its_own_rate_limit_and_login_stays_limited()
+    {
+        using var limited = factory.WithWebHostBuilder(b => b.UseSetting("RateLimiting:AuthPermitPerMinute", "2"));
+        var client = limited.CreateClient();
+        var auth = await CrmApiFactory.LoginAsync(client, CrmApiFactory.AdminEmail, CrmApiFactory.AdminPassword);
+
+        for (var i = 0; i < 5; i++)
+        {
+            var refreshed = await client.PostJsonAsync("/api/auth/refresh", new { refreshToken = auth.RefreshToken });
+            Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
+            auth = await refreshed.ReadAsync<AuthResponse>();
+        }
+
+        var second = await client.PostJsonAsync("/api/auth/login", new { email = CrmApiFactory.AdminEmail, password = CrmApiFactory.AdminPassword });
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var third = await client.PostJsonAsync("/api/auth/login", new { email = CrmApiFactory.AdminEmail, password = CrmApiFactory.AdminPassword });
+        Assert.Equal(HttpStatusCode.TooManyRequests, third.StatusCode);
     }
 
     [Fact]

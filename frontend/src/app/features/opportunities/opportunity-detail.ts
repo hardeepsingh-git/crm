@@ -71,7 +71,7 @@ import { OpportunityFormDialog } from './opportunity-form-dialog';
           </mat-card-content>
         </mat-card>
         <mat-card appearance="outlined"><mat-card-content>
-          <app-activity-panel [links]="{ opportunityId: o.id, accountId: o.accountId, contactId: o.contactId }" />
+          <app-activity-panel filterBy="opportunityId" [links]="{ opportunityId: o.id, accountId: o.accountId, contactId: o.contactId }" />
         </mat-card-content></mat-card>
       </div>
     }

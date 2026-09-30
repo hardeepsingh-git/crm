@@ -72,6 +72,8 @@ export function isOverdue(a: ActivityItem): boolean {
 })
 export class ActivityPanel {
   readonly links = input.required<ActivityLinks>();
+  /** Which link identifies the page's record; the others only pre-fill new activities. */
+  readonly filterBy = input.required<keyof ActivityLinks>();
   readonly auth = inject(AuthService);
   private readonly api = inject(CrmApi);
   private readonly dialog = inject(MatDialog);
@@ -80,7 +82,7 @@ export class ActivityPanel {
 
   private readonly data = httpResource<PagedResult<ActivityItem>>(() => ({
     url: '/api/activities',
-    params: toParams({ ...this.links(), pageSize: 100, sortBy: 'createdAt', sortDir: 'desc' }),
+    params: toParams({ [this.filterBy()]: this.links()[this.filterBy()], pageSize: 100, sortBy: 'createdAt', sortDir: 'desc' }),
   }));
   private readonly value = stableValue(this.data);
   readonly items = computed(() => this.value()?.items ?? []);

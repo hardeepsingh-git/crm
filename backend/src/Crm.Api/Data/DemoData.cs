@@ -135,6 +135,7 @@ public static class DemoData
                 Priority = (ActivityPriority)rnd.Next(3),
                 Opportunity = opp,
                 Account = opp.Account,
+                Contact = opp.Contact,
                 OwnerId = opp.OwnerId,
             };
         }).ToList();

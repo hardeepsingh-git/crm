@@ -63,7 +63,7 @@ import { LeadFormDialog } from './lead-form-dialog';
           </mat-card-content>
         </mat-card>
         <mat-card appearance="outlined"><mat-card-content>
-          <app-activity-panel [links]="{ leadId: l.id }" />
+          <app-activity-panel filterBy="leadId" [links]="{ leadId: l.id }" />
         </mat-card-content></mat-card>
       </div>
     }

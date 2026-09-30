@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AuthService } from './auth.service';
-import { authInterceptor } from './http';
+import { authGuard, authInterceptor } from './http';
 import { AuthResponse } from './models';
 
 const response = (token: string, refresh: string): AuthResponse => ({
@@ -80,6 +80,35 @@ describe('AuthService + authInterceptor', () => {
 
     expect(auth.isAuthenticated()).toBe(false);
     expect(localStorage.getItem('crm.refreshToken')).toBeNull();
+  });
+
+  it('keeps the session when refresh fails transiently (429)', () => {
+    login();
+    http.get('/api/accounts').subscribe({ error: () => undefined });
+    backend.expectOne('/api/accounts').flush(null, { status: 401, statusText: 'Unauthorized' });
+    backend.expectOne('/api/auth/refresh').flush(null, { status: 429, statusText: 'Too Many Requests' });
+
+    expect(auth.isAuthenticated()).toBe(true);
+    expect(localStorage.getItem('crm.refreshToken')).toBe('refresh-1');
+  });
+
+  it('restore keeps the stored token when the server is unavailable', async () => {
+    localStorage.setItem('crm.refreshToken', 'stored');
+    const done = auth.restore();
+    backend.expectOne('/api/auth/refresh').flush(null, { status: 503, statusText: 'Unavailable' });
+    await done;
+
+    expect(auth.isAuthenticated()).toBe(false);
+    expect(localStorage.getItem('crm.refreshToken')).toBe('stored');
+  });
+
+  it('auth guard restores a stored session before allowing navigation', async () => {
+    localStorage.setItem('crm.refreshToken', 'stored');
+    const result = TestBed.runInInjectionContext(() => authGuard({} as never, { url: '/accounts' } as never)) as Promise<unknown>;
+    backend.expectOne('/api/auth/refresh').flush(response('access-9', 'refresh-9'));
+
+    expect(await result).toBe(true);
+    expect(auth.token).toBe('access-9');
   });
 
   it('does not send tokens to non-API URLs', () => {

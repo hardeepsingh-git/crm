@@ -1,10 +1,15 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Observable, finalize, firstValueFrom, shareReplay, tap, throwError } from 'rxjs';
 import { AuthResponse, Role, UserInfo } from './models';
 
 const REFRESH_KEY = 'crm.refreshToken';
+
+/** True only when the server says the refresh token is invalid, as opposed to a transient failure. */
+export function isTokenRejected(err: unknown): boolean {
+  return err instanceof HttpErrorResponse && err.status === 401;
+}
 
 /**
  * Access token lives only in memory; the refresh token is persisted so a page reload can restore the session.
@@ -43,7 +48,7 @@ export class AuthService {
     try {
       await firstValueFrom(this.refresh());
     } catch {
-      this.clear();
+      // refresh() already cleared the session if the token was rejected; otherwise keep it for the next attempt.
     }
   }
 
@@ -51,7 +56,7 @@ export class AuthService {
     const refreshToken = localStorage.getItem(REFRESH_KEY);
     if (!refreshToken) return throwError(() => new Error('No refresh token'));
     this.refreshInFlight ??= this.http.post<AuthResponse>('/api/auth/refresh', { refreshToken }).pipe(
-      tap({ next: (r) => this.store(r), error: () => this.clear() }),
+      tap({ next: (r) => this.store(r), error: (err: unknown) => isTokenRejected(err) && this.clear() }),
       finalize(() => (this.refreshInFlight = null)),
       shareReplay(1),
     );

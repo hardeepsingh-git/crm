@@ -16,12 +16,13 @@ public record ChangePasswordRequest([Required] string CurrentPassword, [Required
 public static class AuthEndpoints
 {
     public const string RateLimitPolicy = "auth";
+    public const string RefreshRateLimitPolicy = "auth-refresh";
 
     public static RouteGroupBuilder MapAuth(this RouteGroupBuilder api)
     {
         var g = api.MapGroup("/auth").WithTags("Auth");
         g.MapPost("/login", Login).AllowAnonymous().RequireRateLimiting(RateLimitPolicy);
-        g.MapPost("/refresh", Refresh).AllowAnonymous().RequireRateLimiting(RateLimitPolicy);
+        g.MapPost("/refresh", Refresh).AllowAnonymous().RequireRateLimiting(RefreshRateLimitPolicy);
         g.MapPost("/logout", Logout).AllowAnonymous();
         g.MapGet("/me", Me).RequireAuthorization();
         g.MapPost("/change-password", ChangePassword).RequireAuthorization();

@@ -91,7 +91,7 @@ import { AccountFormDialog } from './account-form-dialog';
               </table>
             </mat-tab>
             <mat-tab label="Activities">
-              <div class="tab-body"><app-activity-panel [links]="{ accountId: a.id }" /></div>
+              <div class="tab-body"><app-activity-panel filterBy="accountId" [links]="{ accountId: a.id }" /></div>
             </mat-tab>
           </mat-tab-group>
         </mat-card>

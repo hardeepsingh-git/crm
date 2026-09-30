@@ -7,6 +7,7 @@
 | API integration | xUnit, `WebApplicationFactory`, SQLite in-memory | Full HTTP pipeline: routing, auth, validation, authorization, EF queries, business rules | `backend/tests/Crm.Api.Tests` |
 | UI unit | Vitest (Angular `@angular/build:unit-test`), `HttpTestingController` | Session handling, interceptor refresh/retry, helpers, validators | `frontend/src/**/*.spec.ts` |
 | Build gates | `ng build` (AOT + strict templates), `dotnet build` | Type safety of templates and code | CI |
+| Live end-to-end | `scripts/smoke-test.ps1` (PowerShell, 35 checks) | Running API + real PostgreSQL: auth, every module, full sales workflow, RBAC, clean-up | `scripts/` |
 | Schema drift | `dotnet ef migrations has-pending-model-changes` | Model and migrations stay in sync | CI |
 | Manual / UAT | Checklist in section 4 | End-to-end UX on the real PostgreSQL | UAT environment |
 
@@ -14,7 +15,7 @@ Why SQLite for API tests: dev machines have no Docker, so there are no Testconta
 
 ## 2. Automated test inventory
 
-### API (`dotnet test`): 15 tests
+### API (`dotnet test`): 16 tests
 | Test | Covers |
 |---|---|
 | `Liveness_endpoint_is_anonymous` | NFR-3 |
@@ -22,6 +23,7 @@ Why SQLite for API tests: dev machines have no Docker, so there are no Testconta
 | `Login_with_wrong_password_returns_401` | AUTH-1 |
 | `Login_returns_tokens_and_me_returns_admin` | AUTH-1, ADM-5 |
 | `Refresh_rotates_token_and_reuse_revokes_family` | AUTH-2, AUTH-3 |
+| `Refresh_has_its_own_rate_limit_and_login_stays_limited` | AUTH-6 (regression: page reloads were rate-limited as logins) |
 | `Logout_revokes_refresh_token` | AUTH-8 |
 | `Account_crud_and_search` | ACC-1, ACC-2 |
 | `Invalid_payload_returns_validation_problem` | Validation, NFR-6 |
@@ -33,13 +35,16 @@ Why SQLite for API tests: dev machines have no Docker, so there are no Testconta
 | `Sales_rep_permissions_are_enforced` | RBAC-3, RBAC-4, RBAC-5, RBAC-6 |
 | `Admin_can_manage_users` | ADM-1, ADM-3, AUTH-7 |
 
-### UI (`ng test`): 10 tests
+### UI (`ng test`): 13 tests
 | Test | Covers |
 |---|---|
 | stores user and refresh token on login | AUTH-1, AUTH-2 |
 | adds the bearer token to API calls | AUTH-2 |
 | refreshes once on 401 and retries | AUTH-2 |
 | clears the session when refresh fails | AUTH-2 |
+| keeps the session when refresh fails transiently (429) | AUTH-2 (regression) |
+| restore keeps the stored token when the server is unavailable | AUTH-2 (regression) |
+| auth guard restores a stored session before allowing navigation | AUTH-2 |
 | does not send tokens to non-API URLs | Security (token leakage) |
 | toParams drops empty values | Query building |
 | humanize splits enum values | UI labels |
@@ -51,7 +56,10 @@ Why SQLite for API tests: dev machines have no Docker, so there are no Testconta
 ```powershell
 cd backend;  dotnet test
 cd frontend; npx ng test --watch=false
+# Live end-to-end (API must be running; uses the demo users from Seed:DemoUserPassword):
+./scripts/smoke-test.ps1          # add -Keep to leave the [E2E] records in place
 ```
+In VS Code the same commands are available as tasks: *CRM: Backend tests*, *CRM: Frontend tests*, *CRM: Smoke test (API end-to-end)*.
 
 ## 4. UAT checklist (manual, against PostgreSQL)
 

@@ -11,27 +11,30 @@ A full-stack Customer Relationship Management system: accounts, contacts, leads 
 
 ## Quick start (local)
 
+One-time secrets (stored in your Windows profile, not the repo). The connection string (`Database=CRM`) and JWT key are already set:
 ```powershell
-# 1) Secrets (once). The connection string and JWT key are already set in user-secrets.
 cd backend\src\Crm.Api
 dotnet user-secrets set "Database:Password" "<postgres password>"
 dotnet user-secrets set "Seed:AdminPassword" "<admin password: 10+ chars, Aa1!>"
-
-# 2) API: applies DB migrations on start. http://localhost:5290/scalar
-cd ..\..
-dotnet run --project src/Crm.Api --launch-profile http
-
-# 3) UI (new terminal): http://localhost:4200
-cd ..\frontend
-npm start
 ```
 
-Sign in as `admin@crm.local`.
+Start everything (pick one):
+- VS Code: *Tasks: Run Task* → **CRM: Start all**
+- PowerShell: `./scripts/start-dev.ps1`
+
+Then open http://localhost:4200. The API applies migrations and seeds data on start; its docs are at http://localhost:5290/scalar.
+
+| User | Role | Password |
+|---|---|---|
+| `admin@crm.local` | Admin | `Seed:AdminPassword` |
+| `manager@crm.local` | Manager (demo) | `Seed:DemoUserPassword` |
+| `rep@crm.local` | Sales Rep (demo) | `Seed:DemoUserPassword` |
 
 ## Tests
 ```powershell
-cd backend;  dotnet test                    # 15 API integration tests
-cd frontend; npx ng test --watch=false      # 10 UI unit tests
+cd backend;  dotnet test                    # 16 API integration tests
+cd frontend; npx ng test --watch=false      # 13 UI unit tests
+./scripts/smoke-test.ps1                    # 35 live end-to-end checks (API running)
 ```
 
 ## Documentation
@@ -49,5 +52,6 @@ cd frontend; npx ng test --watch=false      # 10 UI unit tests
 ```
 backend/   ASP.NET Core API (src/Crm.Api), tests, database/crm-schema.sql
 frontend/  Angular app, nginx config
+scripts/   start-dev.ps1 (run locally), smoke-test.ps1 (live end-to-end test)
 docs/      Documentation
 ```

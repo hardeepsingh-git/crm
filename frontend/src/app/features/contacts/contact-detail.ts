@@ -71,7 +71,7 @@ import { ContactFormDialog } from './contact-form-dialog';
             </table>
           </mat-card>
           <mat-card appearance="outlined"><mat-card-content>
-            <app-activity-panel [links]="{ contactId: c.id, accountId: c.accountId }" />
+            <app-activity-panel filterBy="contactId" [links]="{ contactId: c.id, accountId: c.accountId }" />
           </mat-card-content></mat-card>
         </div>
       </div>

@@ -1,0 +1,182 @@
+<#
+.SYNOPSIS
+  End-to-end smoke test against a running CRM API.
+.DESCRIPTION
+  Signs in as the seeded demo users, reads every module, then runs a full create/update/convert/close/delete
+  workflow using records tagged "[E2E]" and removes them again (unless -Keep is given).
+  The demo password is read from the API's user-secrets; if absent you are prompted for it.
+.EXAMPLE
+  ./scripts/smoke-test.ps1
+  ./scripts/smoke-test.ps1 -BaseUrl http://localhost:4200 -Keep
+#>
+[CmdletBinding()]
+param(
+    [string]$BaseUrl = 'http://localhost:5290',
+    [string]$ManagerEmail = 'manager@crm.local',
+    [string]$RepEmail = 'rep@crm.local',
+    [switch]$Keep
+)
+
+$ErrorActionPreference = 'Stop'
+$script:passed = 0
+$script:failed = 0
+
+function Check([string]$Name, [scriptblock]$Test) {
+    try {
+        $detail = & $Test
+        Write-Host "  PASS  $Name" -ForegroundColor Green -NoNewline
+        if ($detail) { Write-Host "  ($detail)" -ForegroundColor DarkGray } else { Write-Host '' }
+        $script:passed++
+    } catch {
+        Write-Host "  FAIL  $Name :: $($_.Exception.Message)" -ForegroundColor Red
+        $script:failed++
+    }
+}
+
+function Assert([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
+
+function Api([string]$Method, [string]$Path, $Body = $null, [string]$Token = $script:token) {
+    $params = @{ Method = $Method; Uri = "$BaseUrl$Path"; ContentType = 'application/json' }
+    if ($Token) { $params.Headers = @{ Authorization = "Bearer $Token" } }
+    if ($null -ne $Body) { $params.Body = ($Body | ConvertTo-Json -Depth 5) }
+    Invoke-RestMethod @params
+}
+
+function StatusOf([scriptblock]$Call) {
+    try { & $Call | Out-Null; 200 } catch { [int]$_.Exception.Response.StatusCode }
+}
+
+function Get-DemoPassword {
+    $csproj = Join-Path $PSScriptRoot '..\backend\src\Crm.Api\Crm.Api.csproj'
+    $id = ([xml](Get-Content $csproj)).Project.PropertyGroup.UserSecretsId | Where-Object { $_ } | Select-Object -First 1
+    $path = Join-Path $env:APPDATA "Microsoft\UserSecrets\$id\secrets.json"
+    if (Test-Path $path) {
+        $value = (Get-Content $path -Raw | ConvertFrom-Json).'Seed:DemoUserPassword'
+        if ($value) { return $value }
+    }
+    $secure = Read-Host -AsSecureString 'Demo user password'
+    [Net.NetworkCredential]::new('', $secure).Password
+}
+
+$password = Get-DemoPassword
+$tag = "[E2E $(Get-Date -Format 'HHmmss')]"
+$today = Get-Date
+
+Write-Host "`nCRM smoke test against $BaseUrl" -ForegroundColor Cyan
+
+Write-Host "`n1. Health and authentication" -ForegroundColor Cyan
+Check 'API liveness' { Assert ((Invoke-WebRequest "$BaseUrl/health/live" -UseBasicParsing).StatusCode -eq 200) 'not live' }
+Check 'Database readiness' { Assert ((Invoke-WebRequest "$BaseUrl/health/ready" -UseBasicParsing).StatusCode -eq 200) 'DB not ready' }
+Check 'Anonymous access is rejected' { $s = StatusOf { Api GET '/api/accounts' -Token $null }; Assert ($s -eq 401) "got $s"; '401' }
+Check 'Wrong password is rejected' { $s = StatusOf { Api POST '/api/auth/login' @{ email = $RepEmail; password = 'Wrong#Pass123' } -Token $null }; Assert ($s -eq 401) "got $s"; '401' }
+
+$login = $null
+Check "Manager sign-in ($ManagerEmail)" {
+    $script:login = Api POST '/api/auth/login' @{ email = $ManagerEmail; password = $password } -Token $null
+    $script:token = $script:login.accessToken
+    Assert ($script:login.user.roles -contains 'Manager') 'missing Manager role'
+    $script:login.user.fullName
+}
+if (-not $script:token) { Write-Host "`nCannot continue without a session. Is demo data seeded (Seed:DemoData=true)?" -ForegroundColor Red; exit 1 }
+$me = $script:login.user
+
+Check 'Current user (/me)' { $m = Api GET '/api/auth/me'; Assert ($m.email -eq $ManagerEmail) 'wrong user'; $m.roles -join ',' }
+Check 'Refresh token rotation' {
+    $r = Api POST '/api/auth/refresh' @{ refreshToken = $script:login.refreshToken } -Token $null
+    Assert ($r.refreshToken -ne $script:login.refreshToken) 'token not rotated'
+    $s = StatusOf { Api POST '/api/auth/refresh' @{ refreshToken = $script:login.refreshToken } -Token $null }
+    Assert ($s -eq 401) "old token reuse returned $s"
+    $script:token = (Api POST '/api/auth/login' @{ email = $ManagerEmail; password = $password } -Token $null).accessToken
+    'old token rejected after rotation'
+}
+
+Write-Host "`n2. Read every module (seeded data)" -ForegroundColor Cyan
+Check 'Dashboard' {
+    $d = Api GET '/api/dashboard'
+    Assert ($d.accountCount -gt 0) 'no accounts - demo data missing?'
+    "accounts=$($d.accountCount) contacts=$($d.contactCount) openLeads=$($d.openLeadCount) openDeals=$($d.openOpportunityCount) pipeline=$([math]::Round($d.openPipelineAmount)) winRate=$($d.winRate)%"
+}
+foreach ($module in 'accounts', 'contacts', 'leads', 'opportunities', 'activities') {
+    Check "List $module" { $p = Api GET "/api/$module`?pageSize=5"; Assert ($p.totalCount -gt 0) 'empty'; "$($p.totalCount) records" }
+}
+Check 'Search accounts' { $p = Api GET '/api/accounts?search=acme'; Assert ($p.totalCount -ge 1) 'Acme not found'; $p.items[0].name }
+Check 'Sort opportunities by amount desc' {
+    $p = Api GET '/api/opportunities?sortBy=amount&sortDir=desc&pageSize=3'
+    Assert ($p.items[0].amount -ge $p.items[-1].amount) 'not sorted'; "top=$($p.items[0].amount)"
+}
+Check 'Pipeline board' { $b = Api GET '/api/opportunities/pipeline'; Assert ($b.Count -gt 0) 'empty board'; "$($b.Count) cards" }
+Check 'Overdue activities filter' { $p = Api GET '/api/activities?status=Overdue'; "$($p.totalCount) overdue" }
+Check 'User lookup' { $u = Api GET '/api/users/lookup'; Assert ($u.Count -ge 3) 'expected admin, manager, rep'; ($u.fullName -join ', ') }
+
+Write-Host "`n3. End-to-end workflow (records tagged $tag)" -ForegroundColor Cyan
+$created = [ordered]@{ activities = @(); opportunities = @(); contacts = @(); leads = @(); accounts = @() }
+
+Check 'Create account' {
+    $script:account = Api POST '/api/accounts' @{ name = "$tag Contoso Pty Ltd"; industry = 'Technology'; city = 'Sydney'; country = 'Australia'; website = 'https://contoso.example'; annualRevenue = 2500000 }
+    $created.accounts += $script:account.id; $script:account.name
+}
+Check 'Validation rejects bad input' { $s = StatusOf { Api POST '/api/accounts' @{ name = ''; email = 'not-an-email' } }; Assert ($s -eq 400) "got $s"; '400' }
+Check 'Update account' {
+    $u = Api PUT "/api/accounts/$($script:account.id)" @{ name = $script:account.name; industry = 'Software'; city = 'Sydney'; country = 'Australia'; phone = '+61 2 9000 0000' }
+    Assert ($u.industry -eq 'Software') 'industry not updated'; $u.industry
+}
+Check 'Create contact on account' {
+    $script:contact = Api POST '/api/contacts' @{ firstName = 'Erin'; lastName = "Tester $tag"; email = 'erin.tester@contoso.example'; jobTitle = 'CIO'; accountId = $script:account.id }
+    $created.contacts += $script:contact.id
+    Assert ($script:contact.accountName -eq $script:account.name) 'not linked'; $script:contact.fullName
+}
+Check 'Create opportunity (Proposal)' {
+    $script:opp = Api POST '/api/opportunities' @{ name = "$tag Platform deal"; accountId = $script:account.id; contactId = $script:contact.id; amount = 120000; stage = 'Proposal'; expectedCloseDate = $today.AddDays(30).ToString('yyyy-MM-dd') }
+    $created.opportunities += $script:opp.id
+    Assert ($script:opp.probability -eq 50) "probability $($script:opp.probability)"; "probability=$($script:opp.probability)%"
+}
+Check 'Account shows contact and pipeline' {
+    $a = Api GET "/api/accounts/$($script:account.id)"
+    Assert ($a.contactCount -eq 1 -and $a.openPipelineAmount -eq 120000) "contacts=$($a.contactCount) pipeline=$($a.openPipelineAmount)"; "pipeline=$($a.openPipelineAmount)"
+}
+Check 'Account with deals cannot be deleted' { $s = StatusOf { Api DELETE "/api/accounts/$($script:account.id)" }; Assert ($s -eq 409) "got $s"; '409 Conflict' }
+Check 'Log overdue activity' {
+    $script:act = Api POST '/api/activities' @{ type = 'Call'; subject = "$tag Follow-up call"; priority = 'High'; dueAt = $today.AddDays(-1).ToUniversalTime().ToString('o'); accountId = $script:account.id; opportunityId = $script:opp.id }
+    $created.activities += $script:act.id
+    $o = Api GET "/api/activities?status=Overdue&opportunityId=$($script:opp.id)"
+    Assert ($o.totalCount -eq 1) 'not in overdue list'; 'listed as overdue'
+}
+Check 'Complete activity' { $c = Api POST "/api/activities/$($script:act.id)/complete"; Assert ($null -ne $c.completedAt) 'not completed'; 'completed' }
+Check 'Move deal to Closed Won' {
+    $before = (Api GET '/api/dashboard').wonThisMonthAmount
+    $w = Api PATCH "/api/opportunities/$($script:opp.id)/stage" @{ stage = 'ClosedWon' }
+    Assert ($w.probability -eq 100 -and $w.closedAt) 'not closed'
+    $after = (Api GET '/api/dashboard').wonThisMonthAmount
+    Assert (($after - $before) -eq 120000) "dashboard won delta $($after - $before)"; "won this month +120000"
+}
+Check 'Create and convert lead' {
+    $lead = Api POST '/api/leads' @{ firstName = 'Lee'; lastName = "Prospect $tag"; company = "$tag Fabrikam"; email = 'lee@fabrikam.example'; source = 'Referral'; status = 'Qualified'; estimatedValue = 45000 }
+    $created.leads += $lead.id
+    $r = Api POST "/api/leads/$($lead.id)/convert" @{ createOpportunity = $true; opportunityName = "$tag Fabrikam rollout" }
+    $created.opportunities += $r.opportunityId; $created.contacts += $r.contactId; $created.accounts += $r.accountId
+    Assert ((Api GET "/api/leads/$($lead.id)").status -eq 'Converted') 'lead not converted'
+    $s = StatusOf { Api POST "/api/leads/$($lead.id)/convert" @{ createOpportunity = $false } }
+    Assert ($s -eq 409) "double convert returned $s"; 'account + contact + opportunity created'
+}
+
+Write-Host "`n4. Role-based permissions (Sales Rep)" -ForegroundColor Cyan
+Check "Sales rep sign-in ($RepEmail)" { $script:repToken = (Api POST '/api/auth/login' @{ email = $RepEmail; password = $password } -Token $null).accessToken; 'ok' }
+Check "Rep cannot edit manager's account" { $s = StatusOf { Api PUT "/api/accounts/$($script:account.id)" @{ name = 'Hijack' } -Token $script:repToken }; Assert ($s -eq 403) "got $s"; '403' }
+Check 'Rep cannot delete records' { $s = StatusOf { Api DELETE "/api/leads/$($created.leads[0])" -Token $script:repToken }; Assert ($s -eq 403) "got $s"; '403' }
+Check 'Rep cannot open user admin' { $s = StatusOf { Api GET '/api/users' -Token $script:repToken }; Assert ($s -eq 403) "got $s"; '403' }
+Check 'Rep can create own record' {
+    $a = Api POST '/api/accounts' @{ name = "$tag Rep account" } -Token $script:repToken
+    $created.accounts += $a.id; Assert ($a.ownerName -like 'Sam*') "owner $($a.ownerName)"; "owner=$($a.ownerName)"
+}
+
+if (-not $Keep) {
+    Write-Host "`n5. Clean up test records" -ForegroundColor Cyan
+    Check 'Delete E2E records' {
+        foreach ($kind in $created.Keys) { foreach ($id in $created[$kind] | Where-Object { $_ }) { Api DELETE "/api/$kind/$id" | Out-Null } }
+        $left = (Api GET "/api/accounts?search=$([uri]::EscapeDataString($tag))").totalCount
+        Assert ($left -eq 0) "$left accounts remain"; 'removed'
+    }
+}
+
+Write-Host "`nResult: $script:passed passed, $script:failed failed`n" -ForegroundColor ($script:failed ? 'Red' : 'Green')
+exit $script:failed

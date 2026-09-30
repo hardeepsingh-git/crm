@@ -1,0 +1,64 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CRM: Build API",
+      "type": "shell",
+      "command": "dotnet build backend/src/Crm.Api",
+      "group": "build",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "CRM: Start API",
+      "type": "shell",
+      "command": "dotnet run --project backend/src/Crm.Api --launch-profile http",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "crm-api",
+        "pattern": { "regexp": "^\\s*(fail|crit): (.*)$", "severity": 1, "message": 2 },
+        "background": { "activesBegin": "Building\\.\\.\\.", "endsPattern": "Now listening on|Application started" }
+      },
+      "presentation": { "group": "crm", "panel": "dedicated" }
+    },
+    {
+      "label": "CRM: Start UI",
+      "type": "shell",
+      "command": "npm start",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "crm-ui",
+        "pattern": { "regexp": "^\\s*(ERROR|X \\[ERROR\\]) (.*)$", "severity": 1, "message": 2 },
+        "background": { "activesBegin": "ng serve", "endsPattern": "Local:\\s+http://localhost:4200" }
+      },
+      "presentation": { "group": "crm", "panel": "dedicated" }
+    },
+    {
+      "label": "CRM: Start all",
+      "dependsOn": ["CRM: Start API", "CRM: Start UI"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "CRM: Smoke test (API end-to-end)",
+      "type": "shell",
+      "command": "./scripts/smoke-test.ps1",
+      "problemMatcher": []
+    },
+    {
+      "label": "CRM: Backend tests",
+      "type": "shell",
+      "command": "dotnet test backend",
+      "group": "test",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "CRM: Frontend tests",
+      "type": "shell",
+      "command": "npx ng test --watch=false",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}

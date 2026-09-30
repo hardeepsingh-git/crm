@@ -18,7 +18,7 @@ Configuration is read in this order: `appsettings.json`, then `appsettings.{Envi
 
 | Key | Required | Default | Description |
 |---|---|---|---|
-| `ConnectionStrings:Crm` | ✔ | none | Npgsql connection string **without** the password, e.g. `Host=SYDVMPOS01.cbs.fiserv.net;Port=5432;Database=crm;Username=postgres;SSL Mode=Prefer` |
+| `ConnectionStrings:Crm` | ✔ | none | Npgsql connection string **without** the password, e.g. `Host=SYDVMPOS01.cbs.fiserv.net;Port=5432;Database=CRM;Username=postgres;SSL Mode=Prefer`. The database name is **case-sensitive** (`CRM` ≠ `crm`). |
 | `Database:Password` | ✔* | none | DB password, kept separate so it never sits in a connection string in source control |
 | `Database:Strategy` | | `Migrate` | `Migrate` applies migrations on startup. `EnsureCreated` is for tests. `None` means DBAs apply `crm-schema.sql`. |
 | `Jwt:SigningKey` | ✔ | none | ≥ 32 bytes of random data (base64). The app refuses to start without it. |
@@ -29,7 +29,8 @@ Configuration is read in this order: `appsettings.json`, then `appsettings.{Envi
 | `Seed:DemoData` | | `false` | Seeds sample data into an empty database |
 | `Seed:DemoUserPassword` | | none | If set with DemoData, also creates `manager@crm.local` and `rep@crm.local` |
 | `Cors:AllowedOrigins` | | `[]` | Only needed if the UI is served from a different origin than `/api` |
-| `RateLimiting:AuthPermitPerMinute` | | `10` | Login and refresh attempts per IP per minute |
+| `RateLimiting:AuthPermitPerMinute` | | `10` | Login attempts per IP per minute |
+| `RateLimiting:RefreshPermitPerMinute` | | `120` | Token refreshes per IP per minute (one per page load) |
 | `ForwardedHeaders:Enabled` | | `false` | Set to `true` only when the API is reachable **only** through a trusted reverse proxy |
 | `OpenApi:Enabled` | | `true` in Development | Exposes `/openapi/v1.json` and `/scalar` |
 
@@ -53,9 +54,13 @@ The API applies migrations automatically on startup (`Database:Strategy=Migrate`
 cd C:\Users\FBPo48p\CRM\backend
 dotnet ef database update --project src/Crm.Api
 ```
-DBA alternative: run `backend/database/crm-schema.sql` against the `crm` database and set `Database:Strategy=None`.
+DBA alternative: run `backend/database/crm-schema.sql` against the `CRM` database and set `Database:Strategy=None`.
 
 ### 3.3 Run
+Pick one:
+- **VS Code:** `Ctrl+Shift+P` → *Tasks: Run Task* → **CRM: Start all** (API + UI in dedicated terminals). To debug the API, use the Run and Debug view → **CRM API (debug)**.
+- **One script:** `./scripts/start-dev.ps1` opens the API and UI in two windows and waits until the API is ready.
+- **Manually:**
 ```powershell
 # Terminal 1: API on http://localhost:5290 (Scalar UI at http://localhost:5290/scalar)
 cd C:\Users\FBPo48p\CRM\backend
@@ -65,12 +70,14 @@ dotnet run --project src/Crm.Api --launch-profile http
 cd C:\Users\FBPo48p\CRM\frontend
 npm start
 ```
-Sign in with `admin@crm.local` and your `Seed:AdminPassword`.
+Sign in with `admin@crm.local` and your `Seed:AdminPassword`. With demo data enabled, `manager@crm.local` (Manager) and `rep@crm.local` (Sales Rep) use `Seed:DemoUserPassword`. To see it: `dotnet user-secrets list` in `backend/src/Crm.Api`.
 
 ### 3.4 Tests
 ```powershell
 cd C:\Users\FBPo48p\CRM\backend;  dotnet test
 cd C:\Users\FBPo48p\CRM\frontend; npx ng test --watch=false
+# End-to-end against the running API + database (creates and removes tagged records):
+cd C:\Users\FBPo48p\CRM; ./scripts/smoke-test.ps1
 ```
 
 ## 4. Deployment
@@ -127,4 +134,5 @@ To use the existing remote server instead of the bundled PostgreSQL:
 | Warning `No admin user exists` | Set `Seed:AdminEmail` and `Seed:AdminPassword`, then restart |
 | UI shows "Cannot reach the server" | The API isn't running on :5290, or the proxy isn't configured |
 | `429 Too Many Requests` on login | Wait 1 minute, or raise `RateLimiting:AuthPermitPerMinute` |
+| Tables/data appear in the wrong database | PostgreSQL names are case-sensitive: `Database=CRM` and `Database=crm` are different databases. Migrations create the named database if it doesn't exist. |
 | `NU1900` warnings during restore | The Nexus vulnerability feed returns 403. This is harmless. |

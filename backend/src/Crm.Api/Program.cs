@@ -80,13 +80,18 @@ services.AddAuthorizationBuilder()
 services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    o.AddPolicy(AuthEndpoints.RateLimitPolicy, ctx => RateLimitPartition.GetFixedWindowLimiter(
-        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue("RateLimiting:AuthPermitPerMinute", 10),
-            Window = TimeSpan.FromMinutes(1),
-        }));
+    o.AddPolicy(AuthEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:AuthPermitPerMinute", 10));
+    // Refresh runs on every page load; tokens are 512-bit random so a looser limit is safe.
+    o.AddPolicy(AuthEndpoints.RefreshRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:RefreshPermitPerMinute", 120));
+
+    static RateLimitPartition<string> PerIpPerMinute(HttpContext ctx, string setting, int defaultLimit) =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue(setting, defaultLimit),
+                Window = TimeSpan.FromMinutes(1),
+            });
 });
 
 services.AddCors(o => o.AddDefaultPolicy(p => p
