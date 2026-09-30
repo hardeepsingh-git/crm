@@ -1,8 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
+using Crm.Api.Auth;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Messaging;
 using Crm.Api.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
@@ -28,6 +30,10 @@ public record UpdateTenantRequest(
     [Required, MaxLength(200)] string Name,
     [Required, StringLength(3, MinimumLength = 3)] string Currency,
     TenantStatus Status);
+
+public record PlatformSettingsView(PlatformSettings Settings, bool SmtpPasswordConfigured, bool SmsApiKeyConfigured);
+
+public record TestMessageRequest([Required, MaxLength(256)] string To);
 
 public sealed partial class TenantService(
     CrmDbContext db, UserManager<AppUser> users, TenantContext tenantContext, TimeProvider clock, ILogger<TenantService> logger)
@@ -115,6 +121,7 @@ public sealed partial class TenantService(
         await db.RolePermissions.Where(x => roleIds.Contains(x.RoleId)).ExecuteDeleteAsync(ct);
         await db.Roles.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.RefreshTokens.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync(ct);
+        await db.VerificationCodes.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync(ct);
         await db.Users.Where(u => u.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.Tenants.Where(t => t.Id == tenantId).ExecuteDeleteAsync(ct);
         await tx.CommitAsync(ct);
@@ -133,7 +140,53 @@ public static class TenantEndpoints
         g.MapPost("/tenants", Create);
         g.MapPut("/tenants/{id:guid}", Update);
         g.MapDelete("/tenants/{id:guid}", Delete);
+        g.MapGet("/settings", GetSettings);
+        g.MapPut("/settings", UpdateSettings);
+        g.MapPost("/settings/test-email", TestEmail);
+        g.MapPost("/settings/test-sms", TestSms);
         return api;
+    }
+
+    private static async Task<Ok<PlatformSettingsView>> GetSettings(PlatformSettingsService settings, IConfiguration config, CancellationToken ct) =>
+        TypedResults.Ok(View(await settings.GetAsync(ct), config));
+
+    private static async Task<Results<Ok<PlatformSettingsView>, ValidationProblem>> UpdateSettings(
+        PlatformSettings req, PlatformSettingsService settings, IConfiguration config, CancellationToken ct)
+    {
+        if (req.Validate() is { Count: > 0 } errors) return Errors.Validation(errors);
+        await settings.SaveAsync(req, ct);
+        return TypedResults.Ok(View(await settings.GetAsync(ct), config));
+    }
+
+    private static PlatformSettingsView View(PlatformSettings s, IConfiguration config) =>
+        new(s, !string.IsNullOrEmpty(config["Email:SmtpPassword"]), !string.IsNullOrEmpty(config["Sms:ApiKey"]));
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> TestEmail(TestMessageRequest req, IEmailSender email, CancellationToken ct)
+    {
+        try
+        {
+            await email.SendAsync(req.To.Trim(), "CRM test email", "This is a test message from the CRM platform settings.", ct);
+            return TypedResults.NoContent();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return TypedResults.Problem($"Sending failed: {ex.Message}", statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    private static async Task<Results<NoContent, ProblemHttpResult>> TestSms(TestMessageRequest req, ISmsSender sms, CancellationToken ct)
+    {
+        if (RegistrationService.NormalizePhone(req.To) is not { } phone)
+            return TypedResults.Problem("Enter the number in international format, e.g. +61412345678.", statusCode: StatusCodes.Status400BadRequest);
+        try
+        {
+            await sms.SendAsync(phone, "This is a test message from the CRM platform settings.", ct);
+            return TypedResults.NoContent();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return TypedResults.Problem($"Sending failed: {ex.Message}", statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     private static async Task<Results<NoContent, NotFound, ValidationProblem>> Delete(

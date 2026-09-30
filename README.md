@@ -7,6 +7,7 @@ A configurable, **multi-tenant** relationship-management platform. It ships as a
 - **Customization**: rename or disable standard objects, create custom objects with their own pipelines, add 13 types of custom fields, and edit stages and picklists. Lists, forms, filters, boards and dashboards adapt automatically.
 - **Automation**: no-code rules that create tasks, send notifications or set fields.
 - **Governance**: field-level audit trail, per-record history and in-app notifications.
+- **Self-registration** (optional): people sign up with their organisation's code, optionally verify their email and/or mobile with a one-time code, and can sign in only after an administrator approves them and assigns roles or groups. The platform switches and the email/SMS providers are configured in the UI (**Platform settings**).
 
 | Layer | Stack |
 |---|---|
@@ -35,9 +36,9 @@ To look up a password: `dotnet user-secrets list` in `backend/src/Crm.Api`. Don'
 
 ## Tests
 ```powershell
-cd backend;  dotnet test                    # 29 API integration tests (stop the API first)
-cd frontend; npx ng test --watch=false      # 25 UI unit tests
-./scripts/smoke-test.ps1                    # 44 live end-to-end checks against PostgreSQL (API running)
+cd backend;  dotnet test                    # 36 API integration tests (stop the API first)
+cd frontend; npx ng test --watch=false      # 33 UI unit tests
+./scripts/smoke-test.ps1                    # 48 live end-to-end checks against PostgreSQL (API running)
 ```
 
 ## Documentation

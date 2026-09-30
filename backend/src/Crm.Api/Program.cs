@@ -17,6 +17,7 @@ using Crm.Api.Features.Records;
 using Crm.Api.Features.Security;
 using Crm.Api.Features.Users;
 using Crm.Api.Infrastructure;
+using Crm.Api.Messaging;
 using Crm.Api.Metadata;
 using Crm.Api.Platform;
 using Crm.Api.Security;
@@ -42,6 +43,11 @@ services.AddScoped<MetadataService>();
 services.AddScoped<CustomFieldValidator>();
 services.AddScoped<AutomationEngine>();
 services.AddScoped<TenantService>();
+services.AddScoped<PlatformSettingsService>();
+services.AddScoped<RegistrationService>();
+services.AddScoped<IEmailSender, ConfiguredEmailSender>();
+services.AddScoped<ISmsSender, ConfiguredSmsSender>();
+services.AddHttpClient(ConfiguredSmsSender.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15));
 services.AddDbContext<CrmDbContext>((sp, options) =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
@@ -95,6 +101,7 @@ services.AddRateLimiter(o =>
     o.AddPolicy(AuthEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:AuthPermitPerMinute", 10));
     // Refresh runs on every page load; tokens are 512-bit random so a looser limit is safe.
     o.AddPolicy(AuthEndpoints.RefreshRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:RefreshPermitPerMinute", 120));
+    o.AddPolicy(RegistrationEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:RegisterPermitPerMinute", 10));
 
     static RateLimitPartition<string> PerIpPerMinute(HttpContext ctx, string setting, int defaultLimit) =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -148,6 +155,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c
 
 var api = app.MapGroup("/api");
 api.MapAuth();
+api.MapRegistration();
 var secured = api.MapGroup("").RequireAuthorization();
 secured.MapDashboard();
 secured.MapAccounts();

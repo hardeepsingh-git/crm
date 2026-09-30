@@ -24,6 +24,8 @@ public class Tenant
     public TenantStatus Status { get; set; } = TenantStatus.Active;
     public string Currency { get; set; } = "AUD";
     public string Template { get; set; } = "sales";
+    /// <summary>Tenant opt-in; also requires the platform-wide switch in <see cref="AppSetting"/>.</summary>
+    public bool SelfRegistrationEnabled { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -36,8 +38,31 @@ public class AppUser : IdentityUser<Guid>, ITenantEntity
     public bool IsActive { get; set; } = true;
     /// <summary>Can manage tenants across the whole platform.</summary>
     public bool IsPlatformAdmin { get; set; }
+    public RegistrationStatus RegistrationStatus { get; set; } = RegistrationStatus.Approved;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string FullName => $"{FirstName} {LastName}".Trim();
+}
+
+/// <summary>Platform-wide key/value configuration (not tenant-scoped). Secrets never go here.</summary>
+public class AppSetting
+{
+    public string Key { get; set; } = "";
+    public string Value { get; set; } = "";
+    public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>One-time code sent to verify a self-registration's email or mobile; only the hash is stored.</summary>
+public class VerificationCode
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+    public VerificationChannel Channel { get; set; }
+    public string CodeHash { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public int Attempts { get; set; }
+    public DateTime? ConsumedAt { get; set; }
 }
 
 public class RefreshToken

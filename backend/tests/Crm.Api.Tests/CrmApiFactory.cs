@@ -6,6 +6,7 @@ using Crm.Api.Auth;
 using Crm.Api.Data;
 using Crm.Api.Features.Security;
 using Crm.Api.Features.Users;
+using Crm.Api.Messaging;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
@@ -40,14 +41,21 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Seed:AdminPassword", AdminPassword);
         builder.UseSetting("Seed:DemoData", "false");
         builder.UseSetting("RateLimiting:AuthPermitPerMinute", "10000");
+        builder.UseSetting("RateLimiting:RegisterPermitPerMinute", "10000");
         builder.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Error).AddConsole());
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<CrmDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<CrmDbContext>>();
             services.AddDbContext<CrmDbContext>(o => o.UseSqlite(_connection));
+            services.RemoveAll<IEmailSender>();
+            services.RemoveAll<ISmsSender>();
+            services.AddSingleton<IEmailSender>(Messages);
+            services.AddSingleton<ISmsSender>(Messages);
         });
     }
+
+    public CapturedMessages Messages { get; } = new();
 
     public async Task<HttpClient> CreateAuthenticatedClientAsync(string email = AdminEmail, string password = AdminPassword)
     {

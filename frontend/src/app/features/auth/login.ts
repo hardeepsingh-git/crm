@@ -1,3 +1,4 @@
+import { HttpErrorResponse, httpResource } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,13 +7,14 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { RegistrationOptions } from '../../core/models';
 import { errorMessage } from '../../core/notify.service';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatProgressBarModule],
+  imports: [ReactiveFormsModule, RouterLink, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatProgressBarModule],
   template: `
     <div class="login-page">
       <mat-card class="login-card" appearance="outlined">
@@ -41,8 +43,14 @@ import { errorMessage } from '../../core/notify.service';
             @if (error()) {
               <p class="error" role="alert">{{ error() }}</p>
             }
+            @if (pendingVerification(); as pending) {
+              <p><a [routerLink]="['/verify']" [queryParams]="pending">Verify now</a></p>
+            }
             <button mat-flat-button class="full" type="submit" [disabled]="busy()">Sign in</button>
           </form>
+          @if (registration.hasValue() && registration.value().available) {
+            <p class="register"><a routerLink="/register">New here? Create an account</a></p>
+          }
         </mat-card-content>
       </mat-card>
     </div>
@@ -53,6 +61,7 @@ import { errorMessage } from '../../core/notify.service';
     .logo { font-size: 40px; width: 40px; height: 40px; color: var(--mat-sys-primary); }
     form { margin-top: 16px; }
     .error { color: var(--mat-sys-error); margin: 0 0 12px; }
+    .register { margin: 16px 0 0; text-align: center; }
   `,
 })
 export class Login {
@@ -61,7 +70,10 @@ export class Login {
   private readonly route = inject(ActivatedRoute);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+  readonly pendingVerification = signal<{ email: string; channels: string } | null>(null);
   readonly showPassword = signal(false);
+  /** Only the platform-wide switch is disclosed without an organisation code. */
+  readonly registration = httpResource<RegistrationOptions>(() => '/api/auth/registration-options');
   readonly form = inject(FormBuilder).nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required],
@@ -74,6 +86,7 @@ export class Login {
     }
     this.busy.set(true);
     this.error.set(null);
+    this.pendingVerification.set(null);
     const { email, password } = this.form.getRawValue();
     this.auth.login(email, password).subscribe({
       next: () => {
@@ -81,9 +94,12 @@ export class Login {
         // Only allow in-app redirects to avoid open-redirects.
         void this.router.navigateByUrl(returnUrl?.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/dashboard');
       },
-      error: (err) => {
+      error: (err: HttpErrorResponse) => {
         this.busy.set(false);
         this.error.set(errorMessage(err));
+        const problem = err.error as { registrationStatus?: string; verification?: string[] } | null;
+        if (problem?.registrationStatus === 'PendingVerification' && problem.verification?.length)
+          this.pendingVerification.set({ email, channels: problem.verification.join(',') });
       },
     });
   }

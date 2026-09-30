@@ -30,10 +30,27 @@ Configuration is read in this order: `appsettings.json`, then `appsettings.{Envi
 | `Cors:AllowedOrigins` | | `[]` | Only needed if the UI isn't served from the same origin as `/api` |
 | `RateLimiting:AuthPermitPerMinute` | | `10` | Sign-in attempts per IP per minute |
 | `RateLimiting:RefreshPermitPerMinute` | | `120` | Token refreshes per IP per minute |
+| `RateLimiting:RegisterPermitPerMinute` | | `10` | Self-registration, verify and resend-code calls per IP per minute |
+| `Email:SmtpPassword` | with the SMTP provider | none | SMTP password. The rest of the SMTP settings are in **Platform settings** (UI). |
+| `Sms:ApiKey` | with the HTTP SMS provider | none | Sent as `<SmsAuthHeader>: <SmsAuthScheme> <key>` to the SMS gateway configured in **Platform settings** |
 | `ForwardedHeaders:Enabled` | | `false` | `true` only when the API is reachable **only** through a trusted reverse proxy |
 | `OpenApi:Enabled` | | `true` in Development | `/openapi/v1.json` and `/scalar` |
 
 Tenant-level settings (name, currency, objects, fields, roles…) are **data**, not configuration. Administrators manage them in the UI under **Settings**, and platform admins manage tenants under **Tenants**.
+
+**Platform settings** (self-registration, email/SMS verification flags, code rules, email and SMS providers) are also data, in the `AppSettings` table, edited by platform admins under **Platform settings**. Defaults on first start: everything off, both providers `Log`. Only the two secrets above live in configuration.
+
+### 2.1 Enabling self-registration
+1. **Platform settings**: switch on *Self-registration*; optionally *Email verification* and/or *SMS verification*.
+2. For real delivery, choose the *SMTP* email provider and/or the *HTTP gateway* SMS provider, fill in the fields, set the secret, and use **Send test**:
+   ```powershell
+   cd C:\Users\FBPo48p\CRM\backend\src\Crm.Api
+   dotnet user-secrets set "Email:SmtpPassword" "<smtp password>"   # production: env var Email__SmtpPassword
+   dotnet user-secrets set "Sms:ApiKey" "<gateway key>"             # production: env var Sms__ApiKey
+   ```
+   The HTTP gateway receives `POST <url>` with JSON `{ "to": "+61…", "from": "<sender id>", "message": "…" }`. With the *Log* providers, messages are only written to the API log (including the code, in Development only), which is fine for testing but means real users receive nothing.
+3. Each organisation's administrator switches on *Allow self-registration* under **Settings → Organisation** and shares the link `https://<host>/register/<workspace id>`.
+4. New requests appear under **Settings → Users → Awaiting approval**, with a notification to every user administrator.
 
 ## 3. Local development (Windows)
 
@@ -140,5 +157,8 @@ To use the remote server instead of the bundled PostgreSQL, remove the `db` serv
 | Can't delete a stage / object / account | It still has records. Move or delete them first (the 409 message says how many). |
 | Automation rule didn't fire | Is the rule active? Do all conditions match? Stage-change rules need a pipeline object. Changes made by automation don't trigger other rules. Check **Runs** on the Automation page. |
 | `429 Too Many Requests` on sign-in | Wait a minute, or raise `RateLimiting:AuthPermitPerMinute` |
+| *Create an account* isn't shown / "Self-registration isn't available" | The platform switch (**Platform settings**) and the organisation opt-in (**Settings → Organisation**) must both be on, the organisation must be active, and the code must be its workspace ID. |
+| Registered users get no code | The provider is still *Log* (check the API log), or delivery fails: use **Send test** and check `Email:SmtpPassword` / `Sms:ApiKey`. Send failures are logged but don't fail the registration; the user can request a new code. |
+| A user says they're "waiting for approval" | Approve them under **Settings → Users → Awaiting approval** with at least one role or group. |
 | `dotnet test` fails with file-lock errors | Stop the running API first (it locks `bin/`) |
 | `NU1900` warnings during restore | The Nexus vulnerability feed returns 403. This is harmless. |

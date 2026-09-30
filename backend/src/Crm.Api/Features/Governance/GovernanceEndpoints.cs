@@ -4,6 +4,7 @@ using Crm.Api.Auth;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Platform;
 using Crm.Api.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,15 @@ public record AuditQuery(
     string? EntityType, Guid? EntityId, Guid? UserId, AuditAction? Action, string? Search, DateTime? From, DateTime? To,
     int Page = 1, int PageSize = 50);
 
-public record SettingsRequest([Required, MaxLength(200)] string Name, [Required, StringLength(3, MinimumLength = 3)] string Currency);
+public record SettingsRequest(
+    [Required, MaxLength(200)] string Name,
+    [Required, StringLength(3, MinimumLength = 3)] string Currency,
+    bool? SelfRegistrationEnabled = null);
+
+/// <summary>Organisation settings plus the platform switches that decide whether self-registration can work at all.</summary>
+public record OrganisationSettings(
+    Guid Id, string Name, string Slug, string Currency, string Template, bool SelfRegistrationEnabled,
+    bool SelfRegistrationAllowedByPlatform, bool EmailVerification, bool SmsVerification);
 
 public record NotificationItem(Guid Id, string Title, string Message, string? Link, DateTime CreatedAt, DateTime? ReadAt);
 
@@ -77,20 +86,26 @@ public static class GovernanceEndpoints
     private static IQueryable<AuditItem> Project(IQueryable<AuditLog> q) => q.Select(a => new AuditItem(
         a.Id, a.EntityType, a.EntityId, a.EntityName, a.Action, a.UserId, a.UserName, a.Timestamp, Cf.Parse(a.Changes)));
 
-    private static async Task<Ok<TenantInfo>> GetSettings(Access access, CrmDbContext db, CancellationToken ct)
+    private static async Task<Ok<OrganisationSettings>> GetSettings(Access access, CrmDbContext db, PlatformSettingsService platform, CancellationToken ct)
     {
         var t = await db.Tenants.AsNoTracking().SingleAsync(x => x.Id == access.TenantId, ct);
-        return TypedResults.Ok(new TenantInfo(t.Id, t.Name, t.Slug, t.Currency, t.Template));
+        return TypedResults.Ok(ToSettings(t, await platform.GetAsync(ct)));
     }
 
-    private static async Task<Ok<TenantInfo>> UpdateSettings(SettingsRequest req, Access access, CrmDbContext db, CancellationToken ct)
+    private static async Task<Ok<OrganisationSettings>> UpdateSettings(
+        SettingsRequest req, Access access, CrmDbContext db, PlatformSettingsService platform, CancellationToken ct)
     {
         var t = await db.Tenants.SingleAsync(x => x.Id == access.TenantId, ct);
         t.Name = req.Name.Trim();
         t.Currency = req.Currency.ToUpperInvariant();
+        if (req.SelfRegistrationEnabled is { } enabled) t.SelfRegistrationEnabled = enabled;
         await db.SaveChangesAsync(ct);
-        return TypedResults.Ok(new TenantInfo(t.Id, t.Name, t.Slug, t.Currency, t.Template));
+        return TypedResults.Ok(ToSettings(t, await platform.GetAsync(ct)));
     }
+
+    private static OrganisationSettings ToSettings(Tenant t, PlatformSettings p) => new(
+        t.Id, t.Name, t.Slug, t.Currency, t.Template, t.SelfRegistrationEnabled,
+        p.SelfRegistrationEnabled, p.EmailVerificationEnabled, p.SmsVerificationEnabled);
 
     private static async Task<Ok<NotificationList>> Notifications(Access access, CrmDbContext db, CancellationToken ct)
     {

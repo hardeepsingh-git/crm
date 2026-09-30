@@ -20,16 +20,23 @@ import {
   ObjectDef,
   OpportunityDetail,
   OpportunityRequest,
+  OrganisationSettings,
+  PlatformSettings,
+  PlatformSettingsView,
   RecordItem,
   RecordRequest,
+  RegisterRequest,
+  RegisterResponse,
+  RegistrationOptions,
   RoleItem,
   RuleItem,
   StageDef,
   TemplateInfo,
-  TenantInfo,
   TenantItem,
   UserItem,
   UserLookup,
+  VerificationChannel,
+  VerifyResponse,
 } from './models';
 
 export type QueryParams = Record<string, string | number | boolean | null | undefined>;
@@ -154,6 +161,32 @@ export class CrmApi {
     return this.http.post<void>(`/api/users/${id}/reset-password`, { newPassword });
   }
 
+  approveUser(id: string, body: { roleIds: string[]; groupIds: string[] }): Observable<UserItem> {
+    return this.http.post<UserItem>(`/api/users/${id}/approve`, body);
+  }
+
+  rejectUser(id: string): Observable<UserItem> {
+    return this.http.post<UserItem>(`/api/users/${id}/reject`, {});
+  }
+
+  // ---------- Self-registration (anonymous) ----------
+
+  registrationOptions(tenantCode: string): Observable<RegistrationOptions> {
+    return this.http.get<RegistrationOptions>('/api/auth/registration-options', { params: { tenant: tenantCode } });
+  }
+
+  register(body: RegisterRequest): Observable<RegisterResponse> {
+    return this.http.post<RegisterResponse>('/api/auth/register', body);
+  }
+
+  verify(email: string, channel: VerificationChannel, code: string): Observable<VerifyResponse> {
+    return this.http.post<VerifyResponse>('/api/auth/verify', { email, channel, code });
+  }
+
+  resendCode(email: string, channel: VerificationChannel): Observable<void> {
+    return this.http.post<void>('/api/auth/resend-code', { email, channel });
+  }
+
   saveRole(id: string | null, body: { name: string; description: string | null; permissions: Grant[] }): Observable<RoleItem> {
     return id ? this.http.put<RoleItem>(`/api/admin/roles/${id}`, body) : this.http.post<RoleItem>('/api/admin/roles', body);
   }
@@ -210,8 +243,8 @@ export class CrmApi {
     return this.http.delete<void>(`/api/admin/automation/${id}`);
   }
 
-  saveSettings(body: { name: string; currency: string }): Observable<TenantInfo> {
-    return this.http.put<TenantInfo>('/api/settings', body);
+  saveSettings(body: { name: string; currency: string; selfRegistrationEnabled?: boolean }): Observable<OrganisationSettings> {
+    return this.http.put<OrganisationSettings>('/api/settings', body);
   }
 
   recordHistory(entityType: string, id: string): Observable<AuditItem[]> {
@@ -244,6 +277,14 @@ export class CrmApi {
 
   deleteTenant(id: string): Observable<void> {
     return this.http.delete<void>(`/api/platform/tenants/${id}`);
+  }
+
+  savePlatformSettings(settings: PlatformSettings): Observable<PlatformSettingsView> {
+    return this.http.put<PlatformSettingsView>('/api/platform/settings', settings);
+  }
+
+  testMessage(channel: VerificationChannel, to: string): Observable<void> {
+    return this.http.post<void>(`/api/platform/settings/test-${channel === 'Email' ? 'email' : 'sms'}`, { to });
   }
 }
 

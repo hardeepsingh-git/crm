@@ -1,7 +1,12 @@
 # CRM Platform: User Guide
 
 ## 1. Signing in
-Open the CRM (development: http://localhost:4200) and sign in with the email and password from your administrator. Your session renews itself while you work. Use the menu under your name to **change your password** or **sign out**. The menu also shows your organisation and roles.
+Open the CRM (development: http://localhost:4200) and sign in with the email and password from your administrator. Your session renews itself while you work.
+
+**Creating your own account** (if your organisation allows it): use the link your administrator shared (`…/register/<organisation code>`), or *Create an account* on the sign-in page and enter the organisation code.
+1. Fill in your name, email, mobile number and a password.
+2. If asked, enter the codes sent to your email and/or mobile. *Send a new code* works after a short wait.
+3. An administrator reviews your request and gives you access. Until then, signing in tells you the request is waiting for approval. Use the menu under your name to **change your password** or **sign out**. The menu also shows your organisation and roles.
 
 ## 2. Finding your way around
 The left navigation is built from **your organisation's configuration and your permissions**. You only see the objects you're allowed to read, with the names your organisation uses: for example *Customers* instead of *Accounts*, or extra objects like *Tickets* or *Support Cases*.
@@ -45,8 +50,8 @@ You see only the areas you're allowed to manage.
 
 | Area | What you can do |
 |---|---|
-| **Organisation** | Organisation name and currency |
-| **Users** | Add users with an initial password. Edit names, active status, roles and groups. Reset passwords, which also unlocks accounts. |
+| **Organisation** | Organisation name and currency. **Allow self-registration** (only if the platform operator has switched it on) and the shareable sign-up link. |
+| **Users** | Add users with an initial password. Edit names, active status, roles and groups. Reset passwords, which also unlocks accounts. **Awaiting approval** lists self-registered people: check the verified ticks, then **Approve** with at least one role or group, or **Reject**. You also get a notification for each new request. |
 | **Groups** | Teams, regions or departments. Members share records under *Group* scope and inherit the group's roles. |
 | **Roles & permissions** | Define roles as a matrix. **All objects** is the role's default for every object, including ones added later. Set a specific object to override it (choose **None** to hide it). Tick the administration areas the role can manage. The **Administrator** role always has full access. |
 | **Objects & fields** | Rename or switch off standard objects. Create new objects with an icon, name field label and optional pipeline. Add fields (text, number, currency, date, yes/no, picklists, email, phone, URL, lookup). Edit pipeline stages (order, colour, probability, open/won/lost). |
@@ -65,5 +70,12 @@ Platform operators manage organisations (tenants) under **Tenants**:
 - **New tenant**: name, workspace ID, a template (Sales CRM, Help Desk, Recruitment or Blank), currency, optional sample data, and the first administrator's details.
 - **Suspend / reactivate**: suspended organisations can't sign in. Nothing is deleted.
 - **Delete**: suspend first, then type the workspace ID to confirm. All of the tenant's data is removed permanently.
+
+**Platform settings** controls self-registration for every organisation:
+- **Self-registration**: the master switch. Each organisation must also opt in under *Settings → Organisation*.
+- **Email verification** / **SMS verification**: when on, new users must enter a one-time code for that channel. When off, the step doesn't appear at all.
+- **Codes**: length, validity, allowed attempts and the wait before a resend.
+- **Email**: *Log* (development: messages go to the API log) or *SMTP* (host, port, username, STARTTLS, from address). **SMS**: *Log* or *HTTP gateway* (URL, sender ID, auth header and scheme). Passwords and API keys aren't entered here; the page only shows whether they're configured on the server.
+- **Send test** checks the email or SMS settings.
 
 Each organisation is completely separate: its users, records and configuration are invisible to the others.

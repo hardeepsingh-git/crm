@@ -14,7 +14,7 @@ interface SettingsArea {
 }
 
 const AREAS: SettingsArea[] = [
-  { path: 'general', title: 'Organisation', description: 'Name and currency.', icon: 'business', resource: 'settings', action: 'manage' },
+  { path: 'general', title: 'Organisation', description: 'Name, currency and self-registration.', icon: 'business', resource: 'settings', action: 'manage' },
   { path: 'users', title: 'Users', description: 'Invite people, reset passwords, assign roles and groups.', icon: 'group', resource: 'users', action: 'manage' },
   { path: 'groups', title: 'Groups', description: 'Teams that share records (Group scope) and inherit roles.', icon: 'workspaces', resource: 'groups', action: 'manage' },
   { path: 'roles', title: 'Roles & permissions', description: 'What each role can read, create, update and delete, and at which scope.', icon: 'shield_person', resource: 'roles', action: 'manage' },

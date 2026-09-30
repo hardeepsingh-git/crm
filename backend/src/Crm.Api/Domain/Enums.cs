@@ -23,3 +23,8 @@ public enum ConditionOperator { Equals, NotEquals, GreaterThan, LessThan, Contai
 public enum AutomationActionType { CreateTask, Notify, SetField }
 
 public enum AuditAction { Created, Updated, Deleted }
+
+/// <summary>Only Approved users may sign in; the other states belong to self-registrations still in progress.</summary>
+public enum RegistrationStatus { Approved, PendingVerification, PendingApproval, Rejected }
+
+public enum VerificationChannel { Email, Sms }

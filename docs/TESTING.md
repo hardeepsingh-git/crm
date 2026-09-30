@@ -7,14 +7,14 @@
 | API integration | xUnit, `WebApplicationFactory`, SQLite in-memory | Full HTTP pipeline: auth, tenancy, RBAC, validation, customization, automation, audit | `backend/tests/Crm.Api.Tests` |
 | UI unit | Vitest, `HttpTestingController` | Session handling, permission resolution, metadata, custom-field forms, list helpers | `frontend/src/**/*.spec.ts` |
 | Build gates | `ng build` (AOT, strict templates), `dotnet build` | Type safety | CI |
-| Live end-to-end | `scripts/smoke-test.ps1` (44 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, clean-up | `scripts/` |
+| Live end-to-end | `scripts/smoke-test.ps1` (48 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, self-registration and approval, clean-up | `scripts/` |
 | Browser end-to-end | Manual/Playwright checklist (§4) | Settings screens, custom objects, role matrix, restricted users, tenant lifecycle | UAT |
 
 The SQLite tests exercise the same EF model and query filters. PostgreSQL-specific behaviour (`jsonb @>` filters) is covered by the live smoke test.
 
 ## 2. Automated test inventory
 
-### API (`dotnet test`): 29 tests
+### API (`dotnet test`): 36 tests
 | Test | Covers |
 |---|---|
 | `Liveness_endpoint_is_anonymous` | NFR-4 |
@@ -46,21 +46,33 @@ The SQLite tests exercise the same EF model and query filters. PostgreSQL-specif
 | `Standard_objects_accept_custom_fields_and_configurable_stages` | CUS-1, CUS-3, CUS-6, CRM-2 |
 | `Automation_rules_create_tasks_notifications_and_set_fields` | AUTO-1..6 |
 | `Changes_are_audited_with_field_level_diffs` | AUD-1..3 |
+| `Registration_is_available_only_when_the_platform_and_the_tenant_both_allow_it` | REG-1, REG-2 |
+| `Registered_users_cannot_sign_in_until_an_administrator_approves_them` | REG-3, REG-6, REG-7, REG-8 |
+| `Email_and_mobile_must_be_verified_before_approval` | REG-4 |
+| `Codes_lock_after_too_many_attempts_and_resends_respect_the_cooldown` | REG-5 |
+| `Registration_and_verification_do_not_reveal_existing_accounts` | REG-9 |
+| `Rejected_registrations_cannot_sign_in_and_settings_are_platform_admin_only` | REG-7, REG-10 |
+| `Deleting_a_tenant_removes_its_registrations` | TEN-4 |
 
-### UI (`ng test`): 25 tests
+The registration tests replace the email and SMS senders with an in-memory capture (`CapturedMessages`), so they read the real codes that were sent.
+
+### UI (`ng test`): 33 tests
 | Spec | Tests |
 |---|---|
 | `auth.spec.ts` (10) | login stores session · metadata cleared when the session ends · bearer token added · refresh once on 401 and retry · session cleared on rejected refresh · session kept on 429 · restore keeps the token when the server is down · guard restores the session · refresh serialized across tabs using the latest stored token · no token to non-API URLs |
 | `helpers.spec.ts` (5) | toParams · humanize · validation problem flattening · status messages (including server 403 detail) · password policy |
 | `platform.spec.ts` (10) | Own/Group/All scopes on ownership · `*` default with resolved object overrides and admin areas excluded · assignment only with Group/All · administrators · partial admin access · metadata labels, routes, API URLs, stages and picklists · custom-field controls and validators · custom-field value conversion · legacy picklist values · `cf.` filter parameters |
+| `registration.spec.ts` (8) | unavailable organisation message · mobile required when SMS is on, trimmed payload, continue to verification · password mismatch blocked, done message without verification · per-channel verify and resend, then pending approval · sign-in page offers registration only when the platform allows it · Enter in the code forms is handled in-app (real DOM submit) · platform settings: flags, log-only warning, secret status, clean save payload · phone pattern |
 
-### Live smoke test (`scripts/smoke-test.ps1`): 44 checks
+### Live smoke test (`scripts/smoke-test.ps1`): 48 checks
 1. Health and authentication (7)
 2. Read every module with seeded data (11)
 3. End-to-end sales workflow with tagged records (11)
 4. Standard User permissions (5)
 5. Clean-up (1)
-6. Platform (9): provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · suspend and delete
+6. Platform (13): provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · suspend and delete
+
+The registration checks temporarily switch on global self-registration (with verification off) and always put the original platform settings back.
 
 ## 3. Running
 ```powershell
@@ -93,3 +105,8 @@ VS Code tasks: *CRM: Backend tests*, *CRM: Frontend tests*, *CRM: Smoke test (AP
 | 17 | **Audit log**: filter by object/user | Entries show field-level before and after |
 | 18 | Organisation: change the currency to EUR | Amounts across the app show € |
 | 19 | Phone width | The navigation collapses and forms stack |
+| 20 | **Platform settings**: turn on self-registration and email verification (Log provider). **Settings → Organisation**: allow self-registration and copy the link. | The sign-in page shows *Create an account*. The organisation page shows the shareable link. |
+| 21 | Open the link in a private window and register | The verify page asks for the email code. In Development the code is in the API console. |
+| 22 | Sign in as the new user before approval | "Waiting for administrator approval" (not a generic error) |
+| 23 | As admin: bell notification → **Users → Awaiting approval → Approve** without a role, then with a role | Refused without a role. With one, the user can sign in. |
+| 24 | Turn the platform switch off | *Create an account* disappears and `/register/<code>` says registration isn't available |

@@ -5,6 +5,9 @@ const customize = permissionGuard('customization', 'manage');
 
 export const routes: Routes = [
   { path: 'login', title: 'Sign in | CRM', loadComponent: () => import('./features/auth/login').then((m) => m.Login) },
+  { path: 'register', title: 'Register | CRM', loadComponent: () => import('./features/auth/registration').then((m) => m.Register) },
+  { path: 'register/:tenantCode', title: 'Register | CRM', loadComponent: () => import('./features/auth/registration').then((m) => m.Register) },
+  { path: 'verify', title: 'Verify | CRM', loadComponent: () => import('./features/auth/registration').then((m) => m.Verify) },
   {
     path: '',
     canActivate: [authGuard],
@@ -51,6 +54,7 @@ export const routes: Routes = [
           },
           { path: 'admin/users', redirectTo: 'settings/users' },
           { path: 'platform/tenants', title: 'Tenants | CRM', canActivate: [platformGuard], loadComponent: () => import('./features/platform/tenant-list').then((m) => m.TenantList) },
+          { path: 'platform/settings', title: 'Platform settings | CRM', canActivate: [platformGuard], loadComponent: () => import('./features/platform/platform-settings').then((m) => m.PlatformSettingsPage) },
         ],
       },
     ],

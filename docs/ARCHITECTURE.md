@@ -80,6 +80,26 @@ sequenceDiagram
 | Suspension | Sign-in returns 403. `EffectivePermissions.TenantActive = false` resolves every scope to None, so existing tokens stop working immediately. |
 | Platform | `/api/platform/*` requires `IsPlatformAdmin` on an active tenant. Background work uses `TenantContext.Use(tenantId)` for explicit, temporary scopes (provisioning, seeding). |
 | Lifecycle | `TenantService.CreateAsync` provisions in a transaction (tenant, template, admin user, optional demo data). `DeleteAsync` removes children in dependency order with `ExecuteDelete`. |
+| Anonymous (self-registration) | No token, so no tenant context and no query filters. `RegistrationService` resolves the tenant explicitly from the organisation code (active and opted in), and uses `TenantContext.Use(user.TenantId)` when it touches tenant data (roles, notifications). |
+
+### 3.4 Self-registration
+
+```mermaid
+stateDiagram-v2
+    [*] --> PendingVerification: register (email/SMS flags on)
+    [*] --> PendingApproval: register (no verification)
+    PendingVerification --> PendingApproval: all required codes verified
+    PendingApproval --> Approved: admin approves (role or group required)
+    PendingApproval --> Rejected: admin rejects
+    PendingVerification --> Rejected: admin rejects
+```
+
+- **Two gates:** the global `PlatformSettings.SelfRegistrationEnabled` (platform admin) and `Tenant.SelfRegistrationEnabled` (organisation admin). Verification flags are global so the delivery providers are configured once.
+- **Settings:** `PlatformSettingsService` stores `PlatformSettings` as key/value rows in `AppSettings`, cached for one minute and invalidated on save. `Validate()` covers cross-field rules (SMTP host and sender, absolute gateway URL).
+- **Delivery:** `IEmailSender` and `ISmsSender` pick the provider from the settings on each call: *Log* (API log; the body, including the code, only in Development), *SMTP* (`System.Net.Mail`, password from `Email:SmtpPassword`) or *HTTP gateway* (named `HttpClient`, 15 s timeout, key from `Sms:ApiKey`). Send failures are logged and don't fail the request; the user can resend.
+- **Codes:** random digits from `RandomNumberGenerator`, stored as SHA-256 of `userId:channel:code`, compared in fixed time, single use, limited attempts, expiry and resend cooldown. Issuing a new code replaces the old one.
+- **Sign-in:** the password is checked first, so the registration state is only revealed to someone who knows it. Non-approved users get 403 with `registrationStatus` and the channels still to verify. If an admin has since switched verification off, a pending user moves on to approval at sign-in.
+- **Approval:** reuses the user-admin escalation check. Approvers are notified (in-app) when a request reaches PendingApproval; the approved user gets an email.
 
 ## 4. Authorization (RBAC)
 
@@ -164,16 +184,17 @@ flowchart LR
 | A01 Broken access control | Tenant query filters and a write guard. Per-endpoint permission filters. Per-record scope checks, with 404 for hidden records. Anti-escalation on resolved scopes. Administrator role protected. Tests for isolation, group scope, deny override and escalation. |
 | A02 Cryptographic failures | PBKDF2 password hashes, SHA-256 hashed refresh tokens, a ≥ 256-bit JWT key from secrets, HTTPS/HSTS in production |
 | A03 Injection | EF Core parameterised queries only. The JSONB filter value is serialised with `System.Text.Json` and passed as a parameter. Object, field and stage keys are validated against strict regexes. |
-| A04 Insecure design | Lockout, rate limits, token reuse detection, automation loop guard, stage and object deletion blocked while in use, tenant deletion only when suspended |
-| A05 Misconfiguration | Secrets in user-secrets or environment only. OpenAPI UI only in Development by default. CSP and security headers. |
-| A07 Authentication failures | Strong password policy, lockout, short-lived tokens, server-side logout, suspended-tenant sign-in blocked |
+| A04 Insecure design | Lockout, rate limits (including a separate self-registration policy), token reuse detection, automation loop guard, stage and object deletion blocked while in use, tenant deletion only when suspended. Self-registered users start inactive with no roles and need admin approval. |
+| A05 Misconfiguration | Secrets in user-secrets or environment only (including the SMTP password and SMS API key, which the API never stores or returns). OpenAPI UI only in Development by default. CSP and security headers. |
+| A07 Authentication failures | Strong password policy, lockout, short-lived tokens, server-side logout, suspended-tenant sign-in blocked. Self-registration: hashed single-use codes with attempt limits and expiry, and no account enumeration (identical responses for existing and unknown emails). |
 | A08 Integrity | Lockfiles and CI builds from source |
 | A09 Logging | Audit log for business data. Tenant lifecycle is logged. ProblemDetails responses carry trace IDs. |
-| A10 SSRF | No outbound calls. Automation has no webhook action. |
+| A10 SSRF | The only outbound calls are SMTP and the SMS gateway, to hosts that only platform admins can configure (absolute http(s) URL, validated). Users can't influence the destination. Automation has no webhook action. |
 
 Residual risks:
 - The refresh token lives in `localStorage` (mitigated by CSP, rotation and reuse detection).
 - Isolation relies on the application layer. PostgreSQL row-level security would add defence in depth (ADR-6).
+- A platform admin can point the SMS gateway at any URL, and the API key is sent there. Treat platform admin as a highly trusted role, and consider an egress allow-list in production.
 
 ## 9. Key decisions (ADR summary)
 
@@ -188,3 +209,4 @@ Residual risks:
 | ADR-9 | **Per-role override, union across roles** | Pure union including `*` (can't restrict an object below the default) or deny-wins across roles (one restrictive role silently removes access granted by another) |
 | ADR-10 | Automation runs in-process after `SaveChanges` | A queue/outbox: more robust at scale, but more infrastructure. The outbox is the planned next step for email/webhook actions. |
 | ADR-11 | Metadata loaded once per session in the SPA, reloaded after customization | Per-page fetches: more requests, flicker |
+| ADR-12 | **Self-registration gated twice** (platform + organisation). Verification flags and providers are **global platform settings stored in the database** and edited in the UI; secrets stay in configuration. The tenant slug is the organisation code. | Per-tenant providers (duplicated SMTP/SMS setup per organisation); flags in `appsettings` (needs a redeploy to change); a separate invitation-code table (more admin work for the same outcome) |

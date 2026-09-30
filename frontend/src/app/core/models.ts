@@ -384,6 +384,84 @@ export interface UserItem {
   groups: NamedRef[];
   createdAt: string;
   lockoutEnd: string | null;
+  registrationStatus: RegistrationStatus;
+  phoneNumber: string | null;
+  emailConfirmed: boolean;
+  phoneNumberConfirmed: boolean;
+}
+
+// ---------- Self-registration ----------
+
+export type RegistrationStatus = 'Approved' | 'PendingVerification' | 'PendingApproval' | 'Rejected';
+export type VerificationChannel = 'Email' | 'Sms';
+
+export interface RegistrationOptions {
+  available: boolean;
+  tenantName: string | null;
+  emailVerification: boolean;
+  smsVerification: boolean;
+}
+
+export interface RegisterRequest {
+  tenantCode: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber: string | null;
+  password: string;
+}
+
+export interface RegisterResponse {
+  verification: VerificationChannel[];
+  message: string;
+}
+
+export interface VerifyResponse {
+  status: RegistrationStatus;
+  remaining: VerificationChannel[];
+}
+
+export interface OrganisationSettings {
+  id: string;
+  name: string;
+  slug: string;
+  currency: string;
+  template: string;
+  selfRegistrationEnabled: boolean;
+  selfRegistrationAllowedByPlatform: boolean;
+  emailVerification: boolean;
+  smsVerification: boolean;
+}
+
+export type EmailProvider = 'Log' | 'Smtp';
+export type SmsProvider = 'Log' | 'Http';
+
+export interface PlatformSettings {
+  selfRegistrationEnabled: boolean;
+  emailVerificationEnabled: boolean;
+  smsVerificationEnabled: boolean;
+  codeLength: number;
+  codeTtlMinutes: number;
+  maxAttempts: number;
+  resendCooldownSeconds: number;
+  emailProvider: EmailProvider;
+  smtpHost: string | null;
+  smtpPort: number;
+  smtpUsername: string | null;
+  smtpUseStartTls: boolean;
+  emailFromAddress: string | null;
+  emailFromName: string;
+  smsProvider: SmsProvider;
+  smsGatewayUrl: string | null;
+  smsSenderId: string | null;
+  smsAuthHeader: string;
+  smsAuthScheme: string;
+}
+
+export interface PlatformSettingsView {
+  settings: PlatformSettings;
+  smtpPasswordConfigured: boolean;
+  smsApiKeyConfigured: boolean;
 }
 
 export interface Grant {

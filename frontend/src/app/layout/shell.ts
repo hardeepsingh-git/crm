@@ -55,6 +55,9 @@ const NOTIFICATION_POLL_MS = 60_000;
               <a mat-list-item routerLink="/platform/tenants" routerLinkActive #rp="routerLinkActive" [activated]="rp.isActive" (click)="isMobile() && nav.close()">
                 <mat-icon matListItemIcon>apartment</mat-icon><span matListItemTitle>Tenants</span>
               </a>
+              <a mat-list-item routerLink="/platform/settings" routerLinkActive #rps="routerLinkActive" [activated]="rps.isActive" (click)="isMobile() && nav.close()">
+                <mat-icon matListItemIcon>tune</mat-icon><span matListItemTitle>Platform settings</span>
+              </a>
             }
           }
         </mat-nav-list>

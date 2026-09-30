@@ -240,6 +240,50 @@ if ($adminEmail -and $adminPassword) {
         Api DELETE "/api/accounts/$($a.id)" | Out-Null
         Assert (@($f.items | Where-Object id -eq $a.id).Count -eq 1) 'not found by custom field'; 'filter by cf.tier works'
     }
+
+    # Self-registration: global platform settings are changed temporarily and always restored below.
+    $regEmail = "joiner@$slug.test"
+    Check 'Self-registration needs both the platform switch and the organisation opt-in' {
+        $script:originalPlatform = (Api GET '/api/platform/settings' -Token $script:adminToken).settings
+        Assert (-not (Api GET "/api/auth/registration-options?tenant=$slug" -Token $null).available) 'available before the organisation opted in'
+        $temp = $script:originalPlatform | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+        $temp.selfRegistrationEnabled = $true; $temp.emailVerificationEnabled = $false; $temp.smsVerificationEnabled = $false
+        Api PUT '/api/platform/settings' $temp -Token $script:adminToken | Out-Null
+        Assert (-not (Api GET "/api/auth/registration-options?tenant=$slug" -Token $null).available) 'available without the organisation opt-in'
+        $org = Api PUT '/api/settings' @{ name = $script:tenant.name; currency = 'USD'; selfRegistrationEnabled = $true } -Token $script:hdToken
+        Assert ($org.selfRegistrationEnabled -and $org.selfRegistrationAllowedByPlatform) 'organisation setting not saved'
+        $o = Api GET "/api/auth/registration-options?tenant=$slug" -Token $null
+        Assert ($o.available -and $o.tenantName -eq $script:tenant.name) 'not available after opt-in'
+        "open for $slug"
+    }
+    Check 'Registered user cannot sign in until approved; admins are notified' {
+        $before = (Api GET '/api/notifications' -Token $script:hdToken).unreadCount
+        $r = Api POST '/api/auth/register' @{ tenantCode = $slug; email = $regEmail; firstName = 'Jo'; lastName = 'Iner'; phoneNumber = '+61 412 345 678'; password = 'Joiner#Pass123' } -Token $null
+        Assert (@($r.verification).Count -eq 0) 'unexpected verification step'
+        $s = StatusOf { Api POST '/api/auth/login' @{ email = $regEmail; password = 'Joiner#Pass123' } -Token $null }
+        Assert ($s -eq 403) "pending login returned $s"
+        Assert ((Api GET '/api/notifications' -Token $script:hdToken).unreadCount -eq $before + 1) 'admin not notified'
+        'login 403 while pending approval'
+    }
+    Check 'Admin approves with a role; user can sign in' {
+        $users = Api GET '/api/users?status=PendingApproval' -Token $script:hdToken
+        $pending = $users | Where-Object email -eq $regEmail
+        Assert ($null -ne $pending -and -not $pending.isActive) 'not listed as pending'
+        $s = StatusOf { Api POST "/api/users/$($pending.id)/approve" @{ roleIds = @() } -Token $script:hdToken }
+        Assert ($s -eq 400) "approval without a role returned $s"
+        $roles = Api GET '/api/admin/roles' -Token $script:hdToken
+        $role = $roles | Where-Object name -ne 'Administrator' | Select-Object -First 1
+        $u = Api POST "/api/users/$($pending.id)/approve" @{ roleIds = @($role.id) } -Token $script:hdToken
+        Assert ($u.isActive -and $u.registrationStatus -eq 'Approved') 'not approved'
+        $login = Api POST '/api/auth/login' @{ email = $regEmail; password = 'Joiner#Pass123' } -Token $null
+        Assert ($login.user.roles -contains $role.name) 'role not granted'
+        "signed in as $($role.name)"
+    }
+    Check 'Restore platform settings' {
+        Assert ($null -ne $script:originalPlatform) 'original settings were not captured'
+        Api PUT '/api/platform/settings' $script:originalPlatform -Token $script:adminToken | Out-Null
+        'restored'
+    }
     if (-not $Keep) {
         Check 'Suspend and delete the test tenant' {
             Api PUT "/api/platform/tenants/$($script:tenant.id)" @{ name = $script:tenant.name; currency = 'USD'; status = 'Suspended' } -Token $script:adminToken | Out-Null

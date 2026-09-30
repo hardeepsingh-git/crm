@@ -1203,3 +1203,72 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930112016_SelfRegistration') THEN
+    ALTER TABLE "Tenants" ADD "SelfRegistrationEnabled" boolean NOT NULL DEFAULT FALSE;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930112016_SelfRegistration') THEN
+    ALTER TABLE "AspNetUsers" ADD "RegistrationStatus" character varying(32) NOT NULL DEFAULT 'Approved';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930112016_SelfRegistration') THEN
+    CREATE TABLE "AppSettings" (
+        "Key" character varying(100) NOT NULL,
+        "Value" character varying(2000) NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_AppSettings" PRIMARY KEY ("Key")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930112016_SelfRegistration') THEN
+    CREATE TABLE "VerificationCodes" (
+        "Id" uuid NOT NULL,
+        "UserId" uuid NOT NULL,
+        "Channel" character varying(16) NOT NULL,
+        "CodeHash" character varying(128) NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "ExpiresAt" timestamp with time zone NOT NULL,
+        "Attempts" integer NOT NULL,
+        "ConsumedAt" timestamp with time zone,
+        CONSTRAINT "PK_VerificationCodes" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_VerificationCodes_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930112016_SelfRegistration') THEN
+    CREATE INDEX "IX_AspNetUsers_TenantId_RegistrationStatus" ON "AspNetUsers" ("TenantId", "RegistrationStatus");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930112016_SelfRegistration') THEN
+    CREATE INDEX "IX_VerificationCodes_UserId_Channel" ON "VerificationCodes" ("UserId", "Channel");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20260930112016_SelfRegistration') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20260930112016_SelfRegistration', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

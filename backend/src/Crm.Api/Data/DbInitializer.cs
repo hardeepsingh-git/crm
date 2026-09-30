@@ -35,6 +35,8 @@ public static class DbInitializer
             await db.SaveChangesAsync();
         }
 
+        await scope.ServiceProvider.GetRequiredService<PlatformSettingsService>().EnsureDefaultsAsync();
+
         var tenantContext = scope.ServiceProvider.GetRequiredService<TenantContext>();
         using var _ = tenantContext.Use(Tenant.DefaultId, userName: "System");
 

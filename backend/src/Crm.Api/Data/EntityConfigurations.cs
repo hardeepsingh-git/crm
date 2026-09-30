@@ -38,6 +38,27 @@ public class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
         b.Property(x => x.LastName).HasMaxLength(100).IsRequired();
         b.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(x => x.TenantId);
+        b.HasIndex(x => new { x.TenantId, x.RegistrationStatus });
+    }
+}
+
+public class AppSettingConfiguration : IEntityTypeConfiguration<AppSetting>
+{
+    public void Configure(EntityTypeBuilder<AppSetting> b)
+    {
+        b.HasKey(x => x.Key);
+        b.Property(x => x.Key).HasMaxLength(100);
+        b.Property(x => x.Value).HasMaxLength(2000).IsRequired();
+    }
+}
+
+public class VerificationCodeConfiguration : IEntityTypeConfiguration<VerificationCode>
+{
+    public void Configure(EntityTypeBuilder<VerificationCode> b)
+    {
+        b.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
+        b.HasIndex(x => new { x.UserId, x.Channel });
+        b.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
     }
 }
 

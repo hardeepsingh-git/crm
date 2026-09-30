@@ -1,11 +1,12 @@
 # CRM Platform: Data Model
 
-PostgreSQL database **`CRM`**, schema `public`. The schema is created by two EF Core migrations:
+PostgreSQL database **`CRM`**, schema `public`. The schema is created by three EF Core migrations:
 
 | Migration | Contents |
 |---|---|
 | `20260930041532_InitialCreate` | v1: Identity tables, accounts, contacts, leads, opportunities, activities, refresh tokens |
 | `20260930080943_MultiTenantPlatform` | v2: tenants, RBAC, metadata, custom records, automation, notifications and audit. Adds `TenantId` and `CustomFields` to existing tables and **migrates v1 data** (see below). |
+| `20260930112016_SelfRegistration` | `Tenants.SelfRegistrationEnabled` (default false), `AspNetUsers.RegistrationStatus` (existing users default to `Approved`), `AppSettings`, `VerificationCodes` |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -38,6 +39,7 @@ erDiagram
     CustomRecords |o--o{ Activities : CASCADE
     AspNetUsers ||--o{ Notifications : receives
     AspNetUsers ||--o{ RefreshTokens : has
+    AspNetUsers ||--o{ VerificationCodes : "CASCADE"
 ```
 
 ## 2. Tables
@@ -45,9 +47,11 @@ erDiagram
 ### 2.1 Tenancy and identity
 | Table | Key columns | Notes |
 |---|---|---|
-| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`) |
-| `AspNetUsers` | Identity columns + `TenantId` FK (RESTRICT), `FirstName`, `LastName`, `IsActive`, `IsPlatformAdmin`, `CreatedAt` | Email is unique platform-wide. Users are never hard-deleted except when their tenant is deleted. |
+| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `SelfRegistrationEnabled`, `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`). The slug doubles as the **organisation code** for self-registration. |
+| `AspNetUsers` | Identity columns + `TenantId` FK (RESTRICT), `FirstName`, `LastName`, `IsActive`, `IsPlatformAdmin`, **`RegistrationStatus`**(32), `CreatedAt` | Email is unique platform-wide. Users are never hard-deleted except when their tenant is deleted. `PhoneNumber` (E.164), `EmailConfirmed` and `PhoneNumberConfirmed` are set by self-registration. Index `(TenantId, RegistrationStatus)`. |
 | `RefreshTokens` | `UserId` FK (CASCADE), `TokenHash`(128, **unique**), `ExpiresAt`, `RevokedAt` | SHA-256 of the token |
+| `VerificationCodes` | `UserId` FK (CASCADE), `Channel` (Email/Sms), `CodeHash`(128), `CreatedAt`, `ExpiresAt`, `Attempts`, `ConsumedAt` | One-time codes. SHA-256 of `userId:channel:code`, never the code itself. Index `(UserId, Channel)`. |
+| `AppSettings` | PK `Key`(100), `Value`(2000, JSON), `UpdatedAt` | **Global** (not tenant-owned) platform settings, one row per `PlatformSettings` property, e.g. `SelfRegistrationEnabled = true`. No secrets. |
 
 ### 2.2 Security
 | Table | Key columns | Notes |
@@ -123,6 +127,8 @@ CREATE INDEX IF NOT EXISTS "IX_CustomRecords_CustomFields" ON "CustomRecords" US
 | Enum | Values |
 |---|---|
 | TenantStatus | Active, Suspended |
+| RegistrationStatus | Approved, PendingVerification, PendingApproval, Rejected |
+| VerificationChannel | Email, Sms |
 | PermissionScope | None, Own, Group, All |
 | FieldType | Text, TextArea, Number, Currency, Date, DateTime, Boolean, Picklist, MultiPicklist, Email, Phone, Url, Lookup |
 | StageCategory | Open, Won, Lost |

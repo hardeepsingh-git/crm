@@ -152,8 +152,22 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | SET-2 | Organisation settings: name and currency (ISO 4217). | M |
 | SET-3 | Users: create (initial password), edit name, active flag, roles and groups; reset password. | M |
 
-### 5.10 Future (backlog)
-Field-level security · Sharing rules and territories · Formula and roll-up fields · Email and webhook automation actions · Scheduled automation (e.g. "3 days before due") · CSV import/export · Report builder · Custom layouts · SSO (Entra ID) · Tenant self sign-up · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
+### 5.10 Self-registration (REG)
+| ID | Requirement | Pri |
+|---|---|---|
+| REG-1 | People can create their own account with their organisation's code (the workspace ID): name, email, mobile (optional unless SMS verification is on) and password. The UI offers a shareable link `/register/<code>`. | M |
+| REG-2 | Self-registration works only when the **platform** switch is on (platform admin, Platform settings) **and** the **organisation** has opted in (Settings → Organisation). Otherwise the UI hides it and the API refuses it. | M |
+| REG-3 | New users are created inactive with no roles and can't sign in until approved. Sign-in explains the state (pending verification, pending approval, rejected). | M |
+| REG-4 | Flags **EmailVerification** and **SmsVerification** (platform settings, editable in the UI). When on, the user must enter a one-time code sent to that channel before approval; when off, the step and fields don't appear. | M |
+| REG-5 | Codes: configurable length, expiry, attempt limit and resend cooldown. Stored hashed, single use. | M |
+| REG-6 | Administrators (Administrator role or `users:manage`) are notified of each request and see an **Awaiting approval** list. | M |
+| REG-7 | Approve requires at least one role (directly or via a group), respects anti-escalation, activates the user and emails them. Reject blocks the account. | M |
+| REG-8 | Email (Log or SMTP) and SMS (Log or HTTP gateway) providers are configured in the UI and can be tested. Secrets (SMTP password, SMS API key) stay in server configuration, never in the database or API responses. | M |
+| REG-9 | No account enumeration: registering an existing email, verifying and resending give the same responses as for unknown emails. Registration endpoints are rate-limited. | M |
+| REG-10 | Only platform admins can change platform settings. | M |
+
+### 5.11 Future (backlog)
+Field-level security · Sharing rules and territories · Formula and roll-up fields · Email and webhook automation actions · Scheduled automation (e.g. "3 days before due") · CSV import/export · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Forgot-password by email · Email templates · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
 
 ## 6. Non-functional requirements
 
@@ -186,9 +200,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (29), including tenancy, RBAC override and escalation, customization, automation and audit
-- [x] UI unit tests green (25), including permission resolution, metadata/custom-field helpers and cross-tab token refresh
-- [x] Live smoke test green against PostgreSQL (44 checks, including tenant provisioning, JSONB filters, automation and isolation)
+- [x] API integration tests green (36), including tenancy, RBAC override and escalation, customization, automation, audit and self-registration
+- [x] UI unit tests green (33), including permission resolution, metadata/custom-field helpers, cross-tab token refresh and the registration pages
+- [x] Live smoke test green against PostgreSQL (48 checks, including tenant provisioning, JSONB filters, automation, isolation and self-registration approval)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

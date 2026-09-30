@@ -3,6 +3,7 @@ using Crm.Api.Auth;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Messaging;
 using Crm.Api.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
@@ -16,7 +17,8 @@ public record UserLookup(Guid Id, string FullName, string Email);
 
 public record UserItem(
     Guid Id, string Email, string FirstName, string LastName, string FullName, bool IsActive, bool IsPlatformAdmin,
-    IReadOnlyList<NamedRef> Roles, IReadOnlyList<NamedRef> Groups, DateTime CreatedAt, DateTimeOffset? LockoutEnd);
+    IReadOnlyList<NamedRef> Roles, IReadOnlyList<NamedRef> Groups, DateTime CreatedAt, DateTimeOffset? LockoutEnd,
+    RegistrationStatus RegistrationStatus, string? PhoneNumber, bool EmailConfirmed, bool PhoneNumberConfirmed);
 
 public record CreateUserRequest(
     [Required, EmailAddress, MaxLength(256)] string Email,
@@ -35,6 +37,8 @@ public record UpdateUserRequest(
 
 public record ResetPasswordRequest([Required, MinLength(10)] string NewPassword);
 
+public record ApproveUserRequest(Guid[] RoleIds, Guid[]? GroupIds = null);
+
 public static class UserEndpoints
 {
     public static RouteGroupBuilder MapUsers(this RouteGroupBuilder api)
@@ -46,6 +50,8 @@ public static class UserEndpoints
         admin.MapPost("/", Create);
         admin.MapPut("/{id:guid}", Update);
         admin.MapPost("/{id:guid}/reset-password", ResetPassword);
+        admin.MapPost("/{id:guid}/approve", Approve);
+        admin.MapPost("/{id:guid}/reject", Reject);
         return api;
     }
 
@@ -56,10 +62,11 @@ public static class UserEndpoints
             .Select(u => new UserLookup(u.Id, u.FirstName + " " + u.LastName, u.Email!))
             .ToListAsync(ct));
 
-    private static async Task<Ok<List<UserItem>>> List(Access access, CrmDbContext db, CancellationToken ct)
+    private static async Task<Ok<List<UserItem>>> List(RegistrationStatus? status, Access access, CrmDbContext db, CancellationToken ct)
     {
-        var users = await db.Users.AsNoTracking().Where(u => u.TenantId == access.TenantId)
-            .OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ToListAsync(ct);
+        var query = db.Users.AsNoTracking().Where(u => u.TenantId == access.TenantId);
+        if (status is not null) query = query.Where(u => u.RegistrationStatus == status);
+        var users = await query.OrderBy(u => u.FirstName).ThenBy(u => u.LastName).ToListAsync(ct);
         var ids = users.Select(u => u.Id).ToList();
         var roles = await db.UserRoles.Where(r => ids.Contains(r.UserId)).Select(r => new { r.UserId, r.RoleId, r.Role!.Name }).ToListAsync(ct);
         var groups = await db.GroupMembers.Where(m => ids.Contains(m.UserId))
@@ -96,6 +103,8 @@ public static class UserEndpoints
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id && u.TenantId == access.TenantId, ct);
         if (user is null) return TypedResults.NotFound();
         if (await ValidateAssignmentsAsync(req.RoleIds, req.GroupIds ?? [], p, db, ct) is { } problem) return problem;
+        if (req.IsActive && !user.IsActive && user.RegistrationStatus != RegistrationStatus.Approved)
+            return Errors.Validation("isActive", "Use Approve to activate a pending registration.");
 
         if (id == access.UserId)
         {
@@ -138,6 +147,56 @@ public static class UserEndpoints
         return TypedResults.NoContent();
     }
 
+    /// <summary>Activates a self-registration with at least one role or group, so it never becomes an access-less account.</summary>
+    private static async Task<Results<Ok<UserItem>, NotFound, ValidationProblem>> Approve(
+        Guid id, ApproveUserRequest req, Access access, CrmDbContext db, UserManager<AppUser> users, IEmailSender email,
+        ILoggerFactory loggers, CancellationToken ct)
+    {
+        var p = await access.GetAsync(ct);
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id && u.TenantId == access.TenantId, ct);
+        if (user is null) return TypedResults.NotFound();
+        if (user.RegistrationStatus == RegistrationStatus.Approved) return Errors.Validation("status", "This user is already approved.");
+        var groupIds = req.GroupIds ?? [];
+        if (req.RoleIds.Length == 0 && !await db.GroupRoles.AnyAsync(g => groupIds.Contains(g.GroupId), ct))
+            return Errors.Validation("roleIds", "Assign at least one role, directly or through a group.");
+        if (await ValidateAssignmentsAsync(req.RoleIds, groupIds, p, db, ct) is { } problem) return problem;
+
+        user.RegistrationStatus = RegistrationStatus.Approved;
+        user.IsActive = true;
+        var update = await users.UpdateAsync(user);
+        if (!update.Succeeded) return update.ToValidationProblem();
+        await SetAssignmentsAsync(db, id, req.RoleIds, groupIds, ct);
+        PermissionService.Invalidate(access.TenantId);
+
+        try
+        {
+            var tenantName = await db.Tenants.Where(t => t.Id == user.TenantId).Select(t => t.Name).SingleAsync(ct);
+            await email.SendAsync(user.Email!, $"Your {tenantName} account is ready",
+                $"Hi {user.FirstName},\n\nAn administrator approved your registration. You can now sign in with your email and password.", ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            loggers.CreateLogger("Crm.Api.Users").LogError(ex, "Approval email to user {UserId} failed", user.Id);
+        }
+        return TypedResults.Ok(await LoadItemAsync(db, user, ct));
+    }
+
+    private static async Task<Results<Ok<UserItem>, NotFound, ValidationProblem>> Reject(
+        Guid id, Access access, CrmDbContext db, UserManager<AppUser> users, TokenService tokens, CancellationToken ct)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id && u.TenantId == access.TenantId, ct);
+        if (user is null) return TypedResults.NotFound();
+        if (user.RegistrationStatus == RegistrationStatus.Approved)
+            return Errors.Validation("status", "Only pending registrations can be rejected. Deactivate approved users instead.");
+
+        user.RegistrationStatus = RegistrationStatus.Rejected;
+        user.IsActive = false;
+        var update = await users.UpdateAsync(user);
+        if (!update.Succeeded) return update.ToValidationProblem();
+        await tokens.RevokeAllAsync(user.Id, ct);
+        return TypedResults.Ok(await LoadItemAsync(db, user, ct));
+    }
+
     /// <summary>Roles and groups must belong to the tenant, and the caller may only hand out permissions they hold.</summary>
     public static async Task<ValidationProblem?> ValidateAssignmentsAsync(Guid[] roleIds, Guid[] groupIds, EffectivePermissions p,
         CrmDbContext db, CancellationToken ct)
@@ -175,5 +234,6 @@ public static class UserEndpoints
     }
 
     private static UserItem ToItem(AppUser u, IReadOnlyList<NamedRef> roles, IReadOnlyList<NamedRef> groups) =>
-        new(u.Id, u.Email!, u.FirstName, u.LastName, u.FullName, u.IsActive, u.IsPlatformAdmin, roles, groups, u.CreatedAt, u.LockoutEnd);
+        new(u.Id, u.Email!, u.FirstName, u.LastName, u.FullName, u.IsActive, u.IsPlatformAdmin, roles, groups, u.CreatedAt, u.LockoutEnd,
+            u.RegistrationStatus, u.PhoneNumber, u.EmailConfirmed, u.PhoneNumberConfirmed);
 }

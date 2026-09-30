@@ -35,6 +35,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     public DbSet<Group> Groups => Set<Group>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
     public DbSet<GroupRole> GroupRoles => Set<GroupRole>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
 
     /// <summary>Referenced by the global query filters; EF evaluates it per query.</summary>
     public Guid? CurrentTenantId => tenant.TenantId;
@@ -73,6 +75,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         builder.Properties<StageCategory>().HaveConversion<string>().HaveMaxLength(16);
         builder.Properties<AutomationTrigger>().HaveConversion<string>().HaveMaxLength(32);
         builder.Properties<AuditAction>().HaveConversion<string>().HaveMaxLength(16);
+        builder.Properties<RegistrationStatus>().HaveConversion<string>().HaveMaxLength(32);
+        builder.Properties<VerificationChannel>().HaveConversion<string>().HaveMaxLength(16);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

@@ -32,11 +32,11 @@ public static class AuthEndpoints
     }
 
     private static async Task<Results<Ok<AuthResponse>, ProblemHttpResult>> Login(
-        LoginRequest req, UserManager<AppUser> users, CrmDbContext db, TokenService tokens, CancellationToken ct)
+        LoginRequest req, UserManager<AppUser> users, CrmDbContext db, TokenService tokens, RegistrationService registration, CancellationToken ct)
     {
         var invalid = TypedResults.Problem("Invalid email or password.", statusCode: StatusCodes.Status401Unauthorized);
         var user = await users.FindByEmailAsync(req.Email);
-        if (user is null || !user.IsActive) return invalid;
+        if (user is null) return invalid;
 
         if (await users.IsLockedOutAsync(user))
             return TypedResults.Problem("Account is temporarily locked. Try again later.", statusCode: StatusCodes.Status423Locked);
@@ -46,6 +46,25 @@ public static class AuthEndpoints
             await users.AccessFailedAsync(user);
             return invalid;
         }
+
+        // Registration state is only revealed to someone who knows the password.
+        if (user.RegistrationStatus != RegistrationStatus.Approved)
+        {
+            var (status, remaining) = await registration.CheckPendingAsync(user, ct);
+            var detail = status switch
+            {
+                RegistrationStatus.PendingVerification => "Please verify your " +
+                    string.Join(" and ", remaining.Select(c => c == VerificationChannel.Email ? "email address" : "mobile number")) + " to continue.",
+                RegistrationStatus.PendingApproval => "Your registration is awaiting administrator approval.",
+                _ => "Your registration was not approved. Contact your organisation's administrator.",
+            };
+            return TypedResults.Problem(detail, statusCode: StatusCodes.Status403Forbidden, extensions: new Dictionary<string, object?>
+            {
+                ["registrationStatus"] = status.ToString(),
+                ["verification"] = remaining.Select(c => c.ToString()).ToArray(),
+            });
+        }
+        if (!user.IsActive) return invalid;
 
         var tenantStatus = await db.Tenants.Where(t => t.Id == user.TenantId).Select(t => t.Status).SingleAsync(ct);
         if (tenantStatus != TenantStatus.Active)

@@ -3,7 +3,7 @@
 - **Base URL:** `/api`. In development it's proxied from `http://localhost:4200`; the API itself listens on `http://localhost:5290`.
 - **Interactive docs (Development):** Scalar UI at `/scalar`, OpenAPI JSON at `/openapi/v1.json`.
 - **Format:** JSON (camelCase). Enums are strings. Timestamps are ISO-8601 UTC. Dates use `yyyy-MM-dd`.
-- **Auth:** `Authorization: Bearer <accessToken>` on everything except login, refresh and logout. The token carries the user (`sub`) and tenant (`tid`), so every request is automatically scoped to the caller's tenant.
+- **Auth:** `Authorization: Bearer <accessToken>` on everything except login, refresh, logout and the self-registration endpoints. The token carries the user (`sub`) and tenant (`tid`), so every request is automatically scoped to the caller's tenant.
 - **Errors:** [RFC 7807 ProblemDetails](https://www.rfc-editor.org/rfc/rfc7807). Validation returns `400` with an `errors` map. Custom-field errors are keyed `customFields.<key>`.
 
 ## Conventions
@@ -29,12 +29,26 @@
 
 | Method | Path | Body | Response |
 |---|---|---|---|
-| POST | `/login` | `{ email, password }` | `AuthResponse` · 401 · 403 (tenant suspended) · 423 · 429 |
+| POST | `/login` | `{ email, password }` | `AuthResponse` · 401 · 403 (tenant suspended, or registration not approved) · 423 · 429 |
 | POST | `/refresh` | `{ refreshToken }` | `AuthResponse` (rotated) · 401 |
 | POST | `/logout` | `{ refreshToken }` | 204 |
 | GET | `/me` | none | `UserInfo` |
 | POST | `/change-password` | `{ currentPassword, newPassword }` | 204 (all sessions revoked) |
 
+### Self-registration (anonymous, rate limit `RateLimiting:RegisterPermitPerMinute` per IP)
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/registration-options?tenant=<code>` | none | `{ available, tenantName, emailVerification, smsVerification }`. Without `tenant`, only says whether the platform allows self-registration (`tenantName` is null). |
+| POST | `/register` | `{ tenantCode, email, firstName, lastName, phoneNumber?, password }` | **202** `{ verification: ["Email","Sms"], message }` · 400 · 404 (not available for that code) |
+| POST | `/verify` | `{ email, channel: Email\|Sms, code }` | `{ status, remaining[] }` · 400 (wrong, expired or locked code) |
+| POST | `/resend-code` | `{ email, channel }` | **202** always |
+
+- `tenantCode` is the organisation's workspace ID (slug). `phoneNumber` is required when SMS verification is on and is stored in E.164 form.
+- New users are created **inactive with no roles**. `status` moves `PendingVerification` → `PendingApproval`; an administrator then approves (→ `Approved`) or rejects.
+- Anti-enumeration: registering an email that already exists returns the same 202, and `verify`/`resend-code` don't reveal whether an account exists.
+- Codes are stored as SHA-256 hashes, expire after `codeTtlMinutes`, lock after `maxAttempts` wrong tries, and can be re-sent after `resendCooldownSeconds`.
+- Sign-in for an unapproved registration returns **403** ProblemDetails with extensions `registrationStatus` and `verification[]` (channels still to verify).
 ```jsonc
 // UserInfo (inside AuthResponse.user)
 {
@@ -54,8 +68,8 @@
 | Method | Path | Permission | Notes |
 |---|---|---|---|
 | GET | `/api/metadata` | * | `{ tenant, objects[], picklists }`. Each object includes `fields[]` and `stages[]`, and inactive objects are included with `isActive: false`. |
-| GET | `/api/settings` | * | `TenantInfo` |
-| PUT | `/api/settings` | settings:manage | `{ name, currency }` (ISO 4217) |
+| GET | `/api/settings` | * | `OrganisationSettings { id, name, slug, currency, template, selfRegistrationEnabled, selfRegistrationAllowedByPlatform, emailVerification, smsVerification }` |
+| PUT | `/api/settings` | settings:manage | `{ name, currency, selfRegistrationEnabled? }` (ISO 4217). Omitting `selfRegistrationEnabled` keeps the stored value. |
 
 ## Dashboard
 
@@ -130,9 +144,11 @@ Unknown or inactive object keys return 404.
 | Method | Path | Permission | Notes |
 |---|---|---|---|
 | GET | `/lookup` | * | Active users in the tenant `{ id, fullName, email }` |
-| GET | `/` | users:manage | Users with `roles[]`, `groups[]`, status, lockout, `isPlatformAdmin` |
+| GET | `/?status=` | users:manage | Users with `roles[]`, `groups[]`, status, lockout, `isPlatformAdmin`, `registrationStatus`, `phoneNumber`, `emailConfirmed`, `phoneNumberConfirmed`. `status` filters by registration status, e.g. `PendingApproval`. |
 | POST | `/` | users:manage | `{ email, firstName, lastName, password, roleIds[], groupIds[] }` |
-| PUT | `/{id}` | users:manage | `{ firstName, lastName, isActive, roleIds[], groupIds[] }` |
+| PUT | `/{id}` | users:manage | `{ firstName, lastName, isActive, roleIds[], groupIds[] }`. A pending registration can't be activated here; use approve. |
+| POST | `/{id}/approve` | users:manage | `{ roleIds[], groupIds[]? }`. Needs at least one role, directly or through a group. Activates the user and emails them (best effort). |
+| POST | `/{id}/reject` | users:manage | Pending registrations only. The user stays inactive and can't sign in. |
 | POST | `/{id}/reset-password` | users:manage | `{ newPassword }`. Revokes sessions and clears lockout. |
 
 Assignments are checked for escalation: you can't hand out access you don't hold, and only administrators can grant the Administrator role.
@@ -205,7 +221,12 @@ Field types: `Text`, `TextArea`, `Number`, `Currency`, `Date`, `DateTime`, `Bool
 | GET | `/tenants` | `TenantItem { id, name, slug, status, currency, template, createdAt, userCount }` |
 | POST | `/tenants` | `{ name, slug, template, currency, adminEmail, adminFirstName, adminLastName, adminPassword, seedDemoData }`. Slug: `^[a-z0-9][a-z0-9-]{1,62}$`. Runs in a transaction. |
 | PUT | `/tenants/{id}` | `{ name, currency, status: Active\|Suspended }`. You can't suspend your own tenant. |
-| DELETE | `/tenants/{id}` | Only when suspended, and not the default tenant. Deletes all of its data. |
+| DELETE | `/tenants/{id}` | Only when suspended, and not the default tenant. Deletes all of its data, including pending registrations. |
+| GET | `/settings` | `{ settings: PlatformSettings, smtpPasswordConfigured, smsApiKeyConfigured }` |
+| PUT | `/settings` | `PlatformSettings` (validated, e.g. SMTP host and from-address are required for the Smtp provider) |
+| POST | `/settings/test-email`, `/settings/test-sms` | `{ to }`: sends a test message with the saved settings. 400 with the provider error if it fails. |
+
+`PlatformSettings`: `selfRegistrationEnabled`, `emailVerificationEnabled`, `smsVerificationEnabled`, `codeLength` (4–10), `codeTtlMinutes` (1–60), `maxAttempts` (1–10), `resendCooldownSeconds` (0–600), `emailProvider` (`Log`\|`Smtp`), `smtpHost`, `smtpPort`, `smtpUsername`, `smtpUseStartTls`, `emailFromAddress`, `emailFromName`, `smsProvider` (`Log`\|`Http`), `smsGatewayUrl`, `smsSenderId`, `smsAuthHeader`, `smsAuthScheme`. Secrets are never stored or returned: the SMTP password and SMS API key come from configuration (`Email:SmtpPassword`, `Sms:ApiKey`).
 
 ## Health
 
