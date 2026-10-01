@@ -11,8 +11,11 @@ import {
   ActivityRequest,
   AuditItem,
   AutomationField,
+  ComposeResult,
   ContactDetail,
   ContactRequest,
+  EmailFieldSet,
+  EmailTemplateItem,
   FieldDef,
   Grant,
   GroupItem,
@@ -24,6 +27,8 @@ import {
   OpportunityDetail,
   OpportunityRequest,
   OrganisationSettings,
+  OutboundEmailDetail,
+  OutboundEmailItem,
   PlatformSettings,
   PlatformSettingsView,
   RecordItem,
@@ -254,6 +259,46 @@ export class CrmApi {
 
   deleteRule(id: string): Observable<void> {
     return this.http.delete<void>(`/api/admin/automation/${id}`);
+  }
+
+  // ---------- Email ----------
+
+  emailFields(objectKey: string): Observable<EmailFieldSet> {
+    return this.http.get<EmailFieldSet>(`/api/email/fields/${objectKey}`);
+  }
+
+  emailTemplatesFor(objectKey: string): Observable<EmailTemplateItem[]> {
+    return this.http.get<EmailTemplateItem[]>('/api/email/templates', { params: { objectKey } });
+  }
+
+  composeEmail(objectKey: string, recordId: string, templateId: string | null = null): Observable<ComposeResult> {
+    return this.http.post<ComposeResult>('/api/email/compose', { objectKey, recordId, templateId });
+  }
+
+  sendEmail(body: { objectKey: string; recordId: string; to: string; subject: string; body: string; templateId: string | null }): Observable<{ id: string; status: string }> {
+    return this.http.post<{ id: string; status: string }>('/api/email/send', body);
+  }
+
+  saveEmailTemplate(id: string | null, body: { name: string; objectKey: string; subject: string; body: string }): Observable<EmailTemplateItem> {
+    return id
+      ? this.http.put<EmailTemplateItem>(`/api/admin/email-templates/${id}`, body)
+      : this.http.post<EmailTemplateItem>('/api/admin/email-templates', body);
+  }
+
+  deleteEmailTemplate(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/admin/email-templates/${id}`);
+  }
+
+  emailDetail(id: string): Observable<OutboundEmailDetail> {
+    return this.http.get<OutboundEmailDetail>(`/api/admin/emails/${id}`);
+  }
+
+  retryEmail(id: string): Observable<OutboundEmailItem> {
+    return this.http.post<OutboundEmailItem>(`/api/admin/emails/${id}/retry`, null);
+  }
+
+  cancelEmail(id: string): Observable<OutboundEmailItem> {
+    return this.http.post<OutboundEmailItem>(`/api/admin/emails/${id}/cancel`, null);
   }
 
   saveSettings(body: { name: string; currency: string; selfRegistrationEnabled?: boolean }): Observable<OrganisationSettings> {

@@ -21,7 +21,7 @@ public static class TenantTemplates
     [
         new(Sales, "Sales CRM", "Accounts, contacts, leads, opportunity pipeline and sales automation."),
         new(HelpDesk, "Help Desk", "Customers, contacts and a ticket pipeline with priority-based alerts."),
-        new(Recruitment, "Recruitment (ATS)", "Job openings, a candidate talent pool and an application pipeline per job."),
+        new(Recruitment, "Recruitment (ATS)", "Job openings, a candidate talent pool, an application pipeline per job, candidate emails and interview reminders."),
         new(Blank, "Blank", "Standard objects and roles only. Build your own configuration."),
     ];
 
@@ -39,7 +39,7 @@ public static class TenantTemplates
     public static readonly string[] DefaultLeadSources = ["Web", "Referral", "Event", "ColdCall", "Advertisement", "Partner", "Other"];
 
     /// <summary>Latest revision of each template. Raising it makes startup apply the template's new pieces to existing tenants once.</summary>
-    public static int CurrentVersion(string template) => template == Recruitment ? 2 : 1;
+    public static int CurrentVersion(string template) => template == Recruitment ? 3 : 1;
 
     /// <summary>
     /// Brings tenants created from an older template revision up to date. Only missing objects, fields, stages and rules are
@@ -68,6 +68,7 @@ public static class TenantTemplates
         var existingPicklists = await db.Picklists.Select(p => p.Key).ToListAsync(ct);
         var existingFields = await db.FieldDefinitions.Select(f => f.ObjectKey + "." + f.Key).ToListAsync(ct);
         var existingRules = await db.AutomationRules.Select(r => r.Name).ToListAsync(ct);
+        var existingTemplates = await db.EmailTemplates.ToDictionaryAsync(t => t.Name, t => t.Id, ct);
 
         void Object(string key, string label, string plural, string icon, int order, bool active = true, bool pipeline = false,
             bool standard = true, string nameLabel = "Name", string? description = null)
@@ -114,16 +115,27 @@ public static class TenantTemplates
             existingFields.Add($"{objectKey}.{key}");
         }
 
-        void Rule(string name, string objectKey, AutomationTrigger trigger, AutomationCondition[] conditions, AutomationAction[] actions)
+        void Rule(string name, string objectKey, AutomationTrigger trigger, AutomationCondition[] conditions, AutomationAction[] actions,
+            bool active = true, string? scheduleField = null, int offsetMinutes = 0)
         {
             if (existingRules.Contains(name)) return;
             existingRules.Add(name);
             db.AutomationRules.Add(new AutomationRule
             {
-                Name = name, ObjectKey = objectKey, Trigger = trigger,
+                Name = name, ObjectKey = objectKey, Trigger = trigger, IsActive = active,
                 Conditions = JsonSerializer.Serialize(conditions, AutomationJson.Options),
                 Actions = JsonSerializer.Serialize(actions, AutomationJson.Options),
+                ScheduleField = scheduleField, ScheduleOffsetMinutes = offsetMinutes,
             });
+        }
+
+        Guid Template(string name, string objectKey, string subject, string body)
+        {
+            if (existingTemplates.TryGetValue(name, out var id)) return id;
+            var template = new EmailTemplate { Name = name, ObjectKey = objectKey, Subject = subject, Body = body };
+            db.EmailTemplates.Add(template);
+            existingTemplates[name] = template.Id;
+            return template.Id;
         }
 
         var salesStages = new[]
@@ -236,6 +248,37 @@ public static class TenantTemplates
                 Rule("Rejection follow-up", "application", AutomationTrigger.StageChanged,
                     [new("stage", ConditionOperator.Equals, "rejected")],
                     [new(AutomationActionType.CreateTask, Subject: "Let {{name}} know the outcome", DueInDays: 1)]);
+
+                const string signOff = "\n\nKind regards,\n{{owner.name}}\n{{organisation.name}}";
+                const string candidateEmail = "cf.candidate.cf.email";
+                var received = Template("Application received", "application", "Your application for {{cf.position.name}}",
+                    "Hi {{name}},\n\nThank you for applying for the {{cf.position.name}} role at {{organisation.name}}. " +
+                    "We've received your application and will be in touch once we've reviewed it." + signOff);
+                Template("Interview invitation", "application", "Interview for {{cf.position.name}}",
+                    "Hi {{name}},\n\nWe'd like to invite you to an interview for the {{cf.position.name}} role on {{cf.interview_date}}.\n\n" +
+                    "Please reply to confirm this time works for you, or suggest another." + signOff);
+                var outcome = Template("Application outcome", "application", "Your application for {{cf.position.name}}",
+                    "Hi {{name}},\n\nThank you for your interest in the {{cf.position.name}} role and for the time you've given us. " +
+                    "After careful consideration, we've decided not to progress your application on this occasion.\n\n" +
+                    "We'll keep your details on file and may contact you about future roles." + signOff);
+                Template("Job offer", "application", "Offer: {{cf.position.name}}",
+                    "Hi {{name}},\n\nWe're delighted to offer you the {{cf.position.name}} role at {{organisation.name}}. " +
+                    "{{owner.name}} will be in touch shortly with the details." + signOff);
+
+                // Emails to candidates start switched off: admins review the wording and turn them on.
+                Rule("Acknowledge new applications", "application", AutomationTrigger.Created, [],
+                    [new(AutomationActionType.SendEmail, To: candidateEmail, TemplateId: received)], active: false);
+                Rule("Email rejected candidates", "application", AutomationTrigger.StageChanged,
+                    [new("stage", ConditionOperator.Equals, "rejected")],
+                    [new(AutomationActionType.SendEmail, To: candidateEmail, TemplateId: outcome)], active: false);
+                Rule("Interview reminder", "application", AutomationTrigger.DateReached,
+                    [new("stage", ConditionOperator.Equals, "interview")],
+                    [new(AutomationActionType.Notify, Message: "Interview with {{name}} for {{cf.position.name}} at {{cf.interview_date}}.")],
+                    scheduleField: "cf.interview_date", offsetMinutes: -24 * 60);
+                Rule("Chase stalled applications", "application", AutomationTrigger.DateReached,
+                    [new("closedAt", ConditionOperator.IsEmpty, null)],
+                    [new(AutomationActionType.CreateTask, Subject: "Review stalled application: {{name}}", DueInDays: 1)],
+                    active: false, scheduleField: "updatedAt", offsetMinutes: 7 * 24 * 60);
                 break;
 
             default:

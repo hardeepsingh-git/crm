@@ -7,17 +7,23 @@ namespace Crm.Api.Tests;
 /// <summary>Records outgoing email and SMS instead of sending them, so tests can read verification codes.</summary>
 public sealed partial class CapturedMessages : IEmailSender, ISmsSender
 {
-    public sealed record Message(string Channel, string To, string Subject, string Body);
+    public sealed record Message(string Channel, string To, string Subject, string Body, string? ReplyTo = null);
 
     private readonly ConcurrentQueue<Message> _messages = new();
 
     public IReadOnlyList<Message> All => [.. _messages];
 
-    public Task SendAsync(string to, string subject, string body, CancellationToken ct)
+    /// <summary>When set, emails it returns an exception for are not delivered and the exception is thrown.</summary>
+    public Func<EmailMessage, Exception?>? FailWith { get; set; }
+
+    public Task SendAsync(EmailMessage email, CancellationToken ct)
     {
-        _messages.Enqueue(new Message("Email", to, subject, body));
+        if (FailWith?.Invoke(email) is { } error) throw error;
+        _messages.Enqueue(new Message("Email", email.To, email.Subject, email.Body, email.ReplyTo));
         return Task.CompletedTask;
     }
+
+    public Task SendAsync(string to, string subject, string body, CancellationToken ct) => SendAsync(new EmailMessage(to, subject, body), ct);
 
     public Task SendAsync(string to, string message, CancellationToken ct)
     {

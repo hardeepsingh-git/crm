@@ -5,6 +5,7 @@ using Crm.Api.Automation;
 using Crm.Api.Common;
 using Crm.Api.Domain;
 using Crm.Api.Files;
+using Crm.Api.Messaging;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -40,6 +41,9 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
+    public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
+    public DbSet<OutboundEmail> OutboundEmails => Set<OutboundEmail>();
+    public DbSet<ScheduledRuleRun> ScheduledRuleRuns => Set<ScheduledRuleRun>();
 
     /// <summary>Referenced by the global query filters; EF evaluates it per query.</summary>
     public Guid? CurrentTenantId => tenant.TenantId;
@@ -83,6 +87,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         builder.Properties<AuditAction>().HaveConversion<string>().HaveMaxLength(16);
         builder.Properties<RegistrationStatus>().HaveConversion<string>().HaveMaxLength(32);
         builder.Properties<VerificationChannel>().HaveConversion<string>().HaveMaxLength(16);
+        builder.Properties<OutboundEmailStatus>().HaveConversion<string>().HaveMaxLength(16);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -92,9 +97,11 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         StampAndGuard(now);
         var automationChanges = _runningAutomation || SuppressAutomation ? [] : CaptureAutomationChanges();
         await WriteAuditAsync(now, cancellationToken);
+        var emailsQueued = ChangeTracker.Entries<OutboundEmail>().Any(e => e.State == EntityState.Added);
 
         var result = await base.SaveChangesAsync(cancellationToken);
         if (orphanedFiles.Count > 0) await DeleteFilesAsync(orphanedFiles);
+        if (emailsQueued) (services.GetService(typeof(OutboxSignal)) as OutboxSignal)?.Notify();
 
         if (automationChanges.Count > 0 && services.GetService(typeof(AutomationEngine)) is AutomationEngine engine)
         {
@@ -197,7 +204,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     {
         var entries = ChangeTracker.Entries<ITenantEntity>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
-                        && e.Entity is not AuditLog and not Notification)
+                        && e.Entity is not AuditLog and not Notification and not OutboundEmail and not ScheduledRuleRun)
             .ToList();
         if (entries.Count == 0) return;
 
@@ -304,6 +311,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         PipelineStage => "pipeline_stage",
         Picklist => "picklist",
         AutomationRule => "automation_rule",
+        EmailTemplate => "email_template",
         _ => entity.GetType().Name,
     };
 
@@ -323,6 +331,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         PipelineStage s => $"{s.ObjectKey}.{s.Key}",
         Picklist p => p.Key,
         AutomationRule r => r.Name,
+        EmailTemplate t => t.Name,
         _ => null,
     };
 }

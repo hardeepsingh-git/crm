@@ -47,6 +47,9 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimiting:PasswordResetPermitPerMinute", "10000");
         builder.UseSetting("App:PublicUrl", "https://crm.test");
         builder.UseSetting("Storage:LocalPath", StoragePath);
+        // Tests drive the dispatcher and scheduler directly, with explicit times.
+        builder.UseSetting("BackgroundJobs:Enabled", "false");
+        builder.UseSetting("RateLimiting:EmailSendPermitPerMinute", "10000");
         builder.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Error).AddConsole());
         builder.ConfigureServices(services =>
         {

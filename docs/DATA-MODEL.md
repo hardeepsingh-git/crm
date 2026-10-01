@@ -9,6 +9,7 @@ PostgreSQL database **`CRM`**, schema `public`. The schema is created by these E
 | `20260930112016_SelfRegistration` | `Tenants.SelfRegistrationEnabled` (default false), `AspNetUsers.RegistrationStatus` (existing users default to `Approved`), `AppSettings`, `VerificationCodes` |
 | `*_Phase0FilesAndPasswordReset` | New tables `Attachments` and `PasswordResetTokens` only; no changes to existing data |
 | `20261001050127_Phase1RecruitmentCore` | `Tenants.TemplateVersion` (existing tenants default to 1) and `FieldDefinitions.IsUnique` (default false). No data changes; the recruitment template upgrade then runs at startup (see section 6). |
+| `20261001061040_Phase2EmailAndScheduling` | New tables `EmailTemplates`, `OutboundEmails`, `ScheduledRuleRuns`; `AutomationRules.ScheduleField` and `ScheduleOffsetMinutes` (default 0). No data changes; recruitment tenants then get template v3 at startup. |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -89,7 +90,10 @@ All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NU
 ### 2.5 Automation and governance
 | Table | Key columns | Notes |
 |---|---|---|
-| `AutomationRules` | `TenantId`, `Name`, `ObjectKey`, `Trigger`, `Conditions` jsonb, `Actions` jsonb, `IsActive`, `RunCount`, `LastRunAt` | Index `(TenantId, ObjectKey)` |
+| `AutomationRules` | `TenantId`, `Name`, `ObjectKey`, `Trigger` (Created/Updated/StageChanged/DateReached), `Conditions` jsonb, `Actions` jsonb, `IsActive`, `RunCount`, `LastRunAt`, `ScheduleField`(80), `ScheduleOffsetMinutes` | Indexes `(TenantId, ObjectKey)`, `(Trigger, IsActive)` |
+| `EmailTemplates` | `TenantId`, `Name`(200, unique per tenant), `ObjectKey`(40), `Subject`(300), `Body`(10000) | Referenced from rule actions by id (JSON), so deletion is blocked while used |
+| `OutboundEmails` | `TenantId`, `To`(320), `ReplyTo`, `Subject`(300), `Body`(10000), `ObjectKey`, `RecordId`, `RecordName`, `RuleId`, `TemplateId`, `ActivityId`, `SentById`, `SentByName`, `Status` (Pending/Sent/Failed/Cancelled), `Attempts`, `NextAttemptAt`, `LockedUntil`, `LastError`(1000), `CreatedAt`, `SentAt` | The transactional outbox. Indexes `(Status, NextAttemptAt)` for the dispatcher (across tenants), `(TenantId, CreatedAt)`, `(TenantId, RuleId, RecordId)` |
+| `ScheduledRuleRuns` | `TenantId`, `RuleId`, `RecordId`, `DueAt`, `RanAt`, `Matched` | **Unique `(RuleId, RecordId, DueAt)`**: each due date fires once, even with several API instances |
 | `Notifications` | `TenantId`, `UserId`, `Title`(200), `Message`(1000), `Link`(300), `CreatedAt`, `ReadAt` | Index `(TenantId, UserId, ReadAt)` |
 | `AuditLogs` | `TenantId`, `EntityType`(64, the object key), `EntityId`, `EntityName`, `Action` (Created/Updated/Deleted), `UserId`, `UserName`, `Timestamp`, `Changes` jsonb | Indexes `(TenantId, EntityId)`, `(TenantId, Timestamp)` |
 | `Attachments` | `TenantId`, `ObjectKey`(40), `RecordId`, `FileName`(255), `ContentType`(100), `Size`, `StorageKey`(200), `UploadedById`, `UploadedByName`, `CreatedAt` | Index `(TenantId, ObjectKey, RecordId)`. The bytes live in file storage under `StorageKey` (`<tenant>/<yyyyMM>/<id>`). Rows are removed with their record. |
@@ -171,6 +175,8 @@ At startup, `DbInitializer` applies the sales template to the default tenant if 
 - a "Rejection follow-up" rule.
 
 On upgraded tenants, the application's candidate link is optional, so existing applications without one stay valid, and their old email and phone fields remain.
+
+Recruitment **v3** adds four email templates (*Application received*, *Interview invitation*, *Application outcome*, *Job offer*) and four rules: *Interview reminder* (notify the owner a day before the interview, on), *Chase stalled applications* (task 7 days after the last update, off), and *Acknowledge new applications* and *Email rejected candidates* (email the candidate, **off** until an admin reviews the wording).
 
 ## 7. Schema changes
 

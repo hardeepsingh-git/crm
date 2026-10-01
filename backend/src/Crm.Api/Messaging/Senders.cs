@@ -5,9 +5,13 @@ using Crm.Api.Platform;
 
 namespace Crm.Api.Messaging;
 
+public sealed record EmailMessage(string To, string Subject, string Body, string? ReplyTo = null);
+
 public interface IEmailSender
 {
     Task SendAsync(string to, string subject, string body, CancellationToken ct);
+
+    Task SendAsync(EmailMessage message, CancellationToken ct) => SendAsync(message.To, message.Subject, message.Body, ct);
 }
 
 public interface ISmsSender
@@ -22,8 +26,14 @@ public interface ISmsSender
 public sealed class ConfiguredEmailSender(
     PlatformSettingsService settings, IConfiguration config, IHostEnvironment env, ILogger<ConfiguredEmailSender> logger) : IEmailSender
 {
-    public async Task SendAsync(string to, string subject, string body, CancellationToken ct)
+    public Task SendAsync(string to, string subject, string body, CancellationToken ct) =>
+        SendAsync(new EmailMessage(to, subject, body), ct);
+
+    public async Task SendAsync(EmailMessage email, CancellationToken ct)
     {
+        var (to, body) = (email.To, email.Body);
+        // Subjects come from record data; a line break would let it inject extra headers.
+        var subject = EmailText.SingleLine(email.Subject);
         var s = await settings.GetAsync(ct);
         if (s.EmailProvider == EmailProvider.Log)
         {
@@ -37,10 +47,25 @@ public sealed class ConfiguredEmailSender(
             Subject = subject,
             Body = body,
         };
+        if (!string.IsNullOrWhiteSpace(email.ReplyTo)) message.ReplyToList.Add(new MailAddress(email.ReplyTo));
         using var client = new SmtpClient(s.SmtpHost, s.SmtpPort) { EnableSsl = s.SmtpUseStartTls, DeliveryMethod = SmtpDeliveryMethod.Network };
         if (!string.IsNullOrWhiteSpace(s.SmtpUsername))
             client.Credentials = new NetworkCredential(s.SmtpUsername, config["Email:SmtpPassword"]);
         await client.SendMailAsync(message, ct);
+    }
+}
+
+public static class EmailText
+{
+    public static string SingleLine(string value) =>
+        string.Join(' ', value.Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    /// <summary>A single, syntactically valid address (no display names or lists), normalised to lower case; otherwise null.</summary>
+    public static string? Address(string? value)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed) || trimmed.Length > 320 || trimmed.IndexOfAny([',', ';', '<', '>', '\r', '\n', ' ']) >= 0) return null;
+        return MailAddress.TryCreate(trimmed, out var parsed) && parsed.Address == trimmed ? trimmed.ToLowerInvariant() : null;
     }
 }
 

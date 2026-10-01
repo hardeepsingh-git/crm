@@ -259,7 +259,49 @@ public class AutomationRuleConfiguration : IEntityTypeConfiguration<AutomationRu
         b.Property(x => x.ObjectKey).HasMaxLength(40).IsRequired();
         b.Property(x => x.Conditions).IsJson("[]");
         b.Property(x => x.Actions).IsJson("[]");
+        b.Property(x => x.ScheduleField).HasMaxLength(80);
         b.HasIndex(x => new { x.TenantId, x.ObjectKey });
+        b.HasIndex(x => new { x.Trigger, x.IsActive });
+    }
+}
+
+public class EmailTemplateConfiguration : IEntityTypeConfiguration<EmailTemplate>
+{
+    public void Configure(EntityTypeBuilder<EmailTemplate> b)
+    {
+        b.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        b.Property(x => x.ObjectKey).HasMaxLength(40).IsRequired();
+        b.Property(x => x.Subject).HasMaxLength(300).IsRequired();
+        b.Property(x => x.Body).HasMaxLength(10000).IsRequired();
+        b.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+    }
+}
+
+public class OutboundEmailConfiguration : IEntityTypeConfiguration<OutboundEmail>
+{
+    public void Configure(EntityTypeBuilder<OutboundEmail> b)
+    {
+        b.Property(x => x.To).HasMaxLength(320).IsRequired();
+        b.Property(x => x.ReplyTo).HasMaxLength(320);
+        b.Property(x => x.Subject).HasMaxLength(300).IsRequired();
+        b.Property(x => x.Body).HasMaxLength(10000).IsRequired();
+        b.Property(x => x.ObjectKey).HasMaxLength(40);
+        b.Property(x => x.RecordName).HasMaxLength(300);
+        b.Property(x => x.SentByName).HasMaxLength(200).IsRequired();
+        b.Property(x => x.LastError).HasMaxLength(1000);
+        // The dispatcher scans across tenants for due mail.
+        b.HasIndex(x => new { x.Status, x.NextAttemptAt });
+        b.HasIndex(x => new { x.TenantId, x.CreatedAt });
+        b.HasIndex(x => new { x.TenantId, x.RuleId, x.RecordId });
+    }
+}
+
+public class ScheduledRuleRunConfiguration : IEntityTypeConfiguration<ScheduledRuleRun>
+{
+    public void Configure(EntityTypeBuilder<ScheduledRuleRun> b)
+    {
+        b.HasIndex(x => new { x.RuleId, x.RecordId, x.DueAt }).IsUnique();
+        b.HasIndex(x => x.TenantId);
     }
 }
 

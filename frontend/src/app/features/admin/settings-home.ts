@@ -20,7 +20,9 @@ const AREAS: SettingsArea[] = [
   { path: 'roles', title: 'Roles & permissions', description: 'What each role can read, create, update and delete, and at which scope.', icon: 'shield_person', resource: 'roles', action: 'manage' },
   { path: 'objects', title: 'Objects & fields', description: 'Rename objects, add custom fields, create new objects and pipelines.', icon: 'schema', resource: 'customization', action: 'manage' },
   { path: 'picklists', title: 'Picklists', description: 'Options for industries, lead sources and other shared lists.', icon: 'list', resource: 'customization', action: 'manage' },
-  { path: 'automation', title: 'Automation', description: 'Rules that create tasks, notify people or set fields when records change.', icon: 'bolt', resource: 'customization', action: 'manage' },
+  { path: 'automation', title: 'Automation', description: 'Rules that create tasks, notify people, set fields or send emails, when records change or dates come up.', icon: 'bolt', resource: 'customization', action: 'manage' },
+  { path: 'email-templates', title: 'Email templates', description: 'Reusable emails for records and automation, with placeholders.', icon: 'drafts', resource: 'customization', action: 'manage' },
+  { path: 'emails', title: 'Email log', description: 'Every email sent, its delivery status, and retries.', icon: 'outgoing_mail', resource: 'settings', action: 'manage' },
   { path: 'audit', title: 'Audit log', description: 'Who changed what, and when.', icon: 'history', resource: 'audit', action: 'read' },
 ];
 

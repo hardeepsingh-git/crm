@@ -7,14 +7,14 @@
 | API integration | xUnit, `WebApplicationFactory`, SQLite in-memory | Full HTTP pipeline: auth, tenancy, RBAC, validation, customization, automation, audit | `backend/tests/Crm.Api.Tests` |
 | UI unit | Vitest, `HttpTestingController` | Session handling, permission resolution, metadata, custom-field forms, list helpers | `frontend/src/**/*.spec.ts` |
 | Build gates | `ng build` (AOT, strict templates), `dotnet build` | Type safety | CI |
-| Live end-to-end | `scripts/smoke-test.ps1` (55 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, clean-up | `scripts/` |
+| Live end-to-end | `scripts/smoke-test.ps1` (58 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, clean-up | `scripts/` |
 | Browser end-to-end | Manual/Playwright checklist (§4) | Settings screens, custom objects, role matrix, restricted users, tenant lifecycle | UAT |
 
 The SQLite tests exercise the same EF model and query filters. PostgreSQL-specific behaviour (`jsonb @>` filters) is covered by the live smoke test.
 
 ## 2. Automated test inventory
 
-### API (`dotnet test`): 60 tests
+### API (`dotnet test`): 67 tests
 | Test | Covers |
 |---|---|
 | `Liveness_endpoint_is_anonymous` | NFR-4 |
@@ -67,10 +67,19 @@ The SQLite tests exercise the same EF model and query filters. PostgreSQL-specif
 | `Unique_fields_block_duplicates_in_forms_imports_and_settings` | PLAT-2 |
 | `Boards_and_lists_filter_by_linked_job_or_candidate` | ATS-3, PLAT-1 |
 | `Older_recruitment_tenants_are_upgraded_once_without_touching_their_data` | PLAT-3 |
+| `Addresses_and_subjects_are_sanitised` | MAIL-5 |
+| `Templates_validate_placeholders_and_stay_while_rules_use_them` | MAIL-1 |
+| `Users_email_a_records_own_addresses_and_it_is_logged_and_delivered` | MAIL-2, MAIL-4, MAIL-5 |
+| `Automation_emails_candidates_once_and_retries_failed_deliveries` | MAIL-3, MAIL-4, MAIL-5 |
+| `Date_based_rules_fire_once_per_due_date_and_never_for_the_past` | SCHED-1, SCHED-2 |
+| `Daily_limit_caps_sending_and_deleting_a_tenant_removes_its_mail` | MAIL-5, TEN-4 |
+| `Recruitment_tenants_get_email_templates_and_reminders_once_with_candidate_emails_off` | ATS-6, PLAT-3 |
+
+The dispatcher and scheduler are switched off in tests (`BackgroundJobs:Enabled=false`) and called directly with explicit times, so retries and due dates are tested without waiting.
 
 The registration tests replace the email and SMS senders with an in-memory capture (`CapturedMessages`), so they read the real codes that were sent.
 
-### UI (`ng test`): 46 tests
+### UI (`ng test`): 53 tests
 | Spec | Tests |
 |---|---|
 | `auth.spec.ts` (10) | login stores session · metadata cleared when the session ends · bearer token added · refresh once on 401 and retry · session cleared on rejected refresh · session kept on 429 · restore keeps the token when the server is down · guard restores the session · refresh serialized across tabs using the latest stored token · no token to non-API URLs |
@@ -79,14 +88,15 @@ The registration tests replace the email and SMS senders with an in-memory captu
 | `registration.spec.ts` (8) | unavailable organisation message · mobile required when SMS is on, trimmed payload, continue to verification · password mismatch blocked, done message without verification · per-channel verify and resend, then pending approval · sign-in page offers registration only when the platform allows it · Enter in the code forms is handled in-app (real DOM submit) · platform settings: flags, log-only warning, secret status, clean save payload · phone pattern |
 | `phase0.spec.ts` (7) | forgot password via Enter, no account disclosure · reset with token: mismatch blocked, expired-link message, success · attachments listed, upload only for editors · attachment pre-checks and sizes · CSV import: mapping, required fields, row errors, dry run then import · template CSV quoting · browser error reporting (once, not for HTTP errors or signed-out users) |
 | `phase1.spec.ts` (6) | related objects found only where readable · name source lookup from the name label · new application prefilled, named after the chosen candidate, typed names kept · related list query, count, Pipeline and View all links · `cf.` deep links become lookup filters and stay in sync · Unique option only for text-like fields |
+| `phase2.spec.ts` (7) | schedule offsets to/from minutes · placeholder insertion at the cursor · compose: record addresses, template, blank-field warning, send · no-address message · Email button only with update access · date-based rule with a SendEmail action saves the right payload · email log: Log-provider banner, daily usage, retry |
 
-### Live smoke test (`scripts/smoke-test.ps1`): 55 checks
+### Live smoke test (`scripts/smoke-test.ps1`): 58 checks
 1. Health and authentication (7)
 2. Read every module with seeded data (11)
 3. End-to-end sales workflow with tagged records (11)
 4. Standard User permissions (5)
 5. Clean-up (1)
-6. Platform (20): provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · provision a Recruitment tenant with demo jobs, candidates and applications · duplicate candidate email refused (any case) and flagged within an import file · pipeline per job (board and list filtered by job or candidate) · delete the recruitment tenant · suspend and delete (removes the tenant's files too)
+6. Platform (23): remove test tenants left by interrupted runs · provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · provision a Recruitment tenant with demo jobs, candidates and applications · duplicate candidate email refused (any case) and flagged within an import file · pipeline per job (board and list filtered by job or candidate) · email a candidate from a template, refused for an outside address, delivered by the background dispatcher and logged on the timeline · date-based rule validated and saved · delete the recruitment tenant · suspend and delete (removes the tenant's files too)
 
 The registration checks temporarily switch on global self-registration (with verification off) and always put the original platform settings back.
 
@@ -131,3 +141,8 @@ VS Code tasks: *CRM: Backend tests*, *CRM: Frontend tests*, *CRM: Smoke test (AP
 | 27 | On that board, **New Application**, pick a candidate | The job is already filled in, and the name fills in with the candidate's name |
 | 28 | Create a candidate with an email another candidate has (different case) | "Another record already has this Email" |
 | 29 | **Objects & fields** → a text field → tick **Unique** while duplicates exist | Refused, with the number of duplicates |
+| 30 | Open an application → **Email** → template *Interview invitation* | To is the candidate's email. A warning lists *Next interview* if it isn't set. After **Send**, an Email entry appears on the timeline. |
+| 31 | **Settings → Email log** | The email is listed as Sent (with the Log provider, a banner says it went to the server log) |
+| 32 | **Settings → Automation** → switch on *Email rejected candidates*, then move an application to Rejected | The candidate gets the *Application outcome* email; moving it again within a day doesn't send a second one |
+| 33 | **Automation → New rule**: Application *reaches a date*, 2 hours before *Next interview*, Notify owner | Saved and listed as "reaches 2 hours before Next interview" |
+| 34 | **Settings → Email templates**: new template, click fields to insert them, type `{{oops}}` | Saving with `{{oops}}` is refused; deleting a template a rule uses is refused |

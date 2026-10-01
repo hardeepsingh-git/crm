@@ -231,22 +231,43 @@ Field types: `Text`, `TextArea`, `Number`, `Currency`, `Date`, `DateTime`, `Bool
 ### Automation (`/api/admin/automation`, customization:manage)
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/` | Rules with `runCount`, `lastRunAt` |
-| GET | `/fields/{objectKey}` | Fields usable in conditions, with `settable` for Set-field actions (includes `cf.*`) |
+| GET | `/` | Rules with `runCount`, `lastRunAt`, `scheduleField`, `scheduleOffsetMinutes` |
+| GET | `/fields/{objectKey}` | Fields usable in conditions, with `settable` for Set-field actions and `isDate` for schedules (includes `cf.*`) |
 | POST / PUT / DELETE | `/`, `/{id}` | `RuleRequest` |
 
 ```jsonc
 {
-  "name": "Urgent ticket alert", "objectKey": "ticket", "trigger": "Created", "isActive": true,  // Created | Updated | StageChanged
+  "name": "Urgent ticket alert", "objectKey": "ticket", "trigger": "Created", "isActive": true,  // Created | Updated | StageChanged | DateReached
   "conditions": [ { "field": "cf.priority", "operator": "Equals", "value": "Urgent" } ],
-  // operators: Equals, NotEquals, GreaterThan, LessThan, Contains, IsEmpty, IsNotEmpty, Changed
+  // operators: Equals, NotEquals, GreaterThan, LessThan, Contains, IsEmpty, IsNotEmpty, Changed (not for DateReached)
   "actions": [
     { "type": "CreateTask", "subject": "Respond to {{name}}", "dueInDays": 0, "priority": "High", "assignTo": "owner" },
     { "type": "Notify", "message": "Urgent: {{name}}", "assignTo": "<userId>" },
-    { "type": "SetField", "field": "cf.escalated", "value": "true" }
-  ]
+    { "type": "SetField", "field": "cf.escalated", "value": "true" },
+    { "type": "SendEmail", "to": "cf.requester.email", "templateId": "<id>" },               // or "subject" + "message"
+  ],
+  // DateReached only: a date field and a signed offset (negative = before)
+  "scheduleField": "cf.due_date", "scheduleOffsetMinutes": -1440
 }
 ```
+
+- **SendEmail** `to`: `owner` (default), an active user's id, or an email field path from `/api/email/fields/{objectKey}` (`recipients`), including one level through a lookup, e.g. `cf.candidate.cf.email`. Use a `templateId` for the same object, or a `subject` and `message`. Unknown placeholders are rejected. A rule emails the same recipient about the same record at most once in 24 hours; records with no address are skipped.
+- **DateReached** rules are checked every `Automation:ScheduleIntervalSeconds`. Each record fires once per due time (`date + offset`). Due times before the rule was created, or older than `Automation:ScheduleLookbackHours`, are skipped. Conditions are evaluated at the due time.
+- Placeholders in all text: `{{name}}`, standard fields (`{{amount}}`), `{{stage.label}}`, `{{cf.<key>}}` (dates as "5 Oct 2026", amounts with currency), lookups as the linked record's name (`{{cf.position}}`), the linked record's fields (`{{cf.position.name}}`, `{{cf.candidate.cf.email}}`), `{{owner.name}}`, `{{owner.email}}`, `{{organisation.name}}` and `{{link}}` (needs `App:PublicUrl`).
+
+### Email
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/email/fields/{objectKey}` | object:read | `{ placeholders: [{ key, label }], recipients: [{ key, label }] }` |
+| GET | `/api/email/templates?objectKey=` | object:read | Templates for the object |
+| POST | `/api/email/compose` | read **and** update on the record | `{ objectKey, recordId, templateId? }` → `{ recipients: [{ label, address }], subject, body, blankFields[] }`, rendered for the record. `blankFields` lists template fields that are empty on this record. |
+| POST | `/api/email/send` | read and update on the record | `{ objectKey, recordId, to, subject, body, templateId? }` → **202** `{ id, status }`. `to` must be one of the record's addresses (400 otherwise). Placeholders are filled in. Reply-To is the sender. Logs an Email activity on the record. 429 over the daily limit. Rate limit `RateLimiting:EmailSendPermitPerMinute` per user (20). |
+| GET / POST / PUT / DELETE | `/api/admin/email-templates[/{id}]` | customization:manage | `{ name (unique), objectKey, subject, body }`. Unknown placeholders → 400. Deleting a template used by a rule → **409** naming the rules. |
+| GET | `/api/admin/emails` | settings:manage | `status`, `search`, paging (25) → `{ page, deliveryMode: Log\|Smtp, dailyLimit, queuedToday }` |
+| GET | `/api/admin/emails/{id}` | settings:manage | `{ email, body, replyTo, ruleName }` |
+| POST | `/api/admin/emails/{id}/retry`, `/cancel` | settings:manage | Retry a Failed email (attempts reset); cancel a Pending one |
+
+Emails go to an outbox and are sent by a background dispatcher (`Pending` → `Sent`). Failures are retried after 1, 5, 15 and 60 minutes; after 5 attempts, or at once for an invalid address, the email is `Failed` and its timeline entry is marked "[Not sent]". Subjects are reduced to one line and addresses must be a single plain address, so record data can't inject mail headers.
 
 ### Audit and notifications
 | Method | Path | Permission | Notes |

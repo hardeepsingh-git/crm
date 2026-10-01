@@ -16,11 +16,14 @@ public enum FieldType { Text, TextArea, Number, Currency, Date, DateTime, Boolea
 /// <summary>Won = closed successfully (deal won, ticket resolved, candidate hired); Lost = closed unsuccessfully.</summary>
 public enum StageCategory { Open, Won, Lost }
 
-public enum AutomationTrigger { Created, Updated, StageChanged }
+/// <summary>DateReached rules run on a schedule, relative to a date field, rather than when a record is saved.</summary>
+public enum AutomationTrigger { Created, Updated, StageChanged, DateReached }
 
 public enum ConditionOperator { Equals, NotEquals, GreaterThan, LessThan, Contains, IsEmpty, IsNotEmpty, Changed }
 
-public enum AutomationActionType { CreateTask, Notify, SetField }
+public enum AutomationActionType { CreateTask, Notify, SetField, SendEmail }
+
+public enum OutboundEmailStatus { Pending, Sent, Failed, Cancelled }
 
 public enum AuditAction { Created, Updated, Deleted }
 

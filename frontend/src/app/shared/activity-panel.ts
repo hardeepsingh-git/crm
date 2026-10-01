@@ -11,6 +11,7 @@ import { AuthService } from '../core/auth.service';
 import { MetadataService } from '../core/metadata.service';
 import { ActivityItem, ActivityLinks, ActivityType, PagedResult } from '../core/models';
 import { ActivityFormDialog, ActivityFormData } from '../features/activities/activity-form-dialog';
+import { EmailComposeData, EmailComposeDialog } from './email-compose';
 
 export const ACTIVITY_ICONS: Record<ActivityType, string> = {
   Task: 'task_alt',
@@ -24,6 +25,13 @@ export function isOverdue(a: ActivityItem): boolean {
   return !a.completedAt && !!a.dueAt && new Date(a.dueAt) < new Date();
 }
 
+const RECORD_OBJECTS: Partial<Record<keyof ActivityLinks, string>> = {
+  accountId: 'account',
+  contactId: 'contact',
+  leadId: 'lead',
+  opportunityId: 'opportunity',
+};
+
 /** Timeline of activities linked to a record, embedded on detail pages. */
 @Component({
   selector: 'app-activity-panel',
@@ -32,6 +40,9 @@ export function isOverdue(a: ActivityItem): boolean {
     <div class="panel-header">
       <h3>{{ meta.label('activity', true) }}</h3>
       <span class="spacer"></span>
+      @if (emailObjectKey(); as key) {
+        <button mat-stroked-button (click)="email(key)"><mat-icon>mail</mat-icon> Email</button>
+      }
       @if (auth.can('activity', 'create')) {
         <button mat-stroked-button (click)="add('Call')"><mat-icon>call</mat-icon> Log call</button>
         <button mat-stroked-button (click)="add('Note')"><mat-icon>sticky_note_2</mat-icon> Note</button>
@@ -92,6 +103,21 @@ export class ActivityPanel {
   }));
   private readonly value = stableValue(this.data);
   readonly items = computed(() => this.value()?.items ?? []);
+
+  /** The page's object, when the user may update records of it (sending email acts on the record; the server checks the record itself). */
+  readonly emailObjectKey = computed(() => {
+    const key = this.filterBy() === 'customRecordId' ? this.customObjectKey() : RECORD_OBJECTS[this.filterBy()];
+    return key && this.auth.can(key, 'update') ? key : null;
+  });
+
+  email(objectKey: string): void {
+    const recordId = this.links()[this.filterBy()];
+    if (!recordId) return;
+    this.dialog
+      .open(EmailComposeDialog, { data: { objectKey, recordId } satisfies EmailComposeData, width: '680px', maxHeight: '90vh' })
+      .afterClosed()
+      .subscribe((sent) => sent && this.data.reload());
+  }
 
   add(type: ActivityType): void {
     this.open({ links: this.links(), type, customObjectKey: this.customObjectKey() });

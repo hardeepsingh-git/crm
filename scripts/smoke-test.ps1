@@ -189,6 +189,14 @@ if ($adminEmail -and $adminPassword) {
         $me = Api GET '/api/auth/me' -Token $script:adminToken
         Assert $me.isPlatformAdmin 'not a platform admin'; $me.email
     }
+    Check 'Remove test tenants left by interrupted runs' {
+        $stale = @(Api GET '/api/platform/tenants' -Token $script:adminToken | ForEach-Object { $_ } | Where-Object { $_.slug -match '^e2e-\d{6}(-ats)?$' })
+        foreach ($t in $stale) {
+            if ($t.status -ne 'Suspended') { Api PUT "/api/platform/tenants/$($t.id)" @{ name = $t.name; currency = $t.currency; status = 'Suspended' } -Token $script:adminToken | Out-Null }
+            Api DELETE "/api/platform/tenants/$($t.id)" -Token $script:adminToken | Out-Null
+        }
+        "$($stale.Count) removed"
+    }
     Check 'Provision Help Desk tenant from template (with demo data)' {
         $script:tenant = Api POST '/api/platform/tenants' @{
             name = "E2E Help Desk $slug"; slug = $slug; template = 'helpdesk'; currency = 'USD'
@@ -327,7 +335,7 @@ if ($adminEmail -and $adminPassword) {
 
     # Recruitment (ATS) tenant: candidates, applications per job, unique emails, pipeline per job.
     $atsSlug = "$slug-ats"
-    Check 'Provision Recruitment tenant (template v2 with demo data)' {
+    Check 'Provision Recruitment tenant (template v3 with demo data)' {
         $script:atsTenant = Api POST '/api/platform/tenants' @{
             name = "E2E Recruiting $slug"; slug = $atsSlug; template = 'recruitment'; currency = 'USD'
             adminEmail = "admin@$atsSlug.test"; adminFirstName = 'Rita'; adminLastName = 'Cruiter'; adminPassword = 'Tenant#Pass123'; seedDemoData = $true
@@ -355,6 +363,7 @@ if ($adminEmail -and $adminPassword) {
     Check 'Pipeline per job: board and list filter by the linked job' {
         $job = (Api GET '/api/records/position?pageSize=1' -Token $script:atsToken).items[0]
         $a = Api POST '/api/records/application' @{ name = 'Smoke Candidate'; customFields = @{ candidate = $script:candidateId; position = $job.id } } -Token $script:atsToken
+        $script:atsApplication = $a
         $board = Api GET "/api/records/application/board?cf.position=$($job.id)" -Token $script:atsToken
         $cards = @($board | ForEach-Object { $_ })
         Assert (@($cards | Where-Object id -eq $a.id).Count -eq 1) 'new application not on the job board'
@@ -362,6 +371,45 @@ if ($adminEmail -and $adminPassword) {
         $mine = Api GET "/api/records/application?cf.candidate=$($script:candidateId)" -Token $script:atsToken
         Assert ($mine.totalCount -eq 1) "candidate has $($mine.totalCount) applications"
         "$($cards.Count) cards for '$($job.name)'"
+    }
+    Check 'Email a candidate from a template; outbox delivers it and logs it on the timeline' {
+        $templates = @(Api GET '/api/email/templates?objectKey=application' -Token $script:atsToken | ForEach-Object { $_ })
+        $invite = $templates | Where-Object name -eq 'Interview invitation'
+        Assert ($templates.Count -eq 4 -and $null -ne $invite) "expected 4 templates, got $($templates.Count)"
+        $appId = $script:atsApplication.id
+        $c = Api POST '/api/email/compose' @{ objectKey = 'application'; recordId = $appId; templateId = $invite.id } -Token $script:atsToken
+        $to = "smoke.candidate@$atsSlug.test"
+        Assert (@($c.recipients | Where-Object address -eq $to).Count -eq 1) 'candidate address not offered'
+        Assert ($c.subject -like 'Interview for *') "subject not rendered: $($c.subject)"
+        Assert (@($c.blankFields) -contains 'Next interview') 'missing interview date not reported'
+        $s = StatusOf { Api POST '/api/email/send' @{ objectKey = 'application'; recordId = $appId; to = 'someone@elsewhere.test'; subject = 'x'; body = 'y' } -Token $script:atsToken }
+        Assert ($s -eq 400) "outside address returned $s"
+        $sent = Api POST '/api/email/send' @{ objectKey = 'application'; recordId = $appId; to = $to; subject = $c.subject; body = $c.body; templateId = $invite.id } -Token $script:atsToken
+        $status = $null
+        foreach ($i in 1..20) {
+            $status = (@((Api GET '/api/admin/emails?pageSize=50' -Token $script:atsToken).page.items) | Where-Object id -eq $sent.id).status
+            if ($status -eq 'Sent') { break }
+            Start-Sleep -Milliseconds 500
+        }
+        Assert ($status -eq 'Sent') "email status $status after 10 s"
+        $timeline = Api GET "/api/activities?customRecordId=$appId&type=Email" -Token $script:atsToken
+        Assert ($timeline.totalCount -eq 1) "timeline has $($timeline.totalCount) email entries"
+        "delivered by the background dispatcher; '$($c.subject)'"
+    }
+    Check 'Date-based rule: validated, saved and removed' {
+        $rule = @{
+            name = 'Smoke reminder'; objectKey = 'application'; trigger = 'DateReached'; scheduleField = 'cf.feedback'; scheduleOffsetMinutes = -60
+            conditions = @(); actions = @(@{ type = 'Notify'; message = 'Soon: {{name}}'; assignTo = 'owner' })
+        }
+        $s = StatusOf { Api POST '/api/admin/automation' $rule -Token $script:atsToken }
+        Assert ($s -eq 400) "non-date field returned $s"
+        $rule.scheduleField = 'cf.interview_date'
+        $created = Api POST '/api/admin/automation' $rule -Token $script:atsToken
+        Assert ($created.trigger -eq 'DateReached' -and $created.scheduleOffsetMinutes -eq -60) 'schedule not saved'
+        Api DELETE "/api/admin/automation/$($created.id)" -Token $script:atsToken | Out-Null
+        $reminder = @(Api GET '/api/admin/automation' -Token $script:atsToken | ForEach-Object { $_ }) | Where-Object name -eq 'Interview reminder'
+        Assert ($reminder.isActive -and $reminder.scheduleField -eq 'cf.interview_date') 'template reminder missing'
+        '400 for a text field; 1 hour before Next interview saved'
     }
     if (-not $Keep) {
         Check 'Delete the recruitment tenant' {

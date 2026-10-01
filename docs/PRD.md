@@ -195,8 +195,20 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | PLAT-3 | **Template upgrades**: existing tenants receive new template objects and fields once, additively, without changing their data or reinstating items an admin deleted. | M |
 | PLAT-4 | Lookup filters on lists and boards; a new record's name can come from its main lookup (an application is named after its candidate). | S |
 
-### 5.13 Future (backlog)
-Field-level security · Sharing rules and territories · Formula and roll-up fields · Email and webhook automation actions · Scheduled automation (e.g. "3 days before due") · CSV export and import for standard objects · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Email templates · Cloud file storage · Résumé parsing · Candidate portal and interview scheduling · Offer letters · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
+### 5.13 Phase 2: candidate communication and time-based automation (MAIL, SCHED)
+| ID | Requirement | Pri |
+|---|---|---|
+| MAIL-1 | **Email templates** per object with placeholders, including linked records (`{{cf.position.name}}`), owner and organisation. Typos in placeholders are rejected. | M |
+| MAIL-2 | **Email from any record** to one of its own addresses (or a linked record's, e.g. the application's candidate), from a template or free text, with a warning for template fields that are empty on the record. Logged on the record's timeline; replies go to the sender. | M |
+| MAIL-3 | Automation action **Send an email** to the owner, a user or an email field (also through a lookup). | M |
+| MAIL-4 | **Reliable delivery**: outbox saved with the change, background sending, retries with backoff, failures visible and retryable in an **email log**; safe with several API instances. | M |
+| MAIL-5 | **Abuse limits**: recipients restricted to the record's addresses, update access required, per-user rate limit, per-organisation daily cap, one automated email per rule/record/recipient a day, header injection prevented. | M |
+| SCHED-1 | **Date-based rules**: run a set time before or after a date field (e.g. a day before an interview, 7 days after the last update), once per record and date. | M |
+| SCHED-2 | Date rules never fire for dates that passed before the rule existed, and catch up after short outages. | M |
+| ATS-6 | Recruitment template v3: candidate email templates, interview reminders and stalled-application chasers; candidate emails start switched off. | S |
+
+### 5.14 Future (backlog)
+Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · CSV export and import for standard objects · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Email templates · Cloud file storage · Résumé parsing · Candidate portal and interview scheduling · Offer letters · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
 
 ## 6. Non-functional requirements
 
@@ -229,9 +241,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (60), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields and template upgrades
-- [x] UI unit tests green (46), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters and record naming
-- [x] Live smoke test green against PostgreSQL (55 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments and a recruitment tenant)
+- [x] API integration tests green (67), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits) and date-based rules
+- [x] UI unit tests green (53), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log and the date-rule editor
+- [x] Live smoke test green against PostgreSQL (58 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox and date-based rules)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

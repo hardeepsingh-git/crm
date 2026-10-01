@@ -33,7 +33,13 @@ Configuration is read in this order: `appsettings.json`, then `appsettings.{Envi
 | `RateLimiting:RegisterPermitPerMinute` | | `10` | Self-registration, verify and resend-code calls per IP per minute |
 | `RateLimiting:PasswordResetPermitPerMinute` | | `5` | Forgot-password and reset-password calls per IP per minute |
 | `RateLimiting:ClientErrorPermitPerMinute` | | `30` | Browser error reports per IP per minute |
-| `App:PublicUrl` | ✔ outside Development | `http://localhost:4200` in Development | The UI's public address, used in password-reset links (never taken from the request's Host header). Without it, reset emails aren't sent. |
+| `RateLimiting:EmailSendPermitPerMinute` | | `20` | Emails sent from records, per user per minute |
+| `Email:DailyLimitPerTenant` | | `1000` | Emails each organisation can queue per UTC day; beyond it, sends get 429 and automation emails are logged as Failed |
+| `Email:DispatchIntervalSeconds` | | `15` | How often the outbox is checked (new emails also wake it immediately) |
+| `Automation:ScheduleIntervalSeconds` | | `300` | How often date-based rules are checked |
+| `Automation:ScheduleLookbackHours` | | `48` | Due times older than this are skipped, e.g. after a long outage |
+| `BackgroundJobs:Enabled` | | `true` | Runs the email dispatcher and date-rule scheduler in this API instance. Safe on several instances; set `false` to run them only on some. |
+| `App:PublicUrl` | ✔ outside Development | `http://localhost:4200` in Development | The UI's public address, used in password-reset links and the `{{link}}` email placeholder (never taken from the request's Host header). Without it, reset emails aren't sent. |
 | `PasswordReset:TokenMinutes` | | `60` | How long a reset link is valid |
 | `Storage:LocalPath` | | `<content root>/App_Data/files` | Where attachments are stored. Use a persistent, backed-up volume (shared between nodes if you run several). |
 | `Attachments:MaxFileSizeMb` | | `10` | Per file. Above 28 MB also raise Kestrel/IIS/proxy request size limits. |
@@ -72,6 +78,8 @@ Use a transactional email provider rather than a mailbox server; they handle del
 2. In **Platform settings → Email provider**, choose *SMTP server*, enter host, port **587** and username, and keep *Use TLS (STARTTLS)* on. Port 465 (implicit TLS) isn't supported.
 3. Set the secret: `dotnet user-secrets set "Email:SmtpPassword" "<token>"` (production: `Email__SmtpPassword`), restart the API, and use **Send test**.
 4. Set `App:PublicUrl` so password-reset links point at the real site.
+
+Candidate and customer emails (record **Email** button and automation) use the same provider. Until it's configured they are only written to the API log, and **Settings → Email log** says so. They go through an outbox: check **Settings → Email log** for failures (SMTP rejections, bad addresses), which can be retried there. Pending emails of a suspended organisation wait until it's reactivated.
 
 ### 2.3 Error tracking (Sentry)
 Off unless `Sentry:Dsn` is set (environment variable `Sentry__Dsn`). When on, unhandled API exceptions and every Error-level log (including browser errors the UI reports to `/api/client-errors`) are sent to Sentry. Personal data and request bodies are **not** sent (`SendDefaultPii=false`, `MaxRequestBodySize=None`). Without a DSN the same events are in the API log.

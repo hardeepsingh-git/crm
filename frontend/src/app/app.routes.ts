@@ -51,6 +51,8 @@ export const routes: Routes = [
               { path: 'objects/:key', title: 'Object | CRM', canActivate: [customize], loadComponent: () => import('./features/admin/object-editor').then((m) => m.ObjectEditor) },
               { path: 'picklists', title: 'Picklists | CRM', canActivate: [customize], loadComponent: () => import('./features/admin/picklists').then((m) => m.Picklists) },
               { path: 'automation', title: 'Automation | CRM', canActivate: [customize], loadComponent: () => import('./features/admin/automation-list').then((m) => m.AutomationList) },
+              { path: 'email-templates', title: 'Email templates | CRM', canActivate: [customize], loadComponent: () => import('./features/admin/email-templates').then((m) => m.EmailTemplates) },
+              { path: 'emails', title: 'Email log | CRM', canActivate: [permissionGuard('settings', 'manage')], loadComponent: () => import('./features/admin/email-log').then((m) => m.EmailLog) },
               { path: 'audit', title: 'Audit log | CRM', canActivate: [permissionGuard('audit', 'read')], loadComponent: () => import('./features/admin/audit-log').then((m) => m.AuditLog) },
             ],
           },

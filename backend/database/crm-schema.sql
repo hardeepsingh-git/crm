@@ -1365,3 +1365,140 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    ALTER TABLE "AutomationRules" ADD "ScheduleField" character varying(80);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    ALTER TABLE "AutomationRules" ADD "ScheduleOffsetMinutes" integer NOT NULL DEFAULT 0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE TABLE "EmailTemplates" (
+        "Id" uuid NOT NULL,
+        "Name" character varying(200) NOT NULL,
+        "ObjectKey" character varying(40) NOT NULL,
+        "Subject" character varying(300) NOT NULL,
+        "Body" character varying(10000) NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_EmailTemplates" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE TABLE "OutboundEmails" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "To" character varying(320) NOT NULL,
+        "ReplyTo" character varying(320),
+        "Subject" character varying(300) NOT NULL,
+        "Body" character varying(10000) NOT NULL,
+        "ObjectKey" character varying(40),
+        "RecordId" uuid,
+        "RecordName" character varying(300),
+        "RuleId" uuid,
+        "TemplateId" uuid,
+        "ActivityId" uuid,
+        "SentById" uuid,
+        "SentByName" character varying(200) NOT NULL,
+        "Status" character varying(16) NOT NULL,
+        "Attempts" integer NOT NULL,
+        "NextAttemptAt" timestamp with time zone NOT NULL,
+        "LockedUntil" timestamp with time zone,
+        "LastError" character varying(1000),
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "SentAt" timestamp with time zone,
+        CONSTRAINT "PK_OutboundEmails" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE TABLE "ScheduledRuleRuns" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "RuleId" uuid NOT NULL,
+        "RecordId" uuid NOT NULL,
+        "DueAt" timestamp with time zone NOT NULL,
+        "RanAt" timestamp with time zone NOT NULL,
+        "Matched" boolean NOT NULL,
+        CONSTRAINT "PK_ScheduledRuleRuns" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE INDEX "IX_AutomationRules_Trigger_IsActive" ON "AutomationRules" ("Trigger", "IsActive");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE UNIQUE INDEX "IX_EmailTemplates_TenantId_Name" ON "EmailTemplates" ("TenantId", "Name");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE INDEX "IX_OutboundEmails_Status_NextAttemptAt" ON "OutboundEmails" ("Status", "NextAttemptAt");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE INDEX "IX_OutboundEmails_TenantId_CreatedAt" ON "OutboundEmails" ("TenantId", "CreatedAt");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE INDEX "IX_OutboundEmails_TenantId_RuleId_RecordId" ON "OutboundEmails" ("TenantId", "RuleId", "RecordId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE UNIQUE INDEX "IX_ScheduledRuleRuns_RuleId_RecordId_DueAt" ON "ScheduledRuleRuns" ("RuleId", "RecordId", "DueAt");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    CREATE INDEX "IX_ScheduledRuleRuns_TenantId" ON "ScheduledRuleRuns" ("TenantId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001061040_Phase2EmailAndScheduling') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261001061040_Phase2EmailAndScheduling', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

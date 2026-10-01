@@ -297,6 +297,10 @@ public class AutomationRule : AuditableEntity
     public bool IsActive { get; set; } = true;
     public int RunCount { get; set; }
     public DateTime? LastRunAt { get; set; }
+    /// <summary>DateReached only: the date field the schedule is relative to, e.g. <c>cf.interview_date</c> or <c>updatedAt</c>.</summary>
+    public string? ScheduleField { get; set; }
+    /// <summary>DateReached only: negative runs before the date, positive after.</summary>
+    public int ScheduleOffsetMinutes { get; set; }
 }
 
 public record AutomationCondition(string Field, ConditionOperator Operator, string? Value);
@@ -309,7 +313,59 @@ public record AutomationAction(
     ActivityPriority? Priority = null,
     string? AssignTo = null,
     string? Field = null,
-    string? Value = null);
+    string? Value = null,
+    string? To = null,
+    Guid? TemplateId = null);
+
+/// <summary>Reusable email for one object; placeholders are filled from the record when it is sent.</summary>
+public class EmailTemplate : AuditableEntity
+{
+    public string Name { get; set; } = "";
+    public string ObjectKey { get; set; } = "";
+    public string Subject { get; set; } = "";
+    public string Body { get; set; } = "";
+}
+
+/// <summary>Transactional outbox row: saved together with the change that caused it, then delivered by the dispatcher.</summary>
+public class OutboundEmail : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid TenantId { get; set; }
+    public string To { get; set; } = "";
+    public string? ReplyTo { get; set; }
+    public string Subject { get; set; } = "";
+    public string Body { get; set; } = "";
+    public string? ObjectKey { get; set; }
+    public Guid? RecordId { get; set; }
+    public string? RecordName { get; set; }
+    public Guid? RuleId { get; set; }
+    public Guid? TemplateId { get; set; }
+    /// <summary>The Email activity logged on the record's timeline.</summary>
+    public Guid? ActivityId { get; set; }
+    public Guid? SentById { get; set; }
+    public string SentByName { get; set; } = "";
+    public OutboundEmailStatus Status { get; set; } = OutboundEmailStatus.Pending;
+    public int Attempts { get; set; }
+    public DateTime NextAttemptAt { get; set; }
+    /// <summary>Lease taken by the dispatcher instance currently sending it.</summary>
+    public DateTime? LockedUntil { get; set; }
+    public string? LastError { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? SentAt { get; set; }
+}
+
+/// <summary>Marks a date-based rule as handled for one record and due time, so each due date fires once, even across API instances.</summary>
+public class ScheduledRuleRun : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid TenantId { get; set; }
+    public Guid RuleId { get; set; }
+    public Guid RecordId { get; set; }
+    public DateTime DueAt { get; set; }
+    public DateTime RanAt { get; set; }
+    /// <summary>False when the rule's conditions didn't match at the due time.</summary>
+    public bool Matched { get; set; }
+}
 
 public class Notification : ITenantEntity
 {

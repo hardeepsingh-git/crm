@@ -166,6 +166,26 @@ flowchart LR
 - Audit entries record user id and name (or "Automation"/"System"), entity type (object key), entity id and name, action, and a JSON map `{ field: [old, new] }`.
 - Notifications are rows per user with a link to the record's route. The shell polls every 60 s.
 
+### 6.1 Email outbox and date-based rules
+
+```mermaid
+flowchart LR
+    U[Email button / SendEmail action] --> Q[EmailComposer.QueueAsync<br/>render, Email activity, OutboundEmails row]
+    Q --> TX[(same SaveChanges<br/>as the triggering change)]
+    TX -->|OutboxSignal| D[EmailDispatcher<br/>background service]
+    D -->|claim: UPDATE ... SET LockedUntil<br/>WHERE pending and unlocked| S[IEmailSender<br/>SMTP or Log]
+    S -->|ok| SENT[Sent]
+    S -->|error| R[retry 1/5/15/60 min<br/>Failed after 5, timeline marked]
+    T[ScheduledAutomation<br/>every 5 min] -->|due = date + offset| E[AutomationEngine.RunRuleAsync]
+    E --> RUN[(ScheduledRuleRuns<br/>unique RuleId+RecordId+DueAt)]
+```
+
+- **Transactional outbox.** An email is a row saved in the same transaction as the record change (or the user's send), so an email is never sent for a change that rolled back, and nothing is lost if SMTP is down. Sending happens outside the request.
+- **Several API instances.** The dispatcher claims each email with a conditional update (`LockedUntil`, 5-minute lease) and only sends what it claimed. A crash mid-send leaves the lease to expire and the email is retried: delivery is *at least once*. Scheduled rules record each run in `ScheduledRuleRuns` with a unique key in the same transaction as their actions, so a second instance's attempt fails and rolls back.
+- **Abuse limits.** Users can only email addresses held on the record (or its linked records), need update access to it, and are rate limited. Each tenant has a daily cap (`Email:DailyLimitPerTenant`). A rule emails the same person about the same record at most once a day, so "is updated" rules can't flood.
+- **Rendering.** `EmailComposer.ContextAsync` builds placeholder values once per record: formatted custom fields, lookups resolved to names, one level of linked-record fields, owner, organisation and a link. For user-initiated emails, linked records the user can't read stay blank. Emails are plain text, so record data can't inject markup.
+- **Date rules** compare custom date fields in memory (they live in JSON); `createdAt`/`updatedAt` are filtered in SQL. Each run scans at most 20,000 records per rule.
+
 ## 7. Frontend design
 
 - **Metadata-driven UI.** `MetadataService` exposes labels, icons, fields, stages, picklists and currency as signals. Navigation, list columns, filters, forms, detail views, stage paths and boards are all generated from it.
@@ -193,7 +213,7 @@ flowchart LR
 | A07 Authentication failures | Strong password policy, lockout, short-lived tokens, server-side logout, suspended-tenant sign-in blocked. Self-registration: hashed single-use codes with attempt limits and expiry, and no account enumeration (identical responses for existing and unknown emails). |
 | A08 Integrity | Lockfiles and CI builds from source |
 | A09 Logging | Audit log for business data. Tenant lifecycle is logged. ProblemDetails responses carry trace IDs. |
-| A10 SSRF | The only outbound calls are SMTP, the SMS gateway and Sentry, to hosts that only platform admins or operators configure (absolute http(s) URL, validated). Users can't influence the destination. Automation has no webhook action. |
+| A10 SSRF | The only outbound calls are SMTP, the SMS gateway and Sentry, to hosts that only platform admins or operators configure (absolute http(s) URL, validated). Users can't influence the destination. Automation has no webhook action, and user-sent emails can only go to addresses already on the record. |
 
 Residual risks:
 - The refresh token lives in `localStorage` (mitigated by CSP, rotation and reuse detection).
@@ -219,3 +239,6 @@ Residual risks:
 | ADR-15 | **CSV import validates everything, then saves in one transaction** (all-or-nothing, automation off) | Row-by-row partial imports (leave half-loaded data to clean up); background jobs (unneeded at 5,000 rows) |
 | ADR-16 | **Versioned, additive template upgrades** applied once per tenant at startup | Re-applying templates on every start (would resurrect fields admins deleted); manual per-tenant migration scripts (error-prone across many tenants); destructive upgrades (risk to customer data) |
 | ADR-17 | **Applications as a separate object** linking candidate × job, rather than stages on the candidate | Candidate-only pipeline: one candidate can't be in several jobs' pipelines at once, and the history per job is lost |
+| ADR-18 | **Transactional outbox in PostgreSQL** with an in-process dispatcher and lease-based claiming | Sending inside the request (slow, lost on SMTP errors, sent even if the transaction rolls back); a message broker (more infrastructure than needed today) |
+| ADR-19 | **Polling scheduler with a unique run key** for date-based rules | Per-record scheduled jobs (must be rescheduled whenever a date changes); Quartz/Hangfire (extra dependency and tables for one feature) |
+| ADR-20 | **Recipients limited to the record's own addresses** for user-sent email | Free-text recipients (turns the CRM into an open relay for any signed-in user) |

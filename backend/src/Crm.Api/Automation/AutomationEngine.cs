@@ -2,10 +2,10 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Crm.Api.Automation;
@@ -86,13 +86,15 @@ public static class RecordFields
     }
 
     private static string Camel(string name) => char.ToLowerInvariant(name[0]) + name[1..];
+
+    public static string Humanize(string camel) =>
+        char.ToUpperInvariant(camel[0]) + string.Concat(camel[1..].Select(c => char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : c.ToString()));
 }
 
 /// <summary>Runs tenant-defined rules after records are created or updated. Invoked by <see cref="CrmDbContext"/> after a successful save.</summary>
-public sealed partial class AutomationEngine(TimeProvider clock, ILogger<AutomationEngine> logger)
+public sealed class AutomationEngine(TimeProvider clock, EmailComposer emails, ILogger<AutomationEngine> logger)
 {
-    [GeneratedRegex(@"\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}")]
-    private static partial Regex Placeholder();
+    public static readonly TimeSpan EmailRepeatWindow = TimeSpan.FromHours(24);
 
     /// <returns>True when actions produced changes that need saving.</returns>
     public async Task<bool> RunAsync(CrmDbContext db, IReadOnlyList<RecordChange> changes, CancellationToken ct)
@@ -102,7 +104,8 @@ public sealed partial class AutomationEngine(TimeProvider clock, ILogger<Automat
         var keyed = changes.Select(c => (Change: c, Key: CrmDbContext.EntityTypeKey(c.Entity, customKeys))).ToList();
         var keys = keyed.Select(k => k.Key).Distinct().ToList();
 
-        var rules = await db.AutomationRules.Where(r => r.IsActive && keys.Contains(r.ObjectKey)).OrderBy(r => r.CreatedAt).ToListAsync(ct);
+        var rules = await db.AutomationRules.Where(r => r.IsActive && keys.Contains(r.ObjectKey) && r.Trigger != AutomationTrigger.DateReached)
+            .OrderBy(r => r.CreatedAt).ToListAsync(ct);
         if (rules.Count == 0) return false;
 
         var fieldDefs = await db.FieldDefinitions.Where(f => keys.Contains(f.ObjectKey)).ToListAsync(ct);
@@ -113,26 +116,44 @@ public sealed partial class AutomationEngine(TimeProvider clock, ILogger<Automat
         {
             var current = RecordFields.Read(change.Entity);
             var before = change.Original is null ? null : RecordFields.Read(change.Original);
+            var run = new RuleRun(change.Entity, key, current, fieldDefs, now);
             foreach (var rule in rules.Where(r => r.ObjectKey == key && Matches(r.Trigger, change)))
-            {
-                try
-                {
-                    var conditions = JsonSerializer.Deserialize<List<AutomationCondition>>(rule.Conditions, AutomationJson.Options) ?? [];
-                    if (!conditions.All(c => Evaluate(c, current, before))) continue;
-                    var actions = JsonSerializer.Deserialize<List<AutomationAction>>(rule.Actions, AutomationJson.Options) ?? [];
-                    foreach (var action in actions)
-                        await ExecuteAsync(db, rule, action, change.Entity, key, current, fieldDefs, now, ct);
-                    rule.RunCount++;
-                    rule.LastRunAt = now;
-                    changed = true;
-                }
-                catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
-                {
-                    logger.LogWarning(ex, "Automation rule {Rule} ({RuleId}) failed", rule.Name, rule.Id);
-                }
-            }
+                changed |= await RunRuleAsync(db, rule, run, before, ct);
         }
         return changed;
+    }
+
+    /// <summary>A record being processed; the email/placeholder context is built on first use and shared by its rules.</summary>
+    public sealed class RuleRun(OwnedEntity entity, string objectKey, IReadOnlyDictionary<string, object?> fields, List<FieldDefinition> fieldDefs, DateTime now)
+    {
+        public OwnedEntity Entity { get; } = entity;
+        public string ObjectKey { get; } = objectKey;
+        public IReadOnlyDictionary<string, object?> Fields { get; } = fields;
+        public List<FieldDefinition> FieldDefs { get; } = fieldDefs;
+        public DateTime Now { get; } = now;
+        public Dictionary<string, object?>? Context { get; set; }
+    }
+
+    /// <summary>Evaluates one rule's conditions and, if they match, runs its actions.</summary>
+    /// <returns>True when the rule ran.</returns>
+    public async Task<bool> RunRuleAsync(CrmDbContext db, AutomationRule rule, RuleRun run, IReadOnlyDictionary<string, object?>? before, CancellationToken ct)
+    {
+        try
+        {
+            var conditions = JsonSerializer.Deserialize<List<AutomationCondition>>(rule.Conditions, AutomationJson.Options) ?? [];
+            if (!conditions.All(c => Evaluate(c, run.Fields, before))) return false;
+            var actions = JsonSerializer.Deserialize<List<AutomationAction>>(rule.Actions, AutomationJson.Options) ?? [];
+            foreach (var action in actions)
+                await ExecuteAsync(db, rule, action, run, ct);
+            rule.RunCount++;
+            rule.LastRunAt = run.Now;
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            logger.LogWarning(ex, "Automation rule {Rule} ({RuleId}) failed", rule.Name, rule.Id);
+            return false;
+        }
     }
 
     private static bool Matches(AutomationTrigger trigger, RecordChange change) => trigger switch
@@ -162,10 +183,10 @@ public sealed partial class AutomationEngine(TimeProvider clock, ILogger<Automat
         };
     }
 
-    private async Task ExecuteAsync(
-        CrmDbContext db, AutomationRule rule, AutomationAction action, OwnedEntity entity, string objectKey,
-        IReadOnlyDictionary<string, object?> fields, List<FieldDefinition> fieldDefs, DateTime now, CancellationToken ct)
+    private async Task ExecuteAsync(CrmDbContext db, AutomationRule rule, AutomationAction action, RuleRun run, CancellationToken ct)
     {
+        var entity = run.Entity;
+        var now = run.Now;
         switch (action.Type)
         {
             case AutomationActionType.CreateTask:
@@ -173,7 +194,7 @@ public sealed partial class AutomationEngine(TimeProvider clock, ILogger<Automat
                 var task = new Activity
                 {
                     Type = ActivityType.Task,
-                    Subject = Truncate(Render(action.Subject ?? rule.Name, fields), 200),
+                    Subject = Truncate(EmailText.SingleLine(Render(action.Subject ?? rule.Name, await ContextAsync(db, run, ct))), 200),
                     Description = $"Created by automation rule \"{rule.Name}\".",
                     DueAt = now.Date.AddDays(action.DueInDays ?? 1).AddHours(17),
                     Priority = action.Priority ?? ActivityPriority.Normal,
@@ -188,25 +209,57 @@ public sealed partial class AutomationEngine(TimeProvider clock, ILogger<Automat
                 {
                     UserId = await ResolveUserAsync(db, action.AssignTo, entity.OwnerId, ct),
                     Title = Truncate(rule.Name, 200),
-                    Message = Truncate(Render(action.Message ?? "{{name}} matched this rule.", fields), 1000),
-                    Link = LinkFor(entity, objectKey),
+                    Message = Truncate(Render(action.Message ?? "{{name}} matched this rule.", await ContextAsync(db, run, ct)), 1000),
+                    Link = LinkFor(entity, run.ObjectKey),
                     CreatedAt = now,
                 });
                 break;
             case AutomationActionType.SetField when action.Field is not null:
             {
                 var definition = action.Field.StartsWith("cf.", StringComparison.Ordinal)
-                    ? fieldDefs.FirstOrDefault(f => f.ObjectKey == objectKey && f.Key == action.Field[3..])
+                    ? run.FieldDefs.FirstOrDefault(f => f.ObjectKey == run.ObjectKey && f.Key == action.Field[3..])
                     : null;
-                if (!RecordFields.TrySet(entity, action.Field, action.Value is null ? null : Render(action.Value, fields), definition))
+                if (!RecordFields.TrySet(entity, action.Field, action.Value is null ? null : Render(action.Value, run.Fields), definition))
                     throw new InvalidOperationException($"Cannot set field '{action.Field}'.");
                 break;
             }
+            case AutomationActionType.SendEmail:
+                await SendEmailAsync(db, rule, action, run, ct);
+                break;
         }
     }
 
-    public static string Render(string template, IReadOnlyDictionary<string, object?> fields) =>
-        Placeholder().Replace(template, m => RecordFields.Format(fields.GetValueOrDefault(m.Groups[1].Value)));
+    private async Task SendEmailAsync(CrmDbContext db, AutomationRule rule, AutomationAction action, RuleRun run, CancellationToken ct)
+    {
+        var context = await ContextAsync(db, run, ct);
+        var to = await EmailComposer.ResolveRecipientAsync(db, action.To, context, ct);
+        if (to is null)
+        {
+            logger.LogInformation("Automation rule {RuleId} skipped an email: record {RecordId} has no address for '{To}'", rule.Id, run.Entity.Id, action.To ?? "owner");
+            return;
+        }
+        // Rules on "is updated" fire on every save; one email per rule, record and recipient a day stops floods.
+        var since = run.Now - EmailRepeatWindow;
+        if (await db.OutboundEmails.AnyAsync(e => e.RuleId == rule.Id && e.RecordId == run.Entity.Id && e.To == to && e.CreatedAt > since, ct)
+            || db.OutboundEmails.Local.Any(e => e.RuleId == rule.Id && e.RecordId == run.Entity.Id && e.To == to))
+            return;
+
+        var (subject, body) = (action.Subject ?? "", action.Message ?? "");
+        if (action.TemplateId is { } templateId)
+        {
+            var template = await db.EmailTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == templateId, ct)
+                ?? throw new InvalidOperationException($"Email template {templateId} no longer exists.");
+            (subject, body) = (template.Subject, template.Body);
+        }
+        await emails.QueueAsync(db, new QueueEmail(
+            run.Entity, run.ObjectKey, to, EmailComposer.Render(subject, context), EmailComposer.Render(body, context),
+            RuleId: rule.Id, TemplateId: action.TemplateId), run.Now, ct);
+    }
+
+    private async Task<Dictionary<string, object?>> ContextAsync(CrmDbContext db, RuleRun run, CancellationToken ct) =>
+        run.Context ??= await emails.ContextAsync(db, run.Entity, run.ObjectKey, viewer: null, ct);
+
+    public static string Render(string template, IReadOnlyDictionary<string, object?> fields) => EmailComposer.Render(template, fields);
 
     private static async Task<Guid> ResolveUserAsync(CrmDbContext db, string? assignTo, Guid owner, CancellationToken ct)
     {
@@ -215,7 +268,7 @@ public sealed partial class AutomationEngine(TimeProvider clock, ILogger<Automat
         return await db.Users.AnyAsync(u => u.Id == userId && u.TenantId == tenantId && u.IsActive, ct) ? userId : owner;
     }
 
-    private static void Link(Activity task, OwnedEntity entity)
+    public static void Link(Activity task, OwnedEntity entity)
     {
         switch (entity)
         {

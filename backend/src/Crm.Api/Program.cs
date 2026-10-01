@@ -12,6 +12,7 @@ using Crm.Api.Features.Attachments;
 using Crm.Api.Features.Contacts;
 using Crm.Api.Features.Customization;
 using Crm.Api.Features.Dashboard;
+using Crm.Api.Features.Email;
 using Crm.Api.Features.Governance;
 using Crm.Api.Features.Import;
 using Crm.Api.Features.Leads;
@@ -54,6 +55,15 @@ services.AddScoped<Access>();
 services.AddScoped<MetadataService>();
 services.AddScoped<CustomFieldValidator>();
 services.AddScoped<AutomationEngine>();
+services.AddScoped<EmailComposer>();
+services.AddScoped<EmailDispatcher>();
+services.AddScoped<ScheduledAutomation>();
+services.AddSingleton<OutboxSignal>();
+if (builder.Configuration.GetValue("BackgroundJobs:Enabled", true))
+{
+    services.AddHostedService<EmailDispatcherService>();
+    services.AddHostedService<ScheduledAutomationService>();
+}
 services.AddScoped<TenantService>();
 services.AddScoped<PlatformSettingsService>();
 services.AddScoped<RegistrationService>();
@@ -118,6 +128,13 @@ services.AddRateLimiter(o =>
     o.AddPolicy(RegistrationEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:RegisterPermitPerMinute", 10));
     o.AddPolicy(PasswordResetEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:PasswordResetPermitPerMinute", 5));
     o.AddPolicy(ClientErrorEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:ClientErrorPermitPerMinute", 30));
+    o.AddPolicy(EmailEndpoints.SendRateLimitPolicy, ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirst(Claims.Subject)?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = ctx.RequestServices.GetRequiredService<IConfiguration>().GetValue("RateLimiting:EmailSendPermitPerMinute", 20),
+            Window = TimeSpan.FromMinutes(1),
+        }));
 
     static RateLimitPartition<string> PerIpPerMinute(HttpContext ctx, string setting, int defaultLimit) =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -187,6 +204,7 @@ secured.MapUsers();
 secured.MapSecurity();
 secured.MapCustomization();
 secured.MapAutomation();
+secured.MapEmail();
 secured.MapGovernance();
 secured.MapPlatform();
 secured.MapClientErrors();

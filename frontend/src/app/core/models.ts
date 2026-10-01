@@ -6,9 +6,9 @@ export type StageCategory = 'Open' | 'Won' | 'Lost';
 export type FieldType =
   | 'Text' | 'TextArea' | 'Number' | 'Currency' | 'Date' | 'DateTime' | 'Boolean'
   | 'Picklist' | 'MultiPicklist' | 'Email' | 'Phone' | 'Url' | 'Lookup';
-export type AutomationTrigger = 'Created' | 'Updated' | 'StageChanged';
+export type AutomationTrigger = 'Created' | 'Updated' | 'StageChanged' | 'DateReached';
 export type ConditionOperator = 'Equals' | 'NotEquals' | 'GreaterThan' | 'LessThan' | 'Contains' | 'IsEmpty' | 'IsNotEmpty' | 'Changed';
-export type AutomationActionType = 'CreateTask' | 'Notify' | 'SetField';
+export type AutomationActionType = 'CreateTask' | 'Notify' | 'SetField' | 'SendEmail';
 export type TenantStatus = 'Active' | 'Suspended';
 export type AuditAction = 'Created' | 'Updated' | 'Deleted';
 export type RecordAction = 'read' | 'create' | 'update' | 'delete';
@@ -508,6 +508,8 @@ export interface AutomationAction {
   assignTo?: string | null;
   field?: string | null;
   value?: string | null;
+  to?: string | null;
+  templateId?: string | null;
 }
 
 export interface RuleItem {
@@ -520,12 +522,81 @@ export interface RuleItem {
   isActive: boolean;
   runCount: number;
   lastRunAt: string | null;
+  scheduleField: string | null;
+  scheduleOffsetMinutes: number;
 }
 
 export interface AutomationField {
   key: string;
   label: string;
   settable: boolean;
+  isDate: boolean;
+}
+
+// ---------- Email ----------
+
+export interface EmailTemplateItem {
+  id: string;
+  name: string;
+  objectKey: string;
+  subject: string;
+  body: string;
+  updatedAt: string;
+}
+
+export interface EmailField {
+  key: string;
+  label: string;
+}
+
+export interface EmailFieldSet {
+  placeholders: EmailField[];
+  recipients: EmailField[];
+}
+
+export interface EmailRecipient {
+  label: string;
+  address: string;
+}
+
+export interface ComposeResult {
+  recipients: EmailRecipient[];
+  subject: string;
+  body: string;
+  blankFields?: string[];
+}
+
+export type OutboundEmailStatus = 'Pending' | 'Sent' | 'Failed' | 'Cancelled';
+
+export interface OutboundEmailItem {
+  id: string;
+  to: string;
+  subject: string;
+  objectKey: string | null;
+  recordId: string | null;
+  recordName: string | null;
+  ruleId: string | null;
+  sentByName: string;
+  status: OutboundEmailStatus;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  nextAttemptAt: string;
+}
+
+export interface OutboundEmailDetail {
+  email: OutboundEmailItem;
+  body: string;
+  replyTo: string | null;
+  ruleName: string | null;
+}
+
+export interface EmailLogPage {
+  page: PagedResult<OutboundEmailItem>;
+  deliveryMode: EmailProvider;
+  dailyLimit: number;
+  queuedToday: number;
 }
 
 export interface AuditItem {
