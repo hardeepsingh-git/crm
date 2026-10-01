@@ -194,6 +194,14 @@ flowchart LR
 - **Abuse limits.** Per-IP rate limits for reading and applying, a honeypot field and server-side validation. A CAPTCHA isn't included because the platform makes no outbound calls to third parties; it can be added in front of `apply` if spam appears.
 - **Export** builds one query per object from the caller's read scope plus the list filters (custom-field filters, standard-field equality built from the entity's properties, search, owner, stage/open, activity status). It resolves linked-record names in one query per object, honours read scope for those names too, writes RFC 4180 CSV with formula-injection protection, and audits the export.
 
+### 6.3 Interviews and hiring analytics
+
+- **Typed tables, not custom objects.** Interviews, participants and scorecards are fixed entities (`Features/Interviews`) linked to the *application* custom record, because they carry behaviour (calendar entries, notifications, blind visibility) that metadata can't express. They follow the usual rules: `ITenantEntity`, global filters, audit and cascade delete with their application.
+- **Calendars through activities.** Each interviewer gets a *Meeting* activity (id kept on the participant row), so interviews appear in existing activity lists, the dashboard and overdue filters with no new calendar UI. The interview owns those activities: rescheduling moves them, removing an interviewer or cancelling deletes them, a submitted scorecard completes them. A `.ics` download covers external calendars without outbound calls.
+- **One source for the next interview date.** After every change the application's `interview_date` is set to the next scheduled future interview (or cleared), so the existing *Interview reminder* date rule and the email placeholders keep working unchanged.
+- **Blind scorecards on the server.** `ToItemsAsync` decides per caller which scorecards to return; the UI never receives colleagues' feedback before the interviewer has submitted, so it can't be read from the network tab.
+- **Analytics from the audit log.** Stage history comes from `Updated` audit rows with a `stage` change, read in chunks of 1,000 ids, so the funnel needs no extra tracking table and covers history from before Phase 4. Applications are filtered by the caller's read scope first; the period applies to creation date, and at most 20,000 applications are analysed per request.
+
 ## 7. Frontend design
 
 - **Metadata-driven UI.** `MetadataService` exposes labels, icons, fields, stages, picklists and currency as signals. Navigation, list columns, filters, forms, detail views, stage paths and boards are all generated from it.
@@ -252,3 +260,6 @@ Residual risks:
 | ADR-20 | **Recipients limited to the record's own addresses** for user-sent email | Free-text recipients (turns the CRM into an open relay for any signed-in user) |
 | ADR-21 | **Careers endpoints in the main API**, entering the tenant by slug, and **append-only** for anonymous callers | A separate public service (more deployment for the same data); updating existing candidates from the form (lets anyone change a candidate's details by knowing their email) |
 | ADR-22 | **Export uses read permission plus an audit entry**, not a separate export permission | A new "export" action in every role (more admin work; anyone who can read a list can already copy it). Can be added later if customers ask. |
+| ADR-23 | **Interviews as typed entities** linked to the application, with interviewer calendars as ordinary *Meeting* activities | Interviews as a custom object (no participants, blind feedback or calendar sync logic); a separate calendar model and UI (duplicates activities) |
+| ADR-24 | **Blind feedback enforced in the API** (scorecards filtered per caller) | Hiding in the UI only (leaks through the network tab); hiding from everyone until the interview is complete (managers can't follow progress) |
+| ADR-25 | **Funnel computed from the audit log** on request | A stage-history table (extra writes on every change and no history for existing data); a nightly aggregate (stale, more infrastructure). Revisit if tenants exceed 20,000 applications per period. |

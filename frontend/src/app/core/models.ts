@@ -707,3 +707,117 @@ export interface ImportResult {
   errorCount: number;
   errors: ImportRowError[];
 }
+
+export type InterviewKind = 'Phone' | 'Video' | 'Onsite';
+export const INTERVIEW_KINDS: InterviewKind[] = ['Phone', 'Video', 'Onsite'];
+export type InterviewStatus = 'Scheduled' | 'Completed' | 'Cancelled';
+export type Recommendation = 'StrongNo' | 'No' | 'Yes' | 'StrongYes';
+export const RECOMMENDATIONS: { value: Recommendation; label: string }[] = [
+  { value: 'StrongYes', label: 'Strong yes' },
+  { value: 'Yes', label: 'Yes' },
+  { value: 'No', label: 'No' },
+  { value: 'StrongNo', label: 'Strong no' },
+];
+
+export interface InterviewerItem {
+  id: string;
+  name: string;
+  submitted: boolean;
+}
+
+export interface ScorecardItem {
+  id: string;
+  interviewerId: string;
+  interviewerName: string;
+  recommendation: Recommendation;
+  ratings: Record<string, number>;
+  notes: string | null;
+  submittedAt: string;
+}
+
+export interface InterviewItem {
+  id: string;
+  applicationId: string;
+  applicationName: string;
+  jobTitle: string | null;
+  scheduledAt: string;
+  durationMinutes: number;
+  kind: InterviewKind;
+  location: string | null;
+  notes: string | null;
+  status: InterviewStatus;
+  organizerName: string;
+  interviewers: InterviewerItem[];
+  iAmInterviewer: boolean;
+  myScorecard: ScorecardItem | null;
+  scorecards: ScorecardItem[];
+  canEdit: boolean;
+}
+
+export interface InterviewRequest {
+  applicationId: string;
+  scheduledAt: string;
+  durationMinutes: number;
+  kind: InterviewKind;
+  location: string | null;
+  notes: string | null;
+  interviewerIds: string[];
+  emailCandidate: boolean;
+}
+
+export interface InterviewSaved {
+  interview: InterviewItem;
+  emailNote: string | null;
+}
+
+export interface MyInterviews {
+  upcoming: InterviewItem[];
+  awaitingFeedback: InterviewItem[];
+}
+
+export interface ScorecardRequest {
+  recommendation: Recommendation;
+  ratings: Record<string, number>;
+  notes: string | null;
+}
+
+export interface FunnelStage {
+  key: string;
+  label: string;
+  color: string;
+  current: number;
+  reached: number;
+  conversionToNext: number | null;
+  averageDaysInStage: number | null;
+}
+
+export interface SourceRow {
+  source: string;
+  applications: number;
+  hired: number;
+  hireRate: number;
+}
+
+export interface JobRow {
+  id: string;
+  title: string;
+  applications: number;
+  open: number;
+  hired: number;
+  byStage: Record<string, number>;
+}
+
+export interface HiringAnalytics {
+  days: number;
+  applications: number;
+  open: number;
+  hired: number;
+  rejected: number;
+  averageDaysToHire: number | null;
+  medianDaysToHire: number | null;
+  funnel: FunnelStage[];
+  sources: SourceRow[];
+  jobs: JobRow[];
+  interviewsNext7Days: number;
+  feedbackOutstanding: number;
+}

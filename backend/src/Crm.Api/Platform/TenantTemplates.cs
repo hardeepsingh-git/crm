@@ -21,7 +21,7 @@ public static class TenantTemplates
     [
         new(Sales, "Sales CRM", "Accounts, contacts, leads, opportunity pipeline and sales automation."),
         new(HelpDesk, "Help Desk", "Customers, contacts and a ticket pipeline with priority-based alerts."),
-        new(Recruitment, "Recruitment (ATS)", "Job openings, a public careers page, a candidate talent pool, an application pipeline per job, candidate emails and interview reminders."),
+        new(Recruitment, "Recruitment (ATS)", "Job openings, a public careers page, a candidate talent pool, an application pipeline per job, interviews with scorecards, hiring analytics and candidate emails."),
         new(Blank, "Blank", "Standard objects and roles only. Build your own configuration."),
     ];
 
@@ -39,7 +39,7 @@ public static class TenantTemplates
     public static readonly string[] DefaultLeadSources = ["Web", "Referral", "Event", "ColdCall", "Advertisement", "Partner", "Other"];
 
     /// <summary>Latest revision of each template. Raising it makes startup apply the template's new pieces to existing tenants once.</summary>
-    public static int CurrentVersion(string template) => template == Recruitment ? 4 : 1;
+    public static int CurrentVersion(string template) => template == Recruitment ? 5 : 1;
 
     /// <summary>
     /// Brings tenants created from an older template revision up to date. Only missing objects, fields, stages and rules are
@@ -198,6 +198,7 @@ public static class TenantTemplates
                     nameLabel: "Candidate name", description: "A candidate applying for a job opening, moving through your hiring stages.");
                 Object(ObjectKeys.Activity, "Activity", "Activities", "event_note", 90);
                 Stages(ObjectKeys.Opportunity, salesStages);
+                Picklist("interview.criteria", ["Skills", "Experience", "Communication", "Problem solving", "Culture fit"]);
                 Stages("application",
                     ("applied", "Applied", 10, StageCategory.Open, "#1e88e5"),
                     ("screening", "Screening", 25, StageCategory.Open, "#00897b"),

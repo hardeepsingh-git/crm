@@ -11,6 +11,7 @@ PostgreSQL database **`CRM`**, schema `public`. The schema is created by these E
 | `20261001050127_Phase1RecruitmentCore` | `Tenants.TemplateVersion` (existing tenants default to 1) and `FieldDefinitions.IsUnique` (default false). No data changes; the recruitment template upgrade then runs at startup (see section 6). |
 | `20261001061040_Phase2EmailAndScheduling` | New tables `EmailTemplates`, `OutboundEmails`, `ScheduledRuleRuns`; `AutomationRules.ScheduleField` and `ScheduleOffsetMinutes` (default 0). No data changes; recruitment tenants then get template v3 at startup. |
 | `20261001071143_Phase3CareersAndExport` | `Tenants.CareersEnabled` (default false) and `Tenants.CareersIntro`. No data changes; recruitment tenants then get template v4 at startup. |
+| `20261001081829_Phase4InterviewsAndAnalytics` | New tables `Interviews`, `InterviewParticipants`, `Scorecards`. No changes to existing tables; recruitment tenants then get template v5 at startup. |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -41,6 +42,10 @@ erDiagram
     Leads |o--o{ Activities : CASCADE
     Opportunities |o--o{ Activities : CASCADE
     CustomRecords |o--o{ Activities : CASCADE
+    CustomRecords ||--o{ Interviews : "application (CASCADE)"
+    Interviews ||--o{ InterviewParticipants : CASCADE
+    AspNetUsers ||--o{ InterviewParticipants : "interviewer (CASCADE)"
+    Interviews ||--o{ Scorecards : CASCADE
     AspNetUsers ||--o{ Notifications : receives
     AspNetUsers ||--o{ RefreshTokens : has
     AspNetUsers ||--o{ VerificationCodes : "CASCADE"
@@ -74,7 +79,7 @@ erDiagram
 | `ObjectDefinitions` | `TenantId`, `Key`(40, unique per tenant), `Label`, `PluralLabel`, `Icon`, `Description`, `NameLabel`, `IsStandard`, `IsActive`, `HasPipeline`, `SortOrder` | Standard keys: `account`, `contact`, `lead`, `opportunity`, `activity` |
 | `FieldDefinitions` | `TenantId`, `ObjectKey`, `Key` (unique per tenant + object), `Label`, `Type`, `IsRequired`, `IsUnique`, `Options` jsonb, `LookupObjectKey`, `MaxLength`, `Min`, `Max`, `HelpText`, `ShowInList`, `SortOrder` | `IsUnique`: no two records of the object may share a value (Text, Email, Phone, Url) |
 | `PipelineStages` | `TenantId`, `ObjectKey`, `Key`(64, unique per tenant + object), `Label`, `Category` (Open/Won/Lost), `Probability`, `Color`, `SortOrder` | |
-| `Picklists` | `TenantId`, `Key`(64, unique per tenant), `Options` jsonb | `account.industry`, `lead.source` |
+| `Picklists` | `TenantId`, `Key`(64, unique per tenant), `Options` jsonb | `account.industry`, `lead.source`; recruitment tenants also have `interview.criteria` (what scorecards rate) |
 
 ### 2.4 Business records
 All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NULL DEFAULT '{}'`**, `CreatedAt`, `UpdatedAt`, and an index on `(TenantId, OwnerId)`.
@@ -99,6 +104,13 @@ All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NU
 | `AuditLogs` | `TenantId`, `EntityType`(64, the object key), `EntityId`, `EntityName`, `Action` (Created/Updated/Deleted/Exported), `UserId`, `UserName`, `Timestamp`, `Changes` jsonb | Indexes `(TenantId, EntityId)`, `(TenantId, Timestamp)`. *Exported* rows have an empty `EntityId`, a count as `EntityName` and the filters in `Changes`. |
 | `Attachments` | `TenantId`, `ObjectKey`(40), `RecordId`, `FileName`(255), `ContentType`(100), `Size`, `StorageKey`(200), `UploadedById`, `UploadedByName`, `CreatedAt` | Index `(TenantId, ObjectKey, RecordId)`. The bytes live in file storage under `StorageKey` (`<tenant>/<yyyyMM>/<id>`). Rows are removed with their record. |
 
+### 2.6 Interviews
+| Table | Key columns | Notes |
+|---|---|---|
+| `Interviews` | `TenantId`, `ApplicationId` FK to `CustomRecords` (CASCADE), `ScheduledAt`, `DurationMinutes`, `Kind` (Phone/Video/Onsite), `Location`(500), `Notes`(2000), `Status` (Scheduled/Completed/Cancelled), `OrganizerId`, `CreatedAt`, `UpdatedAt` | Indexes `(TenantId, ApplicationId)`, `(TenantId, ScheduledAt)`. The application's `interview_date` field mirrors its next scheduled interview. |
+| `InterviewParticipants` | PK `(InterviewId, UserId)`, both FK CASCADE; `ActivityId` | The interviewers. `ActivityId` is the *Meeting* activity on the interviewer's calendar (removed when they're taken off or the interview is cancelled). |
+| `Scorecards` | `TenantId`, `InterviewId` FK (CASCADE), `InterviewerId`, `Recommendation` (StrongNo/No/Yes/StrongYes), `Ratings` jsonb, `Notes`(4000), `SubmittedAt` | **Unique `(InterviewId, InterviewerId)`**: one scorecard per interviewer; resubmitting replaces it. |
+
 ## 3. JSON columns
 
 ```jsonc
@@ -111,6 +123,9 @@ All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NU
 // AutomationRules.Conditions / Actions
 [{ "field": "cf.priority", "operator": "Equals", "value": "Urgent" }]
 [{ "type": "CreateTask", "subject": "Call {{name}}", "dueInDays": 1, "priority": "High", "assignTo": "owner" }]
+
+// Scorecards.Ratings: criterion (from the interview.criteria picklist) → 1..5
+{ "Skills": 4, "Communication": 5 }
 ```
 
 Typed values in JSON: numbers are numbers (normalised, no trailing zeros), yes/no are booleans, dates are `yyyy-MM-dd`, date/times are ISO UTC, multi-picklists are arrays and lookups are record ids.
@@ -141,10 +156,12 @@ CREATE INDEX IF NOT EXISTS "IX_CustomRecords_CustomFields" ON "CustomRecords" US
 | PermissionScope | None, Own, Group, All |
 | FieldType | Text, TextArea, Number, Currency, Date, DateTime, Boolean, Picklist, MultiPicklist, Email, Phone, Url, Lookup |
 | StageCategory | Open, Won, Lost |
-| AutomationTrigger | Created, Updated, StageChanged |
+| AutomationTrigger | Created, Updated, StageChanged, DateReached |
 | ConditionOperator | Equals, NotEquals, GreaterThan, LessThan, Contains, IsEmpty, IsNotEmpty, Changed |
-| AutomationActionType | CreateTask, Notify, SetField |
-| AuditAction | Created, Updated, Deleted |
+| AutomationActionType | CreateTask, Notify, SetField, SendEmail |
+| AuditAction | Created, Updated, Deleted, Exported |
+| InterviewKind / InterviewStatus | Phone, Video, Onsite / Scheduled, Completed, Cancelled |
+| Recommendation | StrongNo, No, Yes, StrongYes |
 | LeadStatus | New, Contacted, Qualified, Unqualified, Converted |
 | ActivityType / ActivityPriority | Task, Call, Meeting, Email, Note / Low, Normal, High |
 
@@ -180,6 +197,8 @@ On upgraded tenants, the application's candidate link is optional, so existing a
 Recruitment **v3** adds four email templates (*Application received*, *Interview invitation*, *Application outcome*, *Job offer*) and four rules: *Interview reminder* (notify the owner a day before the interview, on), *Chase stalled applications* (task 7 days after the last update, off), and *Acknowledge new applications* and *Email rejected candidates* (email the candidate, **off** until an admin reviews the wording).
 
 Recruitment **v4** adds the careers page fields: *Show on careers page* (`position.publish`, yes/no), *Cover note* (`application.cover_note`) and *Privacy consent* (`candidate.privacy_consent`, date/time). Upgraded tenants start with no job published and the careers page off.
+
+Recruitment **v5** adds the `interview.criteria` picklist (*Skills*, *Experience*, *Communication*, *Problem solving*, *Culture fit*) used by interview scorecards. Administrators can change it under **Settings → Picklists**; existing scorecards keep their ratings.
 
 ## 7. Schema changes
 

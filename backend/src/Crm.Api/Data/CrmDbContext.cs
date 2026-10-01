@@ -44,6 +44,9 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     public DbSet<EmailTemplate> EmailTemplates => Set<EmailTemplate>();
     public DbSet<OutboundEmail> OutboundEmails => Set<OutboundEmail>();
     public DbSet<ScheduledRuleRun> ScheduledRuleRuns => Set<ScheduledRuleRun>();
+    public DbSet<Interview> Interviews => Set<Interview>();
+    public DbSet<InterviewParticipant> InterviewParticipants => Set<InterviewParticipant>();
+    public DbSet<Scorecard> Scorecards => Set<Scorecard>();
 
     /// <summary>Referenced by the global query filters; EF evaluates it per query.</summary>
     public Guid? CurrentTenantId => tenant.TenantId;
@@ -88,6 +91,9 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         builder.Properties<RegistrationStatus>().HaveConversion<string>().HaveMaxLength(32);
         builder.Properties<VerificationChannel>().HaveConversion<string>().HaveMaxLength(16);
         builder.Properties<OutboundEmailStatus>().HaveConversion<string>().HaveMaxLength(16);
+        builder.Properties<InterviewKind>().HaveConversion<string>().HaveMaxLength(16);
+        builder.Properties<InterviewStatus>().HaveConversion<string>().HaveMaxLength(16);
+        builder.Properties<Recommendation>().HaveConversion<string>().HaveMaxLength(16);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -312,6 +318,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         Picklist => "picklist",
         AutomationRule => "automation_rule",
         EmailTemplate => "email_template",
+        Interview => "interview",
+        Scorecard => "scorecard",
         _ => entity.GetType().Name,
     };
 
@@ -332,6 +340,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         Picklist p => p.Key,
         AutomationRule r => r.Name,
         EmailTemplate t => t.Name,
+        Interview i => $"{i.Kind} interview {i.ScheduledAt:yyyy-MM-dd HH:mm} UTC",
+        Scorecard s => s.Recommendation.ToString(),
         _ => null,
     };
 }

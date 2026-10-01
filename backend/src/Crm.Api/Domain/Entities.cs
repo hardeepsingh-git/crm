@@ -370,6 +370,44 @@ public class ScheduledRuleRun : ITenantEntity
     public bool Matched { get; set; }
 }
 
+/// <summary>An interview for an application (a record of the recruitment template's <c>application</c> object).</summary>
+public class Interview : AuditableEntity
+{
+    public Guid ApplicationId { get; set; }
+    public CustomRecord? Application { get; set; }
+    public DateTime ScheduledAt { get; set; }
+    public int DurationMinutes { get; set; } = 60;
+    public InterviewKind Kind { get; set; } = InterviewKind.Video;
+    /// <summary>Address or meeting link.</summary>
+    public string? Location { get; set; }
+    public string? Notes { get; set; }
+    public InterviewStatus Status { get; set; } = InterviewStatus.Scheduled;
+    public Guid OrganizerId { get; set; }
+    public List<InterviewParticipant> Participants { get; set; } = [];
+    public List<Scorecard> Scorecards { get; set; } = [];
+}
+
+public class InterviewParticipant
+{
+    public Guid InterviewId { get; set; }
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+    /// <summary>The Meeting activity on the interviewer's timeline for this interview.</summary>
+    public Guid? ActivityId { get; set; }
+}
+
+/// <summary>One interviewer's feedback on an interview; others' scorecards stay hidden from an interviewer until they submit theirs.</summary>
+public class Scorecard : AuditableEntity
+{
+    public Guid InterviewId { get; set; }
+    public Guid InterviewerId { get; set; }
+    public Recommendation Recommendation { get; set; }
+    /// <summary>JSON object: criterion -> rating 1..5.</summary>
+    public string Ratings { get; set; } = "{}";
+    public string? Notes { get; set; }
+    public DateTime SubmittedAt { get; set; }
+}
+
 public class Notification : ITenantEntity
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();

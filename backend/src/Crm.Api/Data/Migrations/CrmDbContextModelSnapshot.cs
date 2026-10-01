@@ -796,6 +796,80 @@ namespace Crm.Api.Data.Migrations
                     b.ToTable("GroupRoles");
                 });
 
+            modelBuilder.Entity("Crm.Api.Domain.Interview", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ApplicationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DurationMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("OrganizerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApplicationId");
+
+                    b.HasIndex("TenantId", "ApplicationId");
+
+                    b.HasIndex("TenantId", "ScheduledAt");
+
+                    b.ToTable("Interviews");
+                });
+
+            modelBuilder.Entity("Crm.Api.Domain.InterviewParticipant", b =>
+                {
+                    b.Property<Guid>("InterviewId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ActivityId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("InterviewId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("InterviewParticipants");
+                });
+
             modelBuilder.Entity("Crm.Api.Domain.Lead", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1426,6 +1500,53 @@ namespace Crm.Api.Data.Migrations
                     b.ToTable("ScheduledRuleRuns");
                 });
 
+            modelBuilder.Entity("Crm.Api.Domain.Scorecard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("InterviewId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("InterviewerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("Ratings")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValueSql("'{}'");
+
+                    b.Property<string>("Recommendation")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InterviewId", "InterviewerId")
+                        .IsUnique();
+
+                    b.ToTable("Scorecards");
+                });
+
             modelBuilder.Entity("Crm.Api.Domain.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1737,6 +1858,34 @@ namespace Crm.Api.Data.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("Crm.Api.Domain.Interview", b =>
+                {
+                    b.HasOne("Crm.Api.Domain.CustomRecord", "Application")
+                        .WithMany()
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Application");
+                });
+
+            modelBuilder.Entity("Crm.Api.Domain.InterviewParticipant", b =>
+                {
+                    b.HasOne("Crm.Api.Domain.Interview", null)
+                        .WithMany("Participants")
+                        .HasForeignKey("InterviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Crm.Api.Domain.AppUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Crm.Api.Domain.Lead", b =>
                 {
                     b.HasOne("Crm.Api.Domain.Account", "ConvertedAccount")
@@ -1826,6 +1975,15 @@ namespace Crm.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Crm.Api.Domain.Scorecard", b =>
+                {
+                    b.HasOne("Crm.Api.Domain.Interview", null)
+                        .WithMany("Scorecards")
+                        .HasForeignKey("InterviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Crm.Api.Domain.UserRole", b =>
                 {
                     b.HasOne("Crm.Api.Domain.Role", "Role")
@@ -1893,6 +2051,13 @@ namespace Crm.Api.Data.Migrations
                     b.Navigation("Members");
 
                     b.Navigation("Roles");
+                });
+
+            modelBuilder.Entity("Crm.Api.Domain.Interview", b =>
+                {
+                    b.Navigation("Participants");
+
+                    b.Navigation("Scorecards");
                 });
 
             modelBuilder.Entity("Crm.Api.Domain.Role", b =>

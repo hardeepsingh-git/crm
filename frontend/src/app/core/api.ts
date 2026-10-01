@@ -43,6 +43,10 @@ import {
   TenantItem,
   UserItem,
   UserLookup,
+  InterviewItem,
+  InterviewRequest,
+  InterviewSaved,
+  ScorecardRequest,
   VerificationChannel,
   VerifyResponse,
 } from './models';
@@ -68,7 +72,8 @@ export function saveBlob(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url));
 }
 
-/** Keeps the last successful value while a resource reloads, avoiding table flicker. */export function stableValue<T>(resource: Resource<T | undefined>) {
+/** Keeps the last successful value while a resource reloads, avoiding table flicker. */
+export function stableValue<T>(resource: Resource<T | undefined>) {
   return linkedSignal<T | undefined, T | undefined>({
     source: () => (resource.hasValue() ? resource.value() : undefined),
     computation: (value, previous) => value ?? previous?.value,
@@ -399,6 +404,24 @@ export class CrmApi {
 
   runImport(objectKey: string, body: { csv: string; mapping: Record<string, string | null>; dryRun: boolean; runAutomation: boolean }): Observable<ImportResult> {
     return this.http.post<ImportResult>(`/api/import/${objectKey}`, body);
+  }
+
+  // ---------- Interviews ----------
+
+  saveInterview(id: string | null, body: InterviewRequest): Observable<InterviewSaved> {
+    return id ? this.http.put<InterviewSaved>(`/api/interviews/${id}`, body) : this.http.post<InterviewSaved>('/api/interviews', body);
+  }
+
+  setInterviewStatus(id: string, action: 'cancel' | 'complete'): Observable<InterviewItem> {
+    return this.http.post<InterviewItem>(`/api/interviews/${id}/${action}`, null);
+  }
+
+  submitScorecard(id: string, body: ScorecardRequest): Observable<InterviewItem> {
+    return this.http.put<InterviewItem>(`/api/interviews/${id}/scorecard`, body);
+  }
+
+  downloadInterviewCalendar(id: string): Observable<void> {
+    return this.http.get(`/api/interviews/${id}/ics`, { responseType: 'blob' }).pipe(map((blob) => saveBlob(blob, 'interview.ics')));
   }
 }
 

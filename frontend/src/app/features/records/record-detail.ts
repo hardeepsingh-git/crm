@@ -17,12 +17,13 @@ import { AttachmentsPanel } from '../../shared/attachments-panel';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip, StagePath } from '../../shared/record-widgets';
+import { InterviewsPanel } from '../recruiting/interviews';
 import { RecordFormDialog } from './record-form-dialog';
 import { RelatedRecords } from './related-records';
 
 @Component({
   selector: 'app-record-detail',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, RelatedRecords, StageChip, StagePath],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, InterviewsPanel, RecordHistory, RelatedRecords, StageChip, StagePath],
   template: `
     @if (record.isLoading() && !r()) { <mat-progress-bar mode="indeterminate" /> }
     @if (record.error()) { <p class="muted">Record not found or you do not have access to it.</p> }
@@ -66,10 +67,15 @@ import { RelatedRecords } from './related-records';
         </mat-card>
         @if (auth.can('activity', 'read')) {
           <mat-card appearance="outlined"><mat-card-content>
-            <app-activity-panel filterBy="customRecordId" [links]="{ customRecordId: r.id }" [customObjectKey]="obj.key" />
+            <app-activity-panel filterBy="customRecordId" [links]="{ customRecordId: r.id }" [customObjectKey]="obj.key" [version]="version()" />
           </mat-card-content></mat-card>
         }
       </div>
+      @if (obj.key === 'application' && obj.hasPipeline) {
+        <mat-card appearance="outlined" class="interviews"><mat-card-content>
+          <app-interviews-panel [applicationId]="r.id" [applicationName]="r.name" [ownerId]="r.ownerId" (updated)="interviewsChanged()" />
+        </mat-card-content></mat-card>
+      }
       <app-related-records [objectKey]="obj.key" [recordId]="r.id" [recordName]="r.name" />
     }
   `,
@@ -94,6 +100,12 @@ export class RecordDetailPage {
       this.record.set(updated);
       this.version.update((v) => v + 1);
     });
+  }
+
+  /** Interviews change the record's next interview date, activities and history. */
+  interviewsChanged(): void {
+    this.record.reload();
+    this.version.update((v) => v + 1);
   }
 
   edit(r: RecordItem): void {

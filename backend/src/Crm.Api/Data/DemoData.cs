@@ -293,7 +293,49 @@ public static class DemoData
                 }.ToJsonString(),
             });
         }
+        await SeedInterviewsAsync(db, applications, rnd, now, ct);
         return [.. jobs, .. people, .. applications];
+    }
+
+    /// <summary>A completed interview with a scorecard for applications past screening, and an upcoming one for those in Interview.</summary>
+    private static async Task SeedInterviewsAsync(CrmDbContext db, List<CustomRecord> applications, Random rnd, DateTime now, CancellationToken ct)
+    {
+        var criteria = Cf.ParseStrings(await db.Picklists.Where(p => p.Key == "interview.criteria").Select(p => p.Options).FirstOrDefaultAsync(ct));
+        string[] notes = ["Clear communicator with solid fundamentals.", "Strong problem solving; would like more depth on system design.", "Great culture fit and very motivated."];
+        foreach (var app in applications.Where(a => a.Stage is "interview" or "offer" or "hired"))
+        {
+            var held = new Interview
+            {
+                ApplicationId = app.Id, ScheduledAt = now.Date.AddDays(-rnd.Next(2, 15)).AddHours(rnd.Next(9, 16)), DurationMinutes = 45,
+                Kind = InterviewKind.Video, Location = "https://meet.example.com/screen", Status = InterviewStatus.Completed, OrganizerId = app.OwnerId,
+            };
+            held.Participants.Add(new InterviewParticipant { UserId = app.OwnerId });
+            held.Scorecards.Add(new Scorecard
+            {
+                InterviewerId = app.OwnerId, Recommendation = app.Stage == "interview" ? Recommendation.Yes : Recommendation.StrongYes,
+                Ratings = new JsonObject(criteria.Select(c => KeyValuePair.Create(c, (JsonNode?)JsonValue.Create(rnd.Next(3, 6))))).ToJsonString(),
+                Notes = notes[rnd.Next(notes.Length)], SubmittedAt = held.ScheduledAt.AddHours(2),
+            });
+            db.Interviews.Add(held);
+            if (app.Stage != "interview") continue;
+
+            var next = new Interview
+            {
+                ApplicationId = app.Id, ScheduledAt = now.Date.AddDays(rnd.Next(1, 8)).AddHours(rnd.Next(9, 16)), DurationMinutes = 60,
+                Kind = InterviewKind.Onsite, Location = "Head office, level 3", OrganizerId = app.OwnerId,
+            };
+            var meeting = new Activity
+            {
+                Type = ActivityType.Meeting, OwnerId = app.OwnerId, CustomRecord = app, DueAt = next.ScheduledAt, Priority = ActivityPriority.High,
+                Subject = $"Onsite interview: {app.Name}", Description = "60 minutes, onsite\nWhere: Head office, level 3",
+            };
+            db.Activities.Add(meeting);
+            next.Participants.Add(new InterviewParticipant { UserId = app.OwnerId, ActivityId = meeting.Id });
+            db.Interviews.Add(next);
+            var values = Cf.Parse(app.CustomFields);
+            values["interview_date"] = next.ScheduledAt.ToString("o", System.Globalization.CultureInfo.InvariantCulture);
+            app.CustomFields = values.ToJsonString();
+        }
     }
 
     private static string SampleCustomFields(List<FieldDefinition> fields, string objectKey, Random rnd,

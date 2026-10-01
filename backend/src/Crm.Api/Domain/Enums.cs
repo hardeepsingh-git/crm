@@ -25,6 +25,12 @@ public enum AutomationActionType { CreateTask, Notify, SetField, SendEmail }
 
 public enum OutboundEmailStatus { Pending, Sent, Failed, Cancelled }
 
+public enum InterviewKind { Phone, Video, Onsite }
+
+public enum InterviewStatus { Scheduled, Completed, Cancelled }
+
+public enum Recommendation { StrongNo, No, Yes, StrongYes }
+
 public enum AuditAction { Created, Updated, Deleted, Exported }
 
 /// <summary>Only Approved users may sign in; the other states belong to self-registrations still in progress.</summary>

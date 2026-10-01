@@ -198,6 +198,35 @@ Applying:
 - **Application**: one open application per candidate and job (a repeat adds the new CV and an "Applied again" note), first open stage, source *Website*, cover note, owned by the job's owner, who gets a notification. Automation rules run as usual (e.g. *Acknowledge new applications*). Changes are audited as *Careers site*.
 - The response is the same for new, repeat and honeypot submissions, so the form can't be used to find out who has applied.
 
+## Interviews (`/api/interviews`)
+
+Interviews belong to an **application** (recruitment tenants). Reading needs read access to the application; scheduling, rescheduling, cancelling and completing need **update** access to it (403 otherwise; 404 for other tenants' records).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `?applicationId=` | `InterviewItem[]`, newest first |
+| GET | `/mine` | `{ upcoming, awaitingFeedback }`: the caller's scheduled interviews from an hour ago onwards, and earlier ones (not cancelled) still without their scorecard. Only applications the caller can read. |
+| POST | `/` | `{ applicationId, scheduledAt, durationMinutes, kind, location, notes, interviewerIds[], emailCandidate }` → 201 `{ interview, emailNote }` |
+| PUT | `/{id}` | Same body; reschedule or change interviewers → `{ interview, emailNote }` |
+| POST | `/{id}/cancel`, `/{id}/complete` | Only while *Scheduled* (400 otherwise) → `InterviewItem` |
+| PUT | `/{id}/scorecard` | `{ recommendation, ratings: { criterion: 1..5 }, notes }`. **Interviewers only** (403), not on cancelled interviews. Resubmitting replaces the caller's card. → `InterviewItem` |
+| GET | `/{id}/ics` | `text/calendar` (RFC 5545) for calendar apps; cancelled interviews have `STATUS:CANCELLED` |
+
+`InterviewItem`: `id, applicationId, applicationName, jobTitle, scheduledAt, durationMinutes, kind (Phone|Video|Onsite), location, notes, status (Scheduled|Completed|Cancelled), organizerName, interviewers [{ id, name, submitted }], iAmInterviewer, myScorecard, scorecards [{ interviewerId, interviewerName, recommendation, ratings, notes, submittedAt }], canEdit`.
+
+- **Validation**: `scheduledAt` from 30 days ago to a year ahead; 15–480 minutes; 1–10 active users of the organisation as interviewers; a *Video* location must be an http(s) link. Ratings must be 1–5 on the current `interview.criteria` picklist values.
+- **Side effects**: each interviewer gets a *Meeting* activity on the application (due at the interview, high priority) and a notification; rescheduling moves the activities and notifies them, removing an interviewer deletes theirs, cancelling deletes all. The application's `interview_date` is kept equal to its next scheduled interview, so the *Interview reminder* rule follows reschedules. A submitted scorecard completes the interviewer's activity and notifies the organiser (once).
+- **Candidate email** (`emailCandidate: true`): queues the *Interview invitation* template through the outbox, with the same rules as user-sent email. When it can't be sent (no template, no candidate address, daily limit) the interview is still saved and `emailNote` says why.
+- **Blind feedback**: an interviewer sees colleagues' scorecards only after submitting their own (`interviewers[].submitted` shows who has). Others with update access to the application see all scorecards; read-only users see none.
+
+## Hiring analytics (`/api/recruiting/analytics`, application:read)
+
+`GET ?days=90&positionId=` (days 7–730) → `{ days, applications, open, hired, rejected, averageDaysToHire, medianDaysToHire, funnel[], sources[], jobs[], interviewsNext7Days, feedbackOutstanding }` for applications **created** in the period that the caller can read (at most 20,000).
+
+- `funnel[]`: per stage `{ key, label, color, current, reached, conversionToNext, averageDaysInStage }`. *Reached* counts applications that got at least that far (from the stage history in the audit log; hires count as passing every open stage). *Conversion* is the share that reached the next open stage, or were hired from the last one.
+- `sources[]`: `{ source, applications, hired, hireRate }` by the application's *source*. `jobs[]`: `{ id, title, applications, open, hired, byStage }`.
+- Time to hire: from creation to being closed in a *Won* stage.
+
 ## Diagnostics
 
 | Method | Path | Notes |

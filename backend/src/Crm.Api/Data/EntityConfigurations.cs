@@ -306,6 +306,40 @@ public class ScheduledRuleRunConfiguration : IEntityTypeConfiguration<ScheduledR
     }
 }
 
+public class InterviewConfiguration : IEntityTypeConfiguration<Interview>
+{
+    public void Configure(EntityTypeBuilder<Interview> b)
+    {
+        b.Property(x => x.Location).HasMaxLength(500);
+        b.Property(x => x.Notes).HasMaxLength(2000);
+        b.HasOne(x => x.Application).WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(x => x.Participants).WithOne().HasForeignKey(p => p.InterviewId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(x => x.Scorecards).WithOne().HasForeignKey(s => s.InterviewId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => new { x.TenantId, x.ApplicationId });
+        b.HasIndex(x => new { x.TenantId, x.ScheduledAt });
+    }
+}
+
+public class InterviewParticipantConfiguration : IEntityTypeConfiguration<InterviewParticipant>
+{
+    public void Configure(EntityTypeBuilder<InterviewParticipant> b)
+    {
+        b.HasKey(x => new { x.InterviewId, x.UserId });
+        b.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => x.UserId);
+    }
+}
+
+public class ScorecardConfiguration : IEntityTypeConfiguration<Scorecard>
+{
+    public void Configure(EntityTypeBuilder<Scorecard> b)
+    {
+        b.Property(x => x.Ratings).IsJson();
+        b.Property(x => x.Notes).HasMaxLength(4000);
+        b.HasIndex(x => new { x.InterviewId, x.InterviewerId }).IsUnique();
+    }
+}
+
 public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
 {
     public void Configure(EntityTypeBuilder<Notification> b)

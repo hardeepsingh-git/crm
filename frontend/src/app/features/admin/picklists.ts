@@ -13,11 +13,14 @@ interface PicklistDef {
   key: string;
   title: string;
   hint: string;
+  /** Shown only when this object is active. */
+  requires?: string;
 }
 
 const PICKLISTS: PicklistDef[] = [
   { key: 'account.industry', title: 'Account industries', hint: 'Options for the Industry field on accounts. Leave empty to allow free text.' },
   { key: 'lead.source', title: 'Lead sources', hint: 'Where leads come from. Used on leads and in the dashboard.' },
+  { key: 'interview.criteria', title: 'Interview criteria', hint: 'What interviewers rate from 1 to 5 on their scorecards.', requires: 'application' },
 ];
 
 @Component({
@@ -48,9 +51,9 @@ export class Picklists {
   private readonly meta = inject(MetadataService);
   private readonly api = inject(CrmApi);
   private readonly notify = inject(NotifyService);
-  readonly picklists = PICKLISTS;
+  readonly picklists = PICKLISTS.filter((p) => !p.requires || this.meta.isActive(p.requires));
   readonly saving = signal<string | null>(null);
-  readonly values: Record<string, string> = Object.fromEntries(PICKLISTS.map((p) => [p.key, this.meta.picklist(p.key).join('\n')]));
+  readonly values: Record<string, string> = Object.fromEntries(this.picklists.map((p) => [p.key, this.meta.picklist(p.key).join('\n')]));
 
   save(p: PicklistDef): void {
     const options = this.values[p.key].split('\n').map((o) => o.trim()).filter((o) => o);

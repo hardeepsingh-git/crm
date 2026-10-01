@@ -218,8 +218,22 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | EXP-2 | Readable files: field labels as headers (re-importable), linked records by name, stage labels; protected against CSV/formula injection; Excel-friendly UTF-8. | M |
 | EXP-3 | Every export is recorded in the audit log with its filters; very large exports are refused with advice to filter. | M |
 
-### 5.15 Future (backlog)
-Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Cloud file storage · Résumé parsing · Careers page branding (logo, colours) and CAPTCHA · Candidate portal and interview scheduling · Offer letters · Export permission per role · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
+### 5.15 Phase 4: interviews, scorecards and hiring analytics (INT, SCORE, ANL)
+| ID | Requirement | Pri |
+|---|---|---|
+| INT-1 | **Schedule interviews** on an application: date and time, duration, type (phone, video, onsite), location or meeting link, notes and 1–10 interviewers from the organisation. Needs edit access to the application. | M |
+| INT-2 | Each interviewer gets a meeting on their activities and a notification. Rescheduling, changing interviewers and cancelling keep both in step. The application's *Next interview* date always shows the next scheduled interview, so interview reminders follow reschedules. | M |
+| INT-3 | Optionally **email the candidate** an invitation from the *Interview invitation* template, through the outbox and its limits; the user is told when it can't be sent. | M |
+| INT-4 | **My interviews**: each user's upcoming interviews and those still waiting for their feedback, with calendar (.ics) downloads. | M |
+| SCORE-1 | **Scorecards**: each interviewer gives an overall recommendation (strong yes to strong no), 1–5 ratings on the organisation's interview criteria, and notes. Only interviewers can submit; one card each, editable. | M |
+| SCORE-2 | **Blind feedback**: interviewers see colleagues' scorecards only after submitting their own. Hiring managers (edit access) see all; read-only users see none. The organiser is notified of new feedback. | M |
+| SCORE-3 | Administrators manage the **interview criteria** picklist. | S |
+| ANL-1 | **Hiring analytics**: applications, hires, rejections, average and median time to hire, interviews this week and outstanding feedback, for 30/90/180/365 days and optionally one job. | M |
+| ANL-2 | **Funnel** from the stage history: how many applications reached each stage, conversion to the next stage and average days in stage; plus **source** quality (hire rate per source) and a per-job stage breakdown. Limited to the applications the user can read. | M |
+| ATS-7 | Recruitment template v5 adds the interview criteria; demo data includes interviews and scorecards. | S |
+
+### 5.16 Future (backlog)
+Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Cloud file storage · Résumé parsing · Careers page branding (logo, colours) and CAPTCHA · Candidate portal and self-scheduling of interview slots · Calendar sync (Outlook/Google) · Offer letters · Export permission per role · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
 
 ## 6. Non-functional requirements
 
@@ -252,9 +266,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (74), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits), date-based rules, the careers page and CSV export
-- [x] UI unit tests green (60), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log, the date-rule editor, careers pages and export
-- [x] Live smoke test green against PostgreSQL (60 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox, date-based rules, an anonymous careers application and CSV export)
+- [x] API integration tests green (78), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits), date-based rules, the careers page, CSV export, interviews, blind scorecards and hiring analytics
+- [x] UI unit tests green (68), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log, the date-rule editor, careers pages, export, interview scheduling, scorecards and the analytics page
+- [x] Live smoke test green against PostgreSQL (62 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox, date-based rules, an anonymous careers application, CSV export, interviews with a candidate invitation and scorecard, and hiring analytics)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

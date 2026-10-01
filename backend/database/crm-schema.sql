@@ -1527,3 +1527,105 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE TABLE "Interviews" (
+        "Id" uuid NOT NULL,
+        "ApplicationId" uuid NOT NULL,
+        "ScheduledAt" timestamp with time zone NOT NULL,
+        "DurationMinutes" integer NOT NULL,
+        "Kind" character varying(16) NOT NULL,
+        "Location" character varying(500),
+        "Notes" character varying(2000),
+        "Status" character varying(16) NOT NULL,
+        "OrganizerId" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Interviews" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_Interviews_CustomRecords_ApplicationId" FOREIGN KEY ("ApplicationId") REFERENCES "CustomRecords" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE TABLE "InterviewParticipants" (
+        "InterviewId" uuid NOT NULL,
+        "UserId" uuid NOT NULL,
+        "ActivityId" uuid,
+        CONSTRAINT "PK_InterviewParticipants" PRIMARY KEY ("InterviewId", "UserId"),
+        CONSTRAINT "FK_InterviewParticipants_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE,
+        CONSTRAINT "FK_InterviewParticipants_Interviews_InterviewId" FOREIGN KEY ("InterviewId") REFERENCES "Interviews" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE TABLE "Scorecards" (
+        "Id" uuid NOT NULL,
+        "InterviewId" uuid NOT NULL,
+        "InterviewerId" uuid NOT NULL,
+        "Recommendation" character varying(16) NOT NULL,
+        "Ratings" jsonb NOT NULL DEFAULT ('{}'),
+        "Notes" character varying(4000),
+        "SubmittedAt" timestamp with time zone NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Scorecards" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_Scorecards_Interviews_InterviewId" FOREIGN KEY ("InterviewId") REFERENCES "Interviews" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE INDEX "IX_InterviewParticipants_UserId" ON "InterviewParticipants" ("UserId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE INDEX "IX_Interviews_ApplicationId" ON "Interviews" ("ApplicationId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE INDEX "IX_Interviews_TenantId_ApplicationId" ON "Interviews" ("TenantId", "ApplicationId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE INDEX "IX_Interviews_TenantId_ScheduledAt" ON "Interviews" ("TenantId", "ScheduledAt");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    CREATE UNIQUE INDEX "IX_Scorecards_InterviewId_InterviewerId" ON "Scorecards" ("InterviewId", "InterviewerId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001081829_Phase4InterviewsAndAnalytics') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261001081829_Phase4InterviewsAndAnalytics', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

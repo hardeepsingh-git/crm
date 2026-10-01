@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, effect, inject, input, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDialog } from '@angular/material/dialog';
@@ -90,6 +90,8 @@ export class ActivityPanel {
   readonly filterBy = input.required<keyof ActivityLinks>();
   /** Object key when the panel is on a custom record page. */
   readonly customObjectKey = input<string | null>(null);
+  /** Bumped by the host page when something else changed the record's activities. */
+  readonly version = input(0);
   readonly auth = inject(AuthService);
   readonly meta = inject(MetadataService);
   private readonly api = inject(CrmApi);
@@ -101,6 +103,9 @@ export class ActivityPanel {
     url: '/api/activities',
     params: toParams({ [this.filterBy()]: this.links()[this.filterBy()], pageSize: 100, sortBy: 'createdAt', sortDir: 'desc' }),
   }));
+  private readonly reloadOnVersion = effect(() => {
+    if (this.version()) untracked(() => this.data.reload());
+  });
   private readonly value = stableValue(this.data);
   readonly items = computed(() => this.value()?.items ?? []);
 

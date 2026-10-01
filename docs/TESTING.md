@@ -7,14 +7,14 @@
 | API integration | xUnit, `WebApplicationFactory`, SQLite in-memory | Full HTTP pipeline: auth, tenancy, RBAC, validation, customization, automation, audit | `backend/tests/Crm.Api.Tests` |
 | UI unit | Vitest, `HttpTestingController` | Session handling, permission resolution, metadata, custom-field forms, list helpers | `frontend/src/**/*.spec.ts` |
 | Build gates | `ng build` (AOT, strict templates), `dotnet build` | Type safety | CI |
-| Live end-to-end | `scripts/smoke-test.ps1` (60 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, clean-up | `scripts/` |
+| Live end-to-end | `scripts/smoke-test.ps1` (62 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, recruitment (email, careers, export, interviews, analytics), clean-up | `scripts/` |
 | Browser end-to-end | Manual/Playwright checklist (§4) | Settings screens, custom objects, role matrix, restricted users, tenant lifecycle | UAT |
 
 The SQLite tests exercise the same EF model and query filters. PostgreSQL-specific behaviour (`jsonb @>` filters) is covered by the live smoke test.
 
 ## 2. Automated test inventory
 
-### API (`dotnet test`): 74 tests
+### API (`dotnet test`): 78 tests
 | Test | Covers |
 |---|---|
 | `Liveness_endpoint_is_anonymous` | NFR-4 |
@@ -81,12 +81,16 @@ The SQLite tests exercise the same EF model and query filters. PostgreSQL-specif
 | `Cells_are_quoted_and_formulas_are_neutralised` | EXP-2 |
 | `Exports_follow_list_filters_and_permissions_show_names_and_are_audited` | EXP-1, EXP-2, EXP-3 |
 | `Standard_objects_export_with_their_own_filters_and_large_exports_are_refused` | EXP-1, EXP-3 |
+| `Scheduling_adds_calendar_entries_and_notifications_and_keeps_the_next_interview_date_in_sync` | INT-1, INT-2, INT-3 |
+| `Scorecards_stay_blind_until_submitted_and_only_interviewers_give_feedback` | SCORE-1, SCORE-2, SCORE-3, INT-4 |
+| `Scheduling_needs_edit_access_and_valid_details` | INT-1 |
+| `Hiring_analytics_follow_the_funnel_sources_and_permissions` | ANL-1, ANL-2, TEN-4 |
 
 The dispatcher and scheduler are switched off in tests (`BackgroundJobs:Enabled=false`) and called directly with explicit times, so retries and due dates are tested without waiting.
 
 The registration tests replace the email and SMS senders with an in-memory capture (`CapturedMessages`), so they read the real codes that were sent.
 
-### UI (`ng test`): 60 tests
+### UI (`ng test`): 68 tests
 | Spec | Tests |
 |---|---|
 | `auth.spec.ts` (10) | login stores session · metadata cleared when the session ends · bearer token added · refresh once on 401 and retry · session cleared on rejected refresh · session kept on 429 · restore keeps the token when the server is down · guard restores the session · refresh serialized across tabs using the latest stored token · no token to non-API URLs |
@@ -97,14 +101,15 @@ The registration tests replace the email and SMS senders with an in-memory captu
 | `phase1.spec.ts` (6) | related objects found only where readable · name source lookup from the name label · new application prefilled, named after the chosen candidate, typed names kept · related list query, count, Pipeline and View all links · `cf.` deep links become lookup filters and stay in sync · Unique option only for text-like fields |
 | `phase2.spec.ts` (7) | schedule offsets to/from minutes · placeholder insertion at the cursor · compose: record addresses, template, blank-field warning, send · no-address message · Email button only with update access · date-based rule with a SendEmail action saves the right payload · email log: Log-provider banner, daily usage, retry |
 | `phase3.spec.ts` (7) | job facts and applicant-friendly error messages · careers page lists jobs with links · unavailable careers page · application checked in the browser, then sent as multipart with CV, consent and empty honeypot · oversized CV refused before upload, server errors shown · export downloads the filtered list (paging dropped) and explains a too-large export · careers settings saved |
+| `phase4.spec.ts` (8) | feedback offered only to interviewers after the start · interviews panel: schedule button with edit access, meeting link, blind-feedback note, visible scorecards · schedule dialog: required date, payload with ISO time and interviewers, warning when the invitation can't be sent · reschedule with PUT keeps interviewers · scorecard drops retired criteria and submits ratings · My interviews sections · analytics: KPIs, funnel, sources, refetch on filters · interview criteria picklist only for recruitment |
 
-### Live smoke test (`scripts/smoke-test.ps1`): 60 checks
+### Live smoke test (`scripts/smoke-test.ps1`): 62 checks
 1. Health and authentication (7)
 2. Read every module with seeded data (11)
 3. End-to-end sales workflow with tagged records (11)
 4. Standard User permissions (5)
 5. Clean-up (1)
-6. Platform (25): remove test tenants left by interrupted runs · provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · provision a Recruitment tenant with demo jobs, candidates and applications · duplicate candidate email refused (any case) and flagged within an import file · pipeline per job (board and list filtered by job or candidate) · email a candidate from a template, refused for an outside address, delivered by the background dispatcher and logged on the timeline · date-based rule validated and saved · careers page switched on, anonymous application with a PDF CV lands in the job's pipeline, a script upload is refused · CSV export of that candidate's applications, with names and an audit entry · delete the recruitment tenant · suspend and delete (removes the tenant's files too)
+6. Platform (27): remove test tenants left by interrupted runs · provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · provision a Recruitment tenant with demo jobs, candidates and applications · duplicate candidate email refused (any case) and flagged within an import file · pipeline per job (board and list filtered by job or candidate) · email a candidate from a template, refused for an outside address, delivered by the background dispatcher and logged on the timeline · date-based rule validated and saved · careers page switched on, anonymous application with a PDF CV lands in the job's pipeline, a script upload is refused · CSV export of that candidate's applications, with names and an audit entry · schedule an interview with a candidate invitation, next-interview date, My interviews and a valid .ics, then a scorecard (out-of-range rating refused) · hiring analytics funnel, sources, jobs and this week's interviews · delete the recruitment tenant · suspend and delete (removes the tenant's files too)
 
 The registration checks temporarily switch on global self-registration (with verification off) and always put the original platform settings back.
 
@@ -158,3 +163,7 @@ VS Code tasks: *CRM: Backend tests*, *CRM: Frontend tests*, *CRM: Smoke test (AP
 | 36 | Apply for a job with a PDF CV; try once without ticking consent, once with a renamed .exe | Missing consent and the fake PDF are refused with clear messages. The real application appears in the job's pipeline as *Applied*, the CV is under Files on the application and candidate, and the job owner gets a notification. |
 | 37 | Apply again with the same email but a different name | The existing candidate's name is unchanged; the application gets an "Applied again" note and the new CV |
 | 38 | Applications list → filter by a job → **Export**; open the file in Excel | Only that job's applications, with candidate and job names; the export shows in the audit log |
+| 39 | Open an application → **Schedule interview** with two interviewers and *Email the candidate* | Both interviewers get a notification and a Meeting under Activities; *Next interview* shows the time; the invitation is in the Email log |
+| 40 | As one interviewer, after the interview time: **My interviews → Give feedback** | Before submitting, colleagues' scorecards are hidden; after submitting, they're shown and the Meeting is ticked off. The organiser is notified. |
+| 41 | **Reschedule** and then **Cancel** the interview; download **Add to calendar** | Meetings move, then disappear; *Next interview* follows; the .ics opens in Outlook |
+| 42 | **Hiring analytics** → change the period and pick a job | KPIs, funnel, sources and jobs update; a user who can see only their own applications sees only those |

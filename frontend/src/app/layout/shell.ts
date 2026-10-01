@@ -141,6 +141,10 @@ export class Shell {
       if (!this.auth.can(o.key, 'read')) continue;
       items.push({ path: this.meta.route(o.key)[0], label: o.pluralLabel, icon: o.icon });
       if (o.key === 'opportunity') items.push({ path: '/pipeline', label: 'Pipeline', icon: 'view_kanban' });
+      if (o.key === 'application' && o.hasPipeline) {
+        items.push({ path: '/recruiting/interviews', label: 'My interviews', icon: 'event' });
+        items.push({ path: '/recruiting/analytics', label: 'Hiring analytics', icon: 'insights' });
+      }
     }
     return items;
   });

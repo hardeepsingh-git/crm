@@ -305,7 +305,7 @@ public static partial class CustomizationEndpoints
 
     private static async Task<Results<Ok<string[]>, ValidationProblem>> UpdatePicklist(string key, PicklistRequest req, CrmDbContext db, CancellationToken ct)
     {
-        if (key is not ("account.industry" or "lead.source")) return Errors.Validation("key", "Unknown picklist.");
+        if (key is not ("account.industry" or "lead.source" or "interview.criteria")) return Errors.Validation("key", "Unknown picklist.");
         var options = req.Options.Select(o => o.Trim()).Where(o => o.Length is > 0 and <= 64).Distinct().ToArray();
         var picklist = await db.Picklists.SingleOrDefaultAsync(p => p.Key == key, ct);
         if (picklist is null) db.Picklists.Add(picklist = new Picklist { Key = key });

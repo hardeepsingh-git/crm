@@ -83,7 +83,7 @@ public class ExportTests(CrmApiFactory factory) : IClassFixture<CrmApiFactory>
 
         var audit = await (await ats.GetAsync("/api/admin/audit?action=Exported")).ReadAsync<PagedResult<AuditItem>>();
         Assert.Contains(audit.Items, a => a.EntityType == "application" && a.EntityName == $"{rows.Count} applications"
-                                          && a.Changes["filters"]!["cf.position"]!.GetValue<string>() == jobId);
+                                          && a.Changes["filters"]?["cf.position"]?.GetValue<string>() == jobId);
 
         var role = await (await ats.PostJsonAsync("/api/admin/roles", new
         {

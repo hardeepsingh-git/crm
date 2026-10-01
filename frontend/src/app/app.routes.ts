@@ -35,6 +35,8 @@ export const routes: Routes = [
           { path: 'pipeline', title: 'Pipeline | CRM', canActivate: [objectGuard('opportunity')], loadComponent: () => import('./features/opportunities/pipeline-board').then((m) => m.PipelineBoard) },
           { path: 'opportunities/:id', title: 'Opportunity | CRM', canActivate: [objectGuard('opportunity')], loadComponent: () => import('./features/opportunities/opportunity-detail').then((m) => m.OpportunityDetailPage) },
           { path: 'activities', title: 'Activities | CRM', canActivate: [objectGuard('activity')], loadComponent: () => import('./features/activities/activity-list').then((m) => m.ActivityList) },
+          { path: 'recruiting/interviews', title: 'My interviews | CRM', canActivate: [objectGuard('application')], loadComponent: () => import('./features/recruiting/interviews').then((m) => m.MyInterviewsPage) },
+          { path: 'recruiting/analytics', title: 'Hiring analytics | CRM', canActivate: [objectGuard('application')], loadComponent: () => import('./features/recruiting/analytics').then((m) => m.HiringAnalyticsPage) },
 
           { path: 'o/:objectKey', title: 'Records | CRM', canActivate: [objectGuard()], loadComponent: () => import('./features/records/record-list').then((m) => m.RecordList) },
           { path: 'o/:objectKey/board', title: 'Board | CRM', canActivate: [objectGuard()], loadComponent: () => import('./features/records/record-board').then((m) => m.RecordBoard) },

@@ -146,6 +146,9 @@ cd C:\Users\FBPo48p\CRM;          ./scripts/smoke-test.ps1       # live end-to-e
 | Back up one tenant | `pg_dump` with `--where` isn't supported. Export per table with `COPY (SELECT * FROM "Accounts" WHERE "TenantId" = '…') TO …`, or back up the whole database. |
 | Template upgrades | Automatic. On startup the API upgrades tenants whose `TemplateVersion` is behind their template, and logs `Upgraded tenant <slug> to <template> template v<n>`. Upgrades only add objects, fields, stages and rules; existing data and settings are untouched, and each version is applied once. Back up before deploying a release that raises a template version. |
 | Careers page | The organisation's administrator switches it on under **Settings → Organisation**; the public address is `https://<host>/careers/<workspace id>`. Behind a reverse proxy, set `ForwardedHeaders:Enabled` so per-IP rate limits see the real client address. Each application is logged as `Careers application <id> for job <id> in tenant <slug>`. |
+| Recruitment demo data | `./scripts/seed-recruitment.ps1 -Email <admin email>` (API running; prompts for the password) adds job openings, candidates, applications, interviews and scorecards to an existing recruitment organisation through the API. Safe to re-run: it reuses candidates by email and skips applications that already have interviews. |
+| Interview calendars | Interviews are stored as *Meeting* activities for each interviewer, plus `.ics` downloads (`/api/interviews/{id}/ics`). There is no calendar server sync, so no outbound calls or credentials are needed. Organisation-wide invitation emails count towards `Email:DailyLimitPerTenant`. |
+| Hiring analytics | Computed on request from the audit log (stage changes), for at most 20,000 applications per request. Keep the audit log if you rely on the funnel: removing old `AuditLogs` rows removes that history. |
 
 ## 5. Deployment
 

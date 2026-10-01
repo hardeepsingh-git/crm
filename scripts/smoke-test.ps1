@@ -335,7 +335,7 @@ if ($adminEmail -and $adminPassword) {
 
     # Recruitment (ATS) tenant: candidates, applications per job, unique emails, pipeline per job.
     $atsSlug = "$slug-ats"
-    Check 'Provision Recruitment tenant (template v3 with demo data)' {
+    Check 'Provision Recruitment tenant (template v5 with demo data)' {
         $script:atsTenant = Api POST '/api/platform/tenants' @{
             name = "E2E Recruiting $slug"; slug = $atsSlug; template = 'recruitment'; currency = 'USD'
             adminEmail = "admin@$atsSlug.test"; adminFirstName = 'Rita'; adminLastName = 'Cruiter'; adminPassword = 'Tenant#Pass123'; seedDemoData = $true
@@ -446,6 +446,48 @@ if ($adminEmail -and $adminPassword) {
         $audit = Api GET '/api/admin/audit?action=Exported' -Token $script:atsToken
         Assert ($audit.totalCount -ge 1) 'export not audited'
         "$($lines.Count - 1) row; audit entry '$($audit.items[0].entityName)'"
+    }
+    Check 'Interviews: schedule and invite the candidate, calendar file, blind scorecard' {
+        $me = Api GET '/api/auth/me' -Token $script:atsToken
+        $appId = $script:atsApplication.id
+        $at = (Get-Date).ToUniversalTime().Date.AddDays(2).AddHours(1)
+        $saved = Api POST '/api/interviews' @{
+            applicationId = $appId; scheduledAt = $at.ToString('o'); durationMinutes = 45; kind = 'Video'; location = 'https://meet.example.com/smoke'
+            interviewerIds = @($me.id); emailCandidate = $true
+        } -Token $script:atsToken
+        Assert ($null -eq $saved.emailNote) "invitation not queued: $($saved.emailNote)"
+        $app = Api GET "/api/records/application/$appId" -Token $script:atsToken
+        Assert (([datetime]$app.customFields.interview_date).ToUniversalTime() -eq $at) "next interview is $($app.customFields.interview_date)"
+        $mine = Api GET '/api/interviews/mine' -Token $script:atsToken
+        Assert (@($mine.upcoming | Where-Object id -eq $saved.interview.id).Count -eq 1) 'not in My interviews'
+        $ics = Invoke-WebRequest -Uri "$BaseUrl/api/interviews/$($saved.interview.id)/ics" -Headers @{ Authorization = "Bearer $script:atsToken" } -UseBasicParsing
+        $icsText = if ($ics.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($ics.Content) } else { [string]$ics.Content }
+        Assert ("$($ics.Headers['Content-Type'])" -like 'text/calendar*' -and $icsText -match "DTSTART:$($at.ToString('yyyyMMdd''T''HHmmss''Z'''))") 'bad calendar file'
+
+        $held = (Api POST '/api/interviews' @{
+                applicationId = $appId; scheduledAt = (Get-Date).ToUniversalTime().AddHours(-2).ToString('o'); durationMinutes = 30; kind = 'Phone'
+                interviewerIds = @($me.id)
+            } -Token $script:atsToken).interview
+        $criteria = @((Api GET '/api/metadata' -Token $script:atsToken).picklists.'interview.criteria')
+        Assert ($criteria.Count -ge 3) "criteria picklist has $($criteria.Count) entries"
+        $s = StatusOf { Api PUT "/api/interviews/$($held.id)/scorecard" @{ recommendation = 'Yes'; ratings = @{ $criteria[0] = 9 } } -Token $script:atsToken }
+        Assert ($s -eq 400) "rating 9 returned $s"
+        $card = Api PUT "/api/interviews/$($held.id)/scorecard" @{ recommendation = 'StrongYes'; ratings = @{ $criteria[0] = 5; $criteria[1] = 4 }; notes = 'Smoke feedback' } -Token $script:atsToken
+        Assert ($card.myScorecard.recommendation -eq 'StrongYes' -and $card.scorecards.Count -eq 1) 'scorecard not saved'
+        $mine = Api GET '/api/interviews/mine' -Token $script:atsToken
+        Assert (@($mine.awaitingFeedback | Where-Object id -eq $held.id).Count -eq 0) 'still waiting for feedback'
+        $email = @((Api GET '/api/admin/emails?pageSize=50' -Token $script:atsToken).page.items) | Where-Object { $_.subject -like 'Interview for *' -and $_.to -like 'smoke.candidate@*' }
+        Assert (@($email).Count -ge 1) 'candidate invitation not in the email log'
+        "invited; .ics ok; scorecard on $($criteria.Count) criteria; rating 9 refused"
+    }
+    Check 'Hiring analytics: funnel, sources and jobs' {
+        $r = Api GET '/api/recruiting/analytics?days=90' -Token $script:atsToken
+        $stageCount = @((Api GET '/api/metadata' -Token $script:atsToken).objects | Where-Object key -eq 'application' | ForEach-Object { $_.stages }).Count
+        Assert ($r.applications -gt 0 -and @($r.funnel).Count -eq $stageCount) "$($r.applications) applications, $(@($r.funnel).Count) funnel stages"
+        Assert ($r.funnel[0].reached -eq $r.applications) 'first stage should be reached by every application'
+        Assert (@($r.sources).Count -gt 0 -and @($r.jobs).Count -gt 0) 'sources or jobs missing'
+        Assert ($r.interviewsNext7Days -ge 1) 'scheduled interview not counted'
+        "$($r.applications) applications, $($r.hired) hired, $(@($r.sources).Count) sources, $(@($r.jobs).Count) jobs, $($r.interviewsNext7Days) interviews this week"
     }
     if (-not $Keep) {
         Check 'Delete the recruitment tenant' {
