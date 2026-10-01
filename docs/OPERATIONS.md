@@ -36,6 +36,7 @@ Configuration is read in this order: `appsettings.json`, then `appsettings.{Envi
 | `RateLimiting:EmailSendPermitPerMinute` | | `20` | Emails sent from records, per user per minute |
 | `RateLimiting:CareersPermitPerMinute` | | `120` | Careers page and job views, per IP per minute |
 | `RateLimiting:CareersApplyPermitPerMinute` | | `5` | Careers applications per IP per minute |
+| `RateLimiting:OfferResponsePermitPerMinute` | | `30` | Candidate offer page views and answers per IP per minute |
 | `Careers:MaxCvSizeMb` | | `5` | Largest CV accepted from the careers page |
 | `Export:MaxRows` | | `10000` | Largest CSV export; larger results must be narrowed with filters |
 | `Email:DailyLimitPerTenant` | | `1000` | Emails each organisation can queue per UTC day; beyond it, sends get 429 and automation emails are logged as Failed |
@@ -146,9 +147,11 @@ cd C:\Users\FBPo48p\CRM;          ./scripts/smoke-test.ps1       # live end-to-e
 | Back up one tenant | `pg_dump` with `--where` isn't supported. Export per table with `COPY (SELECT * FROM "Accounts" WHERE "TenantId" = '…') TO …`, or back up the whole database. |
 | Template upgrades | Automatic. On startup the API upgrades tenants whose `TemplateVersion` is behind their template, and logs `Upgraded tenant <slug> to <template> template v<n>`. Upgrades only add objects, fields, stages and rules; existing data and settings are untouched, and each version is applied once. Back up before deploying a release that raises a template version. |
 | Careers page | The organisation's administrator switches it on under **Settings → Organisation**; the public address is `https://<host>/careers/<workspace id>`. Behind a reverse proxy, set `ForwardedHeaders:Enabled` so per-IP rate limits see the real client address. Each application is logged as `Careers application <id> for job <id> in tenant <slug>`. |
-| Recruitment demo data | `./scripts/seed-recruitment.ps1 -Email <admin email>` (API running; prompts for the password) adds job openings, candidates, applications, interviews and scorecards to an existing recruitment organisation through the API. Safe to re-run: it reuses candidates by email and skips applications that already have interviews. |
+| Recruitment demo data | `./scripts/seed-recruitment.ps1 -Email <admin email>` (API running; prompts for the password) adds job openings, candidates, applications, interviews, scorecards and offers to an existing recruitment organisation through the API. Safe to re-run: it reuses candidates by email and skips applications that already have interviews or offers. |
 | Interview calendars | Interviews are stored as *Meeting* activities for each interviewer, plus `.ics` downloads (`/api/interviews/{id}/ics`). There is no calendar server sync, so no outbound calls or credentials are needed. Organisation-wide invitation emails count towards `Email:DailyLimitPerTenant`. |
 | Hiring analytics | Computed on request from the audit log (stage changes), for at most 20,000 applications per request. Keep the audit log if you rely on the funnel: removing old `AuditLogs` rows removes that history. |
+| Offers | Candidate links are `App:PublicUrl` + `/offer/<token>`, so `App:PublicUrl` must be set in production (sending refuses without it). The link is in the outbox row (email log) but not on the record's timeline. Each answer is logged as `Offer <id> accepted/declined in tenant <slug>`; behind a reverse proxy set `ForwardedHeaders:Enabled` so the recorded IP is the candidate's. |
+| Candidate privacy | Administrators handle access and erasure requests from the candidate's page (**Privacy**). Erasure can't be undone (restore from backup is the only way back), and erased people also stay in older database backups until those expire under your backup retention (`backup-db.ps1` keeps 14 days by default). The retention policy (Settings → Privacy) is off by default and only runs when an administrator clicks *Erase now*. |
 
 ## 5. Deployment
 

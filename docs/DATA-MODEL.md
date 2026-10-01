@@ -12,6 +12,7 @@ PostgreSQL database **`CRM`**, schema `public`. The schema is created by these E
 | `20261001061040_Phase2EmailAndScheduling` | New tables `EmailTemplates`, `OutboundEmails`, `ScheduledRuleRuns`; `AutomationRules.ScheduleField` and `ScheduleOffsetMinutes` (default 0). No data changes; recruitment tenants then get template v3 at startup. |
 | `20261001071143_Phase3CareersAndExport` | `Tenants.CareersEnabled` (default false) and `Tenants.CareersIntro`. No data changes; recruitment tenants then get template v4 at startup. |
 | `20261001081829_Phase4InterviewsAndAnalytics` | New tables `Interviews`, `InterviewParticipants`, `Scorecards`. No changes to existing tables; recruitment tenants then get template v5 at startup. |
+| `20261001091146_Phase5OffersAndPrivacy` | New table `Offers`; `Tenants.CandidateRetentionMonths` (nullable, no policy by default). No data changes; recruitment tenants then get template v6 at startup. |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -46,6 +47,7 @@ erDiagram
     Interviews ||--o{ InterviewParticipants : CASCADE
     AspNetUsers ||--o{ InterviewParticipants : "interviewer (CASCADE)"
     Interviews ||--o{ Scorecards : CASCADE
+    CustomRecords ||--o{ Offers : "application (CASCADE)"
     AspNetUsers ||--o{ Notifications : receives
     AspNetUsers ||--o{ RefreshTokens : has
     AspNetUsers ||--o{ VerificationCodes : "CASCADE"
@@ -56,7 +58,7 @@ erDiagram
 ### 2.1 Tenancy and identity
 | Table | Key columns | Notes |
 |---|---|---|
-| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `TemplateVersion`, `SelfRegistrationEnabled`, `CareersEnabled`, `CareersIntro`(2000), `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`). The slug doubles as the **organisation code** for self-registration. |
+| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `TemplateVersion`, `SelfRegistrationEnabled`, `CareersEnabled`, `CareersIntro`(2000), `CandidateRetentionMonths`, `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`). The slug doubles as the **organisation code** for self-registration. |
 | `AspNetUsers` | Identity columns + `TenantId` FK (RESTRICT), `FirstName`, `LastName`, `IsActive`, `IsPlatformAdmin`, **`RegistrationStatus`**(32), `CreatedAt` | Email is unique platform-wide. Users are never hard-deleted except when their tenant is deleted. `PhoneNumber` (E.164), `EmailConfirmed` and `PhoneNumberConfirmed` are set by self-registration. Index `(TenantId, RegistrationStatus)`. |
 | `RefreshTokens` | `UserId` FK (CASCADE), `TokenHash`(128, **unique**), `ExpiresAt`, `RevokedAt` | SHA-256 of the token |
 | `VerificationCodes` | `UserId` FK (CASCADE), `Channel` (Email/Sms), `CodeHash`(128), `CreatedAt`, `ExpiresAt`, `Attempts`, `ConsumedAt` | One-time codes. SHA-256 of `userId:channel:code`, never the code itself. Index `(UserId, Channel)`. |
@@ -110,6 +112,7 @@ All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NU
 | `Interviews` | `TenantId`, `ApplicationId` FK to `CustomRecords` (CASCADE), `ScheduledAt`, `DurationMinutes`, `Kind` (Phone/Video/Onsite), `Location`(500), `Notes`(2000), `Status` (Scheduled/Completed/Cancelled), `OrganizerId`, `CreatedAt`, `UpdatedAt` | Indexes `(TenantId, ApplicationId)`, `(TenantId, ScheduledAt)`. The application's `interview_date` field mirrors its next scheduled interview. |
 | `InterviewParticipants` | PK `(InterviewId, UserId)`, both FK CASCADE; `ActivityId` | The interviewers. `ActivityId` is the *Meeting* activity on the interviewer's calendar (removed when they're taken off or the interview is cancelled). |
 | `Scorecards` | `TenantId`, `InterviewId` FK (CASCADE), `InterviewerId`, `Recommendation` (StrongNo/No/Yes/StrongYes), `Ratings` jsonb, `Notes`(4000), `SubmittedAt` | **Unique `(InterviewId, InterviewerId)`**: one scorecard per interviewer; resubmitting replaces it. |
+| `Offers` | `TenantId`, `ApplicationId` FK to `CustomRecords` (CASCADE), `Status` (Draft/Sent/Accepted/Declined/Withdrawn/Expired), `JobTitle`(200), `Salary` numeric(18,2), `Currency`(3), `PayPeriod` (Year/Month/Hour), `StartDate` date, `ExpiresAt`, `Letter`(20000), `Notes`(2000, internal), `CreatedById`, `TokenHash`(64), `SentAt`, `SentById`, `RespondedAt`, `SignedName`(200), `ResponseIp`(64), `ResponseUserAgent`(500), `DeclineReason`(2000) | **Unique `TokenHash`** (SHA-256 of the candidate's link token; the token itself is never stored). **Filtered unique `ApplicationId` where `Status IN ('Draft','Sent')`** (`IX_Offers_ApplicationId_Active`): at most one open offer per application, even under concurrent requests. Indexes `(TenantId, Status)`, `(TenantId, ApplicationId)`. `TokenHash` is never written to the audit log. |
 
 ## 3. JSON columns
 
@@ -159,9 +162,10 @@ CREATE INDEX IF NOT EXISTS "IX_CustomRecords_CustomFields" ON "CustomRecords" US
 | AutomationTrigger | Created, Updated, StageChanged, DateReached |
 | ConditionOperator | Equals, NotEquals, GreaterThan, LessThan, Contains, IsEmpty, IsNotEmpty, Changed |
 | AutomationActionType | CreateTask, Notify, SetField, SendEmail |
-| AuditAction | Created, Updated, Deleted, Exported |
+| AuditAction | Created, Updated, Deleted, Exported, Erased |
 | InterviewKind / InterviewStatus | Phone, Video, Onsite / Scheduled, Completed, Cancelled |
 | Recommendation | StrongNo, No, Yes, StrongYes |
+| OfferStatus / PayPeriod | Draft, Sent, Accepted, Declined, Withdrawn, Expired / Year, Month, Hour |
 | LeadStatus | New, Contacted, Qualified, Unqualified, Converted |
 | ActivityType / ActivityPriority | Task, Call, Meeting, Email, Note / Low, Normal, High |
 
@@ -199,6 +203,12 @@ Recruitment **v3** adds four email templates (*Application received*, *Interview
 Recruitment **v4** adds the careers page fields: *Show on careers page* (`position.publish`, yes/no), *Cover note* (`application.cover_note`) and *Privacy consent* (`candidate.privacy_consent`, date/time). Upgraded tenants start with no job published and the careers page off.
 
 Recruitment **v5** adds the `interview.criteria` picklist (*Skills*, *Experience*, *Communication*, *Problem solving*, *Culture fit*) used by interview scorecards. Administrators can change it under **Settings → Picklists**; existing scorecards keep their ratings.
+
+Recruitment **v6** adds two application email templates: *Offer letter* (the default letter for new offers) and *Offer email* (sent with the candidate's link). Both can use the offer placeholders `{{offer.job_title}}`, `{{offer.salary}}`, `{{offer.start_date}}`, `{{offer.expires}}` and, in the offer email, `{{offer.link}}`.
+
+## 6a. Erasure and the audit log
+
+Erasing a candidate (on request or by the retention policy) deletes the candidate, their applications and everything that cascades from them (interviews, participants, scorecards, offers, activities, attachments and stored files), their outbound emails (by record or address) and notifications linking to them. Audit rows for all of those ids keep their action, user and time but get `EntityName = '[erased]'` and `Changes = '{}'`. One `Erased` row (no personal data) records the reason and counts.
 
 ## 7. Schema changes
 

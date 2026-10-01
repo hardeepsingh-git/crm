@@ -340,6 +340,28 @@ public class ScorecardConfiguration : IEntityTypeConfiguration<Scorecard>
     }
 }
 
+public class OfferConfiguration : IEntityTypeConfiguration<Offer>
+{
+    public void Configure(EntityTypeBuilder<Offer> b)
+    {
+        b.Property(x => x.JobTitle).HasMaxLength(200).IsRequired();
+        b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+        b.Property(x => x.Letter).HasMaxLength(20000).IsRequired();
+        b.Property(x => x.Notes).HasMaxLength(2000);
+        b.Property(x => x.TokenHash).HasMaxLength(64);
+        b.Property(x => x.SignedName).HasMaxLength(200);
+        b.Property(x => x.ResponseIp).HasMaxLength(64);
+        b.Property(x => x.ResponseUserAgent).HasMaxLength(500);
+        b.Property(x => x.DeclineReason).HasMaxLength(2000);
+        b.HasOne(x => x.Application).WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => x.TokenHash).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.Status });
+        // At most one draft or sent offer per application, even under concurrent requests.
+        b.HasIndex(x => x.ApplicationId).IsUnique().HasFilter("\"Status\" IN ('Draft', 'Sent')").HasDatabaseName("IX_Offers_ApplicationId_Active");
+        b.HasIndex(x => new { x.TenantId, x.ApplicationId });
+    }
+}
+
 public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
 {
     public void Configure(EntityTypeBuilder<Notification> b)

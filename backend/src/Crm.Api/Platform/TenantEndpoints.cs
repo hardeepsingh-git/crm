@@ -109,6 +109,7 @@ public sealed partial class TenantService(
         await db.Scorecards.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.InterviewParticipants.Where(x => interviewIds.Contains(x.InterviewId)).ExecuteDeleteAsync(ct);
         await db.Interviews.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
+        await db.Offers.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.OutboundEmails.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.ScheduledRuleRuns.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.EmailTemplates.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);

@@ -226,6 +226,52 @@ Interviews belong to an **application** (recruitment tenants). Reading needs rea
 - `funnel[]`: per stage `{ key, label, color, current, reached, conversionToNext, averageDaysInStage }`. *Reached* counts applications that got at least that far (from the stage history in the audit log; hires count as passing every open stage). *Conversion* is the share that reached the next open stage, or were hired from the last one.
 - `sources[]`: `{ source, applications, hired, hireRate }` by the application's *source*. `jobs[]`: `{ id, title, applications, open, hired, byStage }`.
 - Time to hire: from creation to being closed in a *Won* stage.
+- `offers`: `{ sent, accepted, declined, expired, pending, acceptanceRate, averageDaysToRespond }` for offers sent on those applications; the acceptance rate is accepted / (accepted + declined + expired).
+
+## Offers (`/api/offers`)
+
+Offers belong to an **application** and carry pay details, so every call needs **update** access to the application (403 otherwise; 404 if it can't be read).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `?applicationId=` | `OfferItem[]`, newest first. Sent offers past their deadline are marked *Expired*. |
+| GET | `/defaults?applicationId=` | `{ jobTitle, salary, currency, payPeriod, startDate, expiresAt, letter }`: the job's title, the candidate's expected salary, the organisation's currency, a start in 4 weeks, a week to respond and the *Offer letter* template |
+| POST | `/` | `{ applicationId, jobTitle, salary, currency, payPeriod (Year|Month|Hour), startDate, expiresAt, letter, notes }` → 201 draft. 400 if the application already has an open (draft or sent) offer. |
+| PUT | `/{id}` | Same body; drafts only |
+| DELETE | `/{id}` | Drafts only → 204 |
+| GET | `/{id}/preview` | `{ letter, blankFields }`: the letter filled in for this application |
+| POST | `/{id}/send` | Fills in and freezes the letter (first send), creates a new candidate link (the previous one stops working), moves the application to *Offer* if it's in an earlier open stage, and emails the *Offer email* template through the outbox → `{ offer, link, emailNote }`. The link is returned only here. |
+| POST | `/{id}/withdraw` | `{ reason }`; draft or sent → *Withdrawn*, the link stops working, and a note is added to the application |
+
+- **Validation**: salary 0–100,000,000; three-letter upper-case currency; start date today or later; deadline between an hour and 60 days ahead; job title and letter required, and the letter may only use known placeholders.
+- **Placeholders** (letters and application emails): `{{offer.job_title}}`, `{{offer.salary}}` ("AUD 120,000.00 per year"), `{{offer.start_date}}`, `{{offer.expires}}`; `{{offer.link}}` is filled only in the offer email. Other emails use the latest offer that wasn't withdrawn.
+- **The link stays off the timeline**: the Email activity logged on the application shows `[link sent to the candidate]`; only the outbox row (email log, administrators) holds the real link.
+
+## Offer response (`/api/offer-response/{token}`, anonymous)
+
+The candidate's link is `<App:PublicUrl>/offer/<token>` (256-bit random, Base64Url). Only its SHA-256 hash is stored; it enters the offer's tenant (which must be active) and gives access to that one offer. Rate limit `RateLimiting:OfferResponsePermitPerMinute` per IP (30). Unknown, withdrawn or replaced links → 404.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | `{ organisation, candidateName, jobTitle, status, expiresAt, salary, currency, payPeriod, startDate, letter, respondedAt, signedName }`. Pay details and the letter only while *Sent* or after *Accepted*. |
+| POST | `/accept` | `{ signedName, agree: true }`. The typed name must match the application's name (case and spacing ignored). Records the time, IP address and browser as evidence → `{ status, message }` |
+| POST | `/decline` | `{ reason }` (optional) |
+
+Both answers need the offer to be *Sent* and not past its deadline (400 with an explanation otherwise), add a note to the application and notify the sender and the application's owner. The application isn't moved to *Hired* automatically.
+
+## Privacy (`/api/privacy`, settings:manage)
+
+For organisations with the *candidate* object (404 otherwise).
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/candidates/{id}/export` | `application/zip`: `data.json` (the candidate's fields, applications with interviews, scorecards without interviewer names, offers, timeline, emails and file list) and `files/` (their files). Audited as *Exported* ("Personal data export"). |
+| POST | `/candidates/{id}/erase` | `{ confirmName }` (must match the candidate's name) → `{ applications, activities, files, emails }`. See DATA-MODEL §6a. |
+| GET | `/retention` | `{ months, cutoff, eligible, sample[] }`: the policy and who it would erase now (50 longest inactive) |
+| PUT | `/retention` | `{ months }`: 6–120, or null to switch the policy off → the same preview |
+| POST | `/retention/run` | Erases up to 100 eligible candidates → `{ erased, remaining }` |
+
+Eligible for retention: candidates unchanged since the cutoff whose applications are all closed, none in a *Won* (hired) stage, and also unchanged since the cutoff.
 
 ## Diagnostics
 

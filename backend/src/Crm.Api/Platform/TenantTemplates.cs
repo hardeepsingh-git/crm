@@ -3,6 +3,7 @@ using Crm.Api.Automation;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Features.Offers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Crm.Api.Platform;
@@ -21,7 +22,7 @@ public static class TenantTemplates
     [
         new(Sales, "Sales CRM", "Accounts, contacts, leads, opportunity pipeline and sales automation."),
         new(HelpDesk, "Help Desk", "Customers, contacts and a ticket pipeline with priority-based alerts."),
-        new(Recruitment, "Recruitment (ATS)", "Job openings, a public careers page, a candidate talent pool, an application pipeline per job, interviews with scorecards, hiring analytics and candidate emails."),
+        new(Recruitment, "Recruitment (ATS)", "Job openings, a public careers page, a candidate talent pool, an application pipeline per job, interviews with scorecards, online offers, hiring analytics, candidate emails and privacy tools."),
         new(Blank, "Blank", "Standard objects and roles only. Build your own configuration."),
     ];
 
@@ -39,7 +40,7 @@ public static class TenantTemplates
     public static readonly string[] DefaultLeadSources = ["Web", "Referral", "Event", "ColdCall", "Advertisement", "Partner", "Other"];
 
     /// <summary>Latest revision of each template. Raising it makes startup apply the template's new pieces to existing tenants once.</summary>
-    public static int CurrentVersion(string template) => template == Recruitment ? 5 : 1;
+    public static int CurrentVersion(string template) => template == Recruitment ? 6 : 1;
 
     /// <summary>
     /// Brings tenants created from an older template revision up to date. Only missing objects, fields, stages and rules are
@@ -270,6 +271,8 @@ public static class TenantTemplates
                 Template("Job offer", "application", "Offer: {{cf.position.name}}",
                     "Hi {{name}},\n\nWe're delighted to offer you the {{cf.position.name}} role at {{organisation.name}}. " +
                     "{{owner.name}} will be in touch shortly with the details." + signOff);
+                Template(OfferKeys.LetterTemplate, "application", "Offer of employment: {{offer.job_title}}", OfferKeys.DefaultLetter);
+                Template(OfferKeys.EmailTemplate, "application", OfferKeys.DefaultEmailSubject, OfferKeys.DefaultEmailBody);
 
                 // Emails to candidates start switched off: admins review the wording and turn them on.
                 Rule("Acknowledge new applications", "application", AutomationTrigger.Created, [],

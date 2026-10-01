@@ -189,6 +189,7 @@ describe('Phase 4: interviews, scorecards and hiring analytics', () => {
       sources: [{ source: 'Referral', applications: 2, hired: 1, hireRate: 0.5 }],
       jobs: [{ id: 'j1', title: 'Data Analyst', applications: 4, open: 2, hired: 1, byStage: { applied: 1, interview: 1, hired: 1, rejected: 1 } }],
       interviewsNext7Days: 2, feedbackOutstanding: 3,
+      offers: { sent: 4, accepted: 2, declined: 1, expired: 1, pending: 0, acceptanceRate: 0.5, averageDaysToRespond: 2.5 },
     };
     const fixture = render(HiringAnalyticsPage);
     backend.expectOne((r) => r.url === '/api/records/position').flush({ items: [{ id: 'j1', name: 'Data Analyst' }], total: 1, page: 1, pageSize: 100 });

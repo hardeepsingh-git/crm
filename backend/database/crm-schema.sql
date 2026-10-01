@@ -1629,3 +1629,82 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001091146_Phase5OffersAndPrivacy') THEN
+    ALTER TABLE "Tenants" ADD "CandidateRetentionMonths" integer;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001091146_Phase5OffersAndPrivacy') THEN
+    CREATE TABLE "Offers" (
+        "Id" uuid NOT NULL,
+        "ApplicationId" uuid NOT NULL,
+        "Status" character varying(16) NOT NULL,
+        "JobTitle" character varying(200) NOT NULL,
+        "Salary" numeric(18,2) NOT NULL,
+        "Currency" character varying(3) NOT NULL,
+        "PayPeriod" character varying(16) NOT NULL,
+        "StartDate" date NOT NULL,
+        "ExpiresAt" timestamp with time zone NOT NULL,
+        "Letter" character varying(20000) NOT NULL,
+        "Notes" character varying(2000),
+        "CreatedById" uuid NOT NULL,
+        "TokenHash" character varying(64),
+        "SentAt" timestamp with time zone,
+        "SentById" uuid,
+        "RespondedAt" timestamp with time zone,
+        "SignedName" character varying(200),
+        "ResponseIp" character varying(64),
+        "ResponseUserAgent" character varying(500),
+        "DeclineReason" character varying(2000),
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Offers" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_Offers_CustomRecords_ApplicationId" FOREIGN KEY ("ApplicationId") REFERENCES "CustomRecords" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001091146_Phase5OffersAndPrivacy') THEN
+    CREATE UNIQUE INDEX "IX_Offers_ApplicationId_Active" ON "Offers" ("ApplicationId") WHERE "Status" IN ('Draft', 'Sent');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001091146_Phase5OffersAndPrivacy') THEN
+    CREATE INDEX "IX_Offers_TenantId_ApplicationId" ON "Offers" ("TenantId", "ApplicationId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001091146_Phase5OffersAndPrivacy') THEN
+    CREATE INDEX "IX_Offers_TenantId_Status" ON "Offers" ("TenantId", "Status");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001091146_Phase5OffersAndPrivacy') THEN
+    CREATE UNIQUE INDEX "IX_Offers_TokenHash" ON "Offers" ("TokenHash");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001091146_Phase5OffersAndPrivacy') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261001091146_Phase5OffersAndPrivacy', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

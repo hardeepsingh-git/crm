@@ -16,6 +16,8 @@ using Crm.Api.Features.Dashboard;
 using Crm.Api.Features.Email;
 using Crm.Api.Features.Export;
 using Crm.Api.Features.Interviews;
+using Crm.Api.Features.Offers;
+using Crm.Api.Features.Privacy;
 using Crm.Api.Features.Governance;
 using Crm.Api.Features.Import;
 using Crm.Api.Features.Leads;
@@ -133,6 +135,7 @@ services.AddRateLimiter(o =>
     o.AddPolicy(ClientErrorEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:ClientErrorPermitPerMinute", 30));
     o.AddPolicy(CareersEndpoints.ReadRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:CareersPermitPerMinute", 120));
     o.AddPolicy(CareersEndpoints.ApplyRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:CareersApplyPermitPerMinute", 5));
+    o.AddPolicy(OfferResponseEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:OfferResponsePermitPerMinute", 30));
     o.AddPolicy(EmailEndpoints.SendRateLimitPolicy, ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.User.FindFirst(Claims.Subject)?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
@@ -196,6 +199,7 @@ api.MapAuth();
 api.MapRegistration();
 api.MapPasswordReset();
 api.MapCareers();
+api.MapOfferResponses();
 var secured = api.MapGroup("").RequireAuthorization();
 secured.MapDashboard();
 secured.MapAccounts();
@@ -209,6 +213,8 @@ secured.MapImport();
 secured.MapExport();
 secured.MapInterviews();
 secured.MapHiringAnalytics();
+secured.MapOffers();
+secured.MapPrivacy();
 secured.MapUsers();
 secured.MapSecurity();
 secured.MapCustomization();

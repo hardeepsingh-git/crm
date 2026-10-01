@@ -3,6 +3,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { MetadataService } from '../../core/metadata.service';
 
 interface SettingsArea {
   path: string;
@@ -11,6 +12,8 @@ interface SettingsArea {
   icon: string;
   resource: string;
   action: string;
+  /** Shown only when this object is active. */
+  requires?: string;
 }
 
 const AREAS: SettingsArea[] = [
@@ -23,6 +26,7 @@ const AREAS: SettingsArea[] = [
   { path: 'automation', title: 'Automation', description: 'Rules that create tasks, notify people, set fields or send emails, when records change or dates come up.', icon: 'bolt', resource: 'customization', action: 'manage' },
   { path: 'email-templates', title: 'Email templates', description: 'Reusable emails for records and automation, with placeholders.', icon: 'drafts', resource: 'customization', action: 'manage' },
   { path: 'emails', title: 'Email log', description: 'Every email sent, its delivery status, and retries.', icon: 'outgoing_mail', resource: 'settings', action: 'manage' },
+  { path: 'privacy', title: 'Privacy', description: 'How long candidates are kept, and their data requests.', icon: 'privacy_tip', resource: 'settings', action: 'manage', requires: 'candidate' },
   { path: 'audit', title: 'Audit log', description: 'Who changed what, and when.', icon: 'history', resource: 'audit', action: 'read' },
 ];
 
@@ -55,7 +59,8 @@ const AREAS: SettingsArea[] = [
 })
 export class SettingsHome {
   private readonly auth = inject(AuthService);
-  readonly areas = computed(() => AREAS.filter((a) => this.auth.can(a.resource, a.action)));
+  private readonly meta = inject(MetadataService);
+  readonly areas = computed(() => AREAS.filter((a) => this.auth.can(a.resource, a.action) && (!a.requires || this.meta.isActive(a.requires))));
 }
 
 /** Back link used at the top of every settings page. */

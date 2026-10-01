@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  Seeds realistic recruitment demo data (job openings, candidates, applications, interviews and scorecards) into a tenant via the API.
+  Seeds realistic recruitment demo data (job openings, candidates, applications, interviews, scorecards and offers) into a tenant via the API.
 .DESCRIPTION
   Signs in as a tenant administrator and creates records through the normal API, so all validation, automation and
   permissions apply. Safe to re-run: candidates are matched by email and existing ones are reused, and it won't
-  create a duplicate application for the same candidate and job, or interviews for an application that has some.
+  create a duplicate application for the same candidate and job, or interviews or offers for an application that has some.
   Records are owned by the signed-in admin, who is also the interviewer.
 .EXAMPLE
   ./scripts/seed-recruitment.ps1 -Email admin@hardeeporg.example
@@ -162,4 +162,24 @@ foreach ($app in @((Api GET '/api/records/application?pageSize=500').items | Whe
     $interviews++
 }
 Write-Host "Interviews: $interviews new (with your scorecards on the completed ones)" -ForegroundColor Cyan
+
+# ---- Offers: open for applications at Offer; accepted (through the candidate's link) for hires ----
+$offers = 0
+foreach ($app in @((Api GET '/api/records/application?pageSize=500').items | Where-Object stage -in 'offer', 'hired')) {
+    if (@(Api GET "/api/offers?applicationId=$($app.id)").Count -gt 0) { continue }
+    $d = Api GET "/api/offers/defaults?applicationId=$($app.id)"
+    $draft = Api POST '/api/offers' @{
+        applicationId = $app.id; jobTitle = $(if ($d.jobTitle) { $d.jobTitle } else { 'Team member' })
+        salary = $(if ($d.salary) { $d.salary } else { (Get-Random -Minimum 80 -Maximum 170) * 1000 }); currency = $d.currency; payPeriod = 'Year'
+        startDate = $d.startDate; expiresAt = $d.expiresAt; letter = $d.letter; notes = 'Demo offer'
+    }
+    $sent = Api POST "/api/offers/$($draft.id)/send"
+    if ($app.stage -eq 'hired') {
+        $token = $sent.link.Substring($sent.link.LastIndexOf('/') + 1)
+        Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/offer-response/$token/accept" -ContentType 'application/json' `
+            -Body (@{ signedName = $app.name; agree = $true } | ConvertTo-Json) | Out-Null
+    }
+    $offers++
+}
+Write-Host "Offers: $offers new (accepted for hires, awaiting a reply at Offer)" -ForegroundColor Cyan
 Write-Host "`nDone. Open Applications, My interviews and Hiring analytics in the app to see the data." -ForegroundColor Green

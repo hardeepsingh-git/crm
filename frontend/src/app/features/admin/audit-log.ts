@@ -62,7 +62,7 @@ import { SettingsBack } from './settings-home';
         <ng-container matColumnDef="record"><th mat-header-cell *matHeaderCellDef>Record</th>
           <td mat-cell *matCellDef="let a">
             <span class="muted">{{ meta.label(a.entityType) }}:</span>
-            @if (a.action !== 'Deleted' && a.action !== 'Exported' && meta.object(a.entityType)) {
+            @if (linkable(a)) {
               <a [routerLink]="meta.route(a.entityType, a.entityId)">{{ a.entityName ?? a.entityId }}</a>
             } @else { {{ a.entityName ?? a.entityId }} }
           </td></ng-container>
@@ -83,7 +83,7 @@ export class AuditLog {
   readonly meta = inject(MetadataService);
   readonly lookup = inject(UserLookupService);
   readonly inputValue = inputValue;
-  readonly actions: AuditAction[] = ['Created', 'Updated', 'Deleted', 'Exported'];
+  readonly actions: AuditAction[] = ['Created', 'Updated', 'Deleted', 'Exported', 'Erased'];
   readonly columns = ['timestamp', 'user', 'action', 'record', 'changes'];
   readonly search = signal('');
   readonly entityType = signal<string | null>(null);
@@ -109,10 +109,19 @@ export class AuditLog {
   readonly total = computed(() => this.value()?.totalCount ?? 0);
 
   chip(action: AuditAction): string {
-    return action === 'Created' ? 'Active' : action === 'Deleted' ? 'Inactive' : 'Normal';
+    return action === 'Created' ? 'Active' : action === 'Deleted' || action === 'Erased' ? 'Inactive' : 'Normal';
+  }
+
+  /** Deleted, erased and exported entries have no record to open. */
+  linkable(a: AuditItem): boolean {
+    return (a.action === 'Created' || a.action === 'Updated') && !!this.meta.object(a.entityType);
   }
 
   changes(a: AuditItem): string[] {
+    if (a.action === 'Erased') {
+      const c = a.changes as unknown as Record<string, string | number>;
+      return [`Reason: ${c['reason'] ?? 'not given'}`, `${c['applications'] ?? 0} applications, ${c['files'] ?? 0} files, ${c['emails'] ?? 0} emails removed`];
+    }
     if (a.action === 'Exported') {
       const filters = Object.entries((a.changes as unknown as { filters?: Record<string, string> }).filters ?? {});
       return filters.length ? filters.map(([k, v]) => `${k} = ${v}`) : ['No filters'];

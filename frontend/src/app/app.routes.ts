@@ -12,6 +12,7 @@ export const routes: Routes = [
   { path: 'reset-password', title: 'Reset password | CRM', loadComponent: () => import('./features/auth/password-reset').then((m) => m.ResetPassword) },
   { path: 'careers/:slug', title: 'Careers', loadComponent: () => import('./features/careers/careers').then((m) => m.CareersPageView) },
   { path: 'careers/:slug/:jobId', title: 'Careers', loadComponent: () => import('./features/careers/careers').then((m) => m.CareerJobView) },
+  { path: 'offer/:token', title: 'Your job offer', loadComponent: () => import('./features/offer/offer-response').then((m) => m.OfferResponsePage) },
   {
     path: '',
     canActivate: [authGuard],
@@ -57,6 +58,7 @@ export const routes: Routes = [
               { path: 'automation', title: 'Automation | CRM', canActivate: [customize], loadComponent: () => import('./features/admin/automation-list').then((m) => m.AutomationList) },
               { path: 'email-templates', title: 'Email templates | CRM', canActivate: [customize], loadComponent: () => import('./features/admin/email-templates').then((m) => m.EmailTemplates) },
               { path: 'emails', title: 'Email log | CRM', canActivate: [permissionGuard('settings', 'manage')], loadComponent: () => import('./features/admin/email-log').then((m) => m.EmailLog) },
+              { path: 'privacy', title: 'Privacy | CRM', canActivate: [permissionGuard('settings', 'manage')], loadComponent: () => import('./features/admin/privacy').then((m) => m.PrivacySettings) },
               { path: 'audit', title: 'Audit log | CRM', canActivate: [permissionGuard('audit', 'read')], loadComponent: () => import('./features/admin/audit-log').then((m) => m.AuditLog) },
             ],
           },

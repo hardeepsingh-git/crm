@@ -47,6 +47,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     public DbSet<Interview> Interviews => Set<Interview>();
     public DbSet<InterviewParticipant> InterviewParticipants => Set<InterviewParticipant>();
     public DbSet<Scorecard> Scorecards => Set<Scorecard>();
+    public DbSet<Offer> Offers => Set<Offer>();
 
     /// <summary>Referenced by the global query filters; EF evaluates it per query.</summary>
     public Guid? CurrentTenantId => tenant.TenantId;
@@ -94,6 +95,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         builder.Properties<InterviewKind>().HaveConversion<string>().HaveMaxLength(16);
         builder.Properties<InterviewStatus>().HaveConversion<string>().HaveMaxLength(16);
         builder.Properties<Recommendation>().HaveConversion<string>().HaveMaxLength(16);
+        builder.Properties<OfferStatus>().HaveConversion<string>().HaveMaxLength(16);
+        builder.Properties<PayPeriod>().HaveConversion<string>().HaveMaxLength(16);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -201,7 +204,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
 
     private static readonly HashSet<string> NeverAudited =
         [nameof(AuditableEntity.Id), nameof(ITenantEntity.TenantId), nameof(AuditableEntity.CreatedAt), nameof(AuditableEntity.UpdatedAt),
-         nameof(AutomationRule.RunCount), nameof(AutomationRule.LastRunAt)];
+         nameof(AutomationRule.RunCount), nameof(AutomationRule.LastRunAt), nameof(Offer.TokenHash)];
 
     private static readonly HashSet<string> AuditedUserProperties =
         [nameof(AppUser.Email), nameof(AppUser.FirstName), nameof(AppUser.LastName), nameof(AppUser.IsActive)];
@@ -320,6 +323,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         EmailTemplate => "email_template",
         Interview => "interview",
         Scorecard => "scorecard",
+        Offer => "offer",
         _ => entity.GetType().Name,
     };
 
@@ -342,6 +346,7 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         EmailTemplate t => t.Name,
         Interview i => $"{i.Kind} interview {i.ScheduledAt:yyyy-MM-dd HH:mm} UTC",
         Scorecard s => s.Recommendation.ToString(),
+        Offer o => $"Offer: {o.JobTitle}",
         _ => null,
     };
 }

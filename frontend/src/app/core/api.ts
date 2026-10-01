@@ -47,6 +47,15 @@ import {
   InterviewRequest,
   InterviewSaved,
   ScorecardRequest,
+  ErasureResult,
+  OfferAnswered,
+  OfferDefaults,
+  OfferItem,
+  OfferPreview,
+  OfferRequest,
+  OfferSent,
+  RetentionRun,
+  RetentionStatus,
   VerificationChannel,
   VerifyResponse,
 } from './models';
@@ -70,6 +79,12 @@ export function saveBlob(blob: Blob, fileName: string): void {
   link.download = fileName;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url));
+}
+
+/** The file name in a Content-Disposition header (plain or RFC 5987), or the fallback. */
+export function fileNameOf(disposition: string | null, fallback: string): string {
+  const name = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition ?? '')?.[1];
+  return name ? decodeURIComponent(name) : fallback;
 }
 
 /** Keeps the last successful value while a resource reloads, avoiding table flicker. */
@@ -333,8 +348,8 @@ export class CrmApi {
       .get(`/api/export/${objectKey}`, { params: params.delete('page').delete('pageSize'), responseType: 'blob', observe: 'response' })
       .pipe(
         map((response) => {
-          const name = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? `${objectKey}.csv`;
-          saveBlob(response.body!, decodeURIComponent(name));
+          const name = fileNameOf(response.headers.get('Content-Disposition'), `${objectKey}.csv`);
+          saveBlob(response.body!, name);
         }),
       );
   }
@@ -422,6 +437,60 @@ export class CrmApi {
 
   downloadInterviewCalendar(id: string): Observable<void> {
     return this.http.get(`/api/interviews/${id}/ics`, { responseType: 'blob' }).pipe(map((blob) => saveBlob(blob, 'interview.ics')));
+  }
+
+  // ---------- Offers ----------
+
+  offerDefaults(applicationId: string): Observable<OfferDefaults> {
+    return this.http.get<OfferDefaults>('/api/offers/defaults', { params: { applicationId } });
+  }
+
+  saveOffer(id: string | null, body: OfferRequest): Observable<OfferItem> {
+    return id ? this.http.put<OfferItem>(`/api/offers/${id}`, body) : this.http.post<OfferItem>('/api/offers', body);
+  }
+
+  deleteOffer(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/offers/${id}`);
+  }
+
+  previewOffer(id: string): Observable<OfferPreview> {
+    return this.http.get<OfferPreview>(`/api/offers/${id}/preview`);
+  }
+
+  sendOffer(id: string): Observable<OfferSent> {
+    return this.http.post<OfferSent>(`/api/offers/${id}/send`, null);
+  }
+
+  withdrawOffer(id: string, reason: string | null): Observable<OfferItem> {
+    return this.http.post<OfferItem>(`/api/offers/${id}/withdraw`, { reason });
+  }
+
+  // ---------- Offer response (anonymous) ----------
+
+  answerOffer(token: string, answer: 'accept', body: { signedName: string; agree: boolean }): Observable<OfferAnswered>;
+  answerOffer(token: string, answer: 'decline', body: { reason: string | null }): Observable<OfferAnswered>;
+  answerOffer(token: string, answer: 'accept' | 'decline', body: object): Observable<OfferAnswered> {
+    return this.http.post<OfferAnswered>(`/api/offer-response/${encodeURIComponent(token)}/${answer}`, body);
+  }
+
+  // ---------- Privacy ----------
+
+  exportCandidateData(id: string): Observable<void> {
+    return this.http
+      .get(`/api/privacy/candidates/${id}/export`, { responseType: 'blob', observe: 'response' })
+      .pipe(map((response) => saveBlob(response.body!, fileNameOf(response.headers.get('Content-Disposition'), 'candidate-data.zip'))));
+  }
+
+  eraseCandidate(id: string, confirmName: string): Observable<ErasureResult> {
+    return this.http.post<ErasureResult>(`/api/privacy/candidates/${id}/erase`, { confirmName });
+  }
+
+  saveRetention(months: number | null): Observable<RetentionStatus> {
+    return this.http.put<RetentionStatus>('/api/privacy/retention', { months });
+  }
+
+  runRetention(): Observable<RetentionRun> {
+    return this.http.post<RetentionRun>('/api/privacy/retention/run', null);
   }
 }
 

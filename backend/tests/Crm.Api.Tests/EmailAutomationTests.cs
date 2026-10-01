@@ -93,7 +93,7 @@ public class EmailAutomationTests(CrmApiFactory factory) : IClassFixture<CrmApiF
     {
         var (ats, _, _) = await RecruitmentTenantAsync();
         var templates = await (await ats.GetAsync("/api/admin/email-templates")).ReadAsync<List<EmailTemplateItem>>();
-        Assert.Equal(["Application outcome", "Application received", "Interview invitation", "Job offer"], templates.Select(t => t.Name).Order());
+        Assert.Equal(["Application outcome", "Application received", "Interview invitation", "Job offer", "Offer email", "Offer letter"], templates.Select(t => t.Name).Order());
 
         var fields = await (await ats.GetAsync("/api/email/fields/application")).ReadAsync<EmailFieldSet>();
         Assert.Contains(fields.Placeholders, p => p.Key == "cf.position.name");
@@ -329,7 +329,7 @@ public class EmailAutomationTests(CrmApiFactory factory) : IClassFixture<CrmApiF
         var reminder = rules.Single(r => r.Name == "Interview reminder");
         Assert.True(reminder.IsActive);
         Assert.Equal((AutomationTrigger.DateReached, "cf.interview_date", -1440), (reminder.Trigger, reminder.ScheduleField, reminder.ScheduleOffsetMinutes));
-        Assert.Equal(4, (await (await ats.GetAsync("/api/admin/email-templates")).ReadAsync<List<EmailTemplateItem>>()).Count);
+        Assert.Equal(6, (await (await ats.GetAsync("/api/admin/email-templates")).ReadAsync<List<EmailTemplateItem>>()).Count);
 
         var job = await (await ats.GetAsync("/api/admin/email-templates")).ReadAsync<List<EmailTemplateItem>>();
         Assert.Equal(HttpStatusCode.NoContent, (await ats.DeleteAsync($"/api/admin/email-templates/{job.Single(t => t.Name == "Job offer").Id}")).StatusCode);

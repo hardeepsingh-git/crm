@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Features.Offers;
 using Crm.Api.Messaging;
 using Crm.Api.Security;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,8 @@ public record EmailRecipient(string Label, string Address);
 
 public record QueueEmail(
     OwnedEntity Record, string ObjectKey, string To, string Subject, string Body,
-    Guid? RuleId = null, Guid? TemplateId = null, Guid? SentById = null, string SentByName = "Automation", string? ReplyTo = null);
+    Guid? RuleId = null, Guid? TemplateId = null, Guid? SentById = null, string SentByName = "Automation", string? ReplyTo = null,
+    string? TimelineBody = null);
 
 /// <summary>Loads any record by object key; standard objects have their own tables, custom ones share <c>CustomRecords</c>.</summary>
 public static class RecordStore
@@ -115,6 +117,7 @@ public sealed partial class EmailComposer(IConfiguration config, IHostEnvironmen
         placeholders.Add(new("owner.email", "Owner email"));
         placeholders.Add(new("organisation.name", "Organisation name"));
         placeholders.Add(new("link", "Link to the record"));
+        if (objectKey == OfferKeys.ApplicationKey) placeholders.AddRange(OfferKeys.Placeholders);
         return new EmailFieldSet(placeholders, recipients);
     }
 
@@ -153,6 +156,12 @@ public sealed partial class EmailComposer(IConfiguration config, IHostEnvironmen
         context["owner.email"] = owner?.Email ?? "";
         context["organisation.name"] = tenant?.Name ?? "";
         context["link"] = PublicUrl() is { } url ? url + AutomationEngine.LinkFor(record, objectKey) : "";
+        if (objectKey == OfferKeys.ApplicationKey)
+        {
+            var offer = await db.Offers.AsNoTracking().Where(o => o.ApplicationId == record.Id && o.Status != OfferStatus.Withdrawn)
+                .OrderByDescending(o => o.CreatedAt).FirstOrDefaultAsync(ct);
+            foreach (var (key, value) in OfferKeys.Values(offer)) context[key] = value;
+        }
 
         var values = Cf.Parse(record.CustomFields);
         foreach (var lookup in own.Where(f => f.Type == FieldType.Lookup && f.LookupObjectKey is not null))
@@ -254,7 +263,7 @@ public sealed partial class EmailComposer(IConfiguration config, IHostEnvironmen
             {
                 Type = ActivityType.Email,
                 Subject = Truncate(subject, 200),
-                Description = Truncate($"To: {q.To}\n\n{body}", 4000),
+                Description = Truncate($"To: {q.To}\n\n{q.TimelineBody ?? body}", 4000),
                 CompletedAt = now,
                 OwnerId = q.SentById ?? q.Record.OwnerId,
             };

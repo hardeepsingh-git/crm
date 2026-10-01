@@ -99,7 +99,7 @@ public static class InterviewEndpoints
     }
 
     private static IQueryable<Interview> Load(CrmDbContext db) =>
-        db.Interviews.AsNoTracking().Include(i => i.Participants).ThenInclude(x => x.User).Include(i => i.Scorecards);
+        db.Interviews.AsNoTracking().Include(i => i.Participants).ThenInclude(x => x.User).Include(i => i.Scorecards).AsSplitQuery();
 
     private static async Task<Dictionary<Guid, CustomRecord>> AppsAsync(CrmDbContext db, IEnumerable<Interview> interviews, CancellationToken ct)
     {

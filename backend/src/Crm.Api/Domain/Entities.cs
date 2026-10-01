@@ -31,6 +31,8 @@ public class Tenant
     /// <summary>Public job board at /careers/{slug}; recruitment-shaped tenants only.</summary>
     public bool CareersEnabled { get; set; }
     public string? CareersIntro { get; set; }
+    /// <summary>Candidates with no open or hired application and no changes for this long can be erased; null = no policy.</summary>
+    public int? CandidateRetentionMonths { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -406,6 +408,34 @@ public class Scorecard : AuditableEntity
     public string Ratings { get; set; } = "{}";
     public string? Notes { get; set; }
     public DateTime SubmittedAt { get; set; }
+}
+
+/// <summary>A job offer on an application. The candidate answers through a single-purpose link; only the link's hash is stored.</summary>
+public class Offer : AuditableEntity
+{
+    public Guid ApplicationId { get; set; }
+    public CustomRecord? Application { get; set; }
+    public OfferStatus Status { get; set; } = OfferStatus.Draft;
+    public string JobTitle { get; set; } = "";
+    public decimal Salary { get; set; }
+    public string Currency { get; set; } = "AUD";
+    public PayPeriod PayPeriod { get; set; } = PayPeriod.Year;
+    public DateOnly StartDate { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    /// <summary>Letter text with placeholders while a draft; filled in and frozen when first sent.</summary>
+    public string Letter { get; set; } = "";
+    /// <summary>Internal; never shown to the candidate.</summary>
+    public string? Notes { get; set; }
+    public Guid CreatedById { get; set; }
+    public string? TokenHash { get; set; }
+    public DateTime? SentAt { get; set; }
+    public Guid? SentById { get; set; }
+    public DateTime? RespondedAt { get; set; }
+    /// <summary>Acceptance evidence: the name typed by the candidate, with their IP address and browser.</summary>
+    public string? SignedName { get; set; }
+    public string? ResponseIp { get; set; }
+    public string? ResponseUserAgent { get; set; }
+    public string? DeclineReason { get; set; }
 }
 
 public class Notification : ITenantEntity

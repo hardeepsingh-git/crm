@@ -335,7 +335,7 @@ if ($adminEmail -and $adminPassword) {
 
     # Recruitment (ATS) tenant: candidates, applications per job, unique emails, pipeline per job.
     $atsSlug = "$slug-ats"
-    Check 'Provision Recruitment tenant (template v5 with demo data)' {
+    Check 'Provision Recruitment tenant (template v6 with demo data)' {
         $script:atsTenant = Api POST '/api/platform/tenants' @{
             name = "E2E Recruiting $slug"; slug = $atsSlug; template = 'recruitment'; currency = 'USD'
             adminEmail = "admin@$atsSlug.test"; adminFirstName = 'Rita'; adminLastName = 'Cruiter'; adminPassword = 'Tenant#Pass123'; seedDemoData = $true
@@ -375,7 +375,7 @@ if ($adminEmail -and $adminPassword) {
     Check 'Email a candidate from a template; outbox delivers it and logs it on the timeline' {
         $templates = @(Api GET '/api/email/templates?objectKey=application' -Token $script:atsToken | ForEach-Object { $_ })
         $invite = $templates | Where-Object name -eq 'Interview invitation'
-        Assert ($templates.Count -eq 4 -and $null -ne $invite) "expected 4 templates, got $($templates.Count)"
+        Assert ($templates.Count -eq 6 -and $null -ne $invite) "expected 6 templates, got $($templates.Count)"
         $appId = $script:atsApplication.id
         $c = Api POST '/api/email/compose' @{ objectKey = 'application'; recordId = $appId; templateId = $invite.id } -Token $script:atsToken
         $to = "smoke.candidate@$atsSlug.test"
@@ -488,6 +488,53 @@ if ($adminEmail -and $adminPassword) {
         Assert (@($r.sources).Count -gt 0 -and @($r.jobs).Count -gt 0) 'sources or jobs missing'
         Assert ($r.interviewsNext7Days -ge 1) 'scheduled interview not counted'
         "$($r.applications) applications, $($r.hired) hired, $(@($r.sources).Count) sources, $(@($r.jobs).Count) jobs, $($r.interviewsNext7Days) interviews this week"
+    }
+    Check 'Offers: draft, send, candidate signs by typing their name' {
+        $appId = $script:atsApplication.id
+        $d = Api GET "/api/offers/defaults?applicationId=$appId" -Token $script:atsToken
+        $terms = @{ applicationId = $appId; jobTitle = $d.jobTitle; salary = 99000; currency = $d.currency; payPeriod = 'Year'; startDate = $d.startDate; expiresAt = $d.expiresAt; letter = $d.letter }
+        $draft = Api POST '/api/offers' $terms -Token $script:atsToken
+        $s = StatusOf { Api POST '/api/offers' $terms -Token $script:atsToken }
+        Assert ($s -eq 400) "second open offer returned $s"
+        $sent = Api POST "/api/offers/$($draft.id)/send" -Token $script:atsToken
+        Assert ($null -eq $sent.emailNote) "offer not emailed: $($sent.emailNote)"
+        $token = $sent.link.Substring($sent.link.LastIndexOf('/') + 1)
+        $view = Api GET "/api/offer-response/$token" -Token $null
+        Assert ($view.status -eq 'Sent' -and $view.salary -eq 99000 -and $view.letter -like '*Smoke Candidate*' -and $view.letter -notlike '*{{*') 'candidate view wrong'
+        $bad = StatusOf { Api POST "/api/offer-response/$token/accept" @{ signedName = 'Someone Else'; agree = $true } -Token $null }
+        Assert ($bad -eq 400) "wrong signature returned $bad"
+        $ok = Api POST "/api/offer-response/$token/accept" @{ signedName = 'smoke  CANDIDATE'; agree = $true } -Token $null
+        Assert ($ok.status -eq 'Accepted') "accept returned $($ok.status)"
+        $offer = @(Api GET "/api/offers?applicationId=$appId" -Token $script:atsToken)[0]
+        Assert ($offer.status -eq 'Accepted' -and $offer.signedName -eq 'smoke  CANDIDATE' -and $offer.respondedAt) 'acceptance evidence missing'
+        $mails = @((Api GET "/api/activities?customRecordId=$appId&type=Email" -Token $script:atsToken).items)
+        Assert (@($mails | Where-Object { $_.description -like "*$token*" }).Count -eq 0) 'offer link leaked onto the timeline'
+        $stats = (Api GET '/api/recruiting/analytics?days=90' -Token $script:atsToken).offers
+        Assert ($stats.accepted -ge 1) 'accepted offer not counted'
+        "sent, signed and accepted; link kept off the timeline; acceptance rate $([math]::Round($stats.acceptanceRate * 100))%"
+    }
+    Check 'Privacy: export a candidate''s data, erase them, retention preview' {
+        $id = $script:careersCandidate.id
+        $zip = Invoke-WebRequest -Uri "$BaseUrl/api/privacy/candidates/$id/export" -Headers @{ Authorization = "Bearer $script:atsToken" } -UseBasicParsing
+        $bytes = if ($zip.Content -is [byte[]]) { $zip.Content } else { [Text.Encoding]::Latin1.GetBytes([string]$zip.Content) }
+        Assert ("$($zip.Headers['Content-Type'])" -eq 'application/zip' -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) 'export is not a ZIP'
+        $archive = [IO.Compression.ZipArchive]::new([IO.MemoryStream]::new($bytes))
+        try {
+            $data = [IO.StreamReader]::new($archive.GetEntry('data.json').Open()).ReadToEnd()
+            Assert ($data -like '*Careers Applicant*' -and @($archive.Entries | Where-Object FullName -like 'files/*').Count -eq 2) 'export incomplete'
+        } finally { $archive.Dispose() }
+        $s = StatusOf { Api POST "/api/privacy/candidates/$id/erase" @{ confirmName = 'Wrong Name' } -Token $script:atsToken }
+        Assert ($s -eq 400) "wrong confirmation returned $s"
+        $r = Api POST "/api/privacy/candidates/$id/erase" @{ confirmName = 'careers applicant' } -Token $script:atsToken
+        Assert ($r.applications -eq 1 -and $r.files -eq 2) "erased $($r | ConvertTo-Json -Compress)"
+        $gone = StatusOf { Api GET "/api/records/candidate/$id" -Token $script:atsToken }
+        Assert ($gone -eq 404) "erased candidate returned $gone"
+        $audit = Api GET '/api/admin/audit?action=Erased' -Token $script:atsToken
+        Assert ($audit.totalCount -eq 1 -and $audit.items[0].entityName -eq '[erased]') 'erasure not audited anonymously'
+        $retention = Api PUT '/api/privacy/retention' @{ months = 24 } -Token $script:atsToken
+        Assert ($retention.months -eq 24 -and $retention.eligible -eq 0) "retention preview: $($retention.eligible) eligible"
+        Api PUT '/api/privacy/retention' @{ months = $null } -Token $script:atsToken | Out-Null
+        "ZIP with data.json and 2 files; erased 1 application and 2 files; audit anonymised; retention preview 0"
     }
     if (-not $Keep) {
         Check 'Delete the recruitment tenant' {

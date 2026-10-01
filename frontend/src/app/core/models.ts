@@ -10,7 +10,7 @@ export type AutomationTrigger = 'Created' | 'Updated' | 'StageChanged' | 'DateRe
 export type ConditionOperator = 'Equals' | 'NotEquals' | 'GreaterThan' | 'LessThan' | 'Contains' | 'IsEmpty' | 'IsNotEmpty' | 'Changed';
 export type AutomationActionType = 'CreateTask' | 'Notify' | 'SetField' | 'SendEmail';
 export type TenantStatus = 'Active' | 'Suspended';
-export type AuditAction = 'Created' | 'Updated' | 'Deleted' | 'Exported';
+export type AuditAction = 'Created' | 'Updated' | 'Deleted' | 'Exported' | 'Erased';
 export type RecordAction = 'read' | 'create' | 'update' | 'delete';
 export type AdminResource = 'users' | 'roles' | 'groups' | 'customization' | 'settings' | 'audit';
 
@@ -820,4 +820,120 @@ export interface HiringAnalytics {
   jobs: JobRow[];
   interviewsNext7Days: number;
   feedbackOutstanding: number;
+  offers: OfferStats;
+}
+
+export interface OfferStats {
+  sent: number;
+  accepted: number;
+  declined: number;
+  expired: number;
+  pending: number;
+  acceptanceRate: number | null;
+  averageDaysToRespond: number | null;
+}
+
+export type OfferStatus = 'Draft' | 'Sent' | 'Accepted' | 'Declined' | 'Withdrawn' | 'Expired';
+export type PayPeriod = 'Year' | 'Month' | 'Hour';
+export const PAY_PERIODS: PayPeriod[] = ['Year', 'Month', 'Hour'];
+
+export interface OfferItem {
+  id: string;
+  applicationId: string;
+  status: OfferStatus;
+  jobTitle: string;
+  salary: number;
+  currency: string;
+  payPeriod: PayPeriod;
+  startDate: string;
+  expiresAt: string;
+  letter: string;
+  notes: string | null;
+  createdByName: string;
+  createdAt: string;
+  sentAt: string | null;
+  sentByName: string | null;
+  respondedAt: string | null;
+  signedName: string | null;
+  responseIp: string | null;
+  declineReason: string | null;
+}
+
+export interface OfferRequest {
+  applicationId: string;
+  jobTitle: string;
+  salary: number;
+  currency: string;
+  payPeriod: PayPeriod;
+  startDate: string;
+  expiresAt: string;
+  letter: string;
+  notes: string | null;
+}
+
+export interface OfferDefaults {
+  jobTitle: string;
+  salary: number | null;
+  currency: string;
+  payPeriod: PayPeriod;
+  startDate: string;
+  expiresAt: string;
+  letter: string;
+}
+
+export interface OfferPreview {
+  letter: string;
+  blankFields: string[];
+}
+
+export interface OfferSent {
+  offer: OfferItem;
+  link: string;
+  emailNote: string | null;
+}
+
+export interface PublicOffer {
+  organisation: string;
+  candidateName: string;
+  jobTitle: string;
+  status: OfferStatus;
+  expiresAt: string;
+  salary: number | null;
+  currency: string | null;
+  payPeriod: PayPeriod | null;
+  startDate: string | null;
+  letter: string | null;
+  respondedAt: string | null;
+  signedName: string | null;
+}
+
+export interface OfferAnswered {
+  status: OfferStatus;
+  message: string;
+}
+
+export interface ErasureResult {
+  applications: number;
+  activities: number;
+  files: number;
+  emails: number;
+}
+
+export interface RetentionCandidate {
+  id: string;
+  name: string;
+  lastActivity: string;
+  applications: number;
+}
+
+export interface RetentionStatus {
+  months: number | null;
+  cutoff: string | null;
+  eligible: number;
+  sample: RetentionCandidate[];
+}
+
+export interface RetentionRun {
+  erased: number;
+  remaining: number;
 }

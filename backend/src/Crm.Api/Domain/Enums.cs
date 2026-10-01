@@ -31,7 +31,13 @@ public enum InterviewStatus { Scheduled, Completed, Cancelled }
 
 public enum Recommendation { StrongNo, No, Yes, StrongYes }
 
-public enum AuditAction { Created, Updated, Deleted, Exported }
+/// <summary>Draft and Sent are active (one per application); the others are final.</summary>
+public enum OfferStatus { Draft, Sent, Accepted, Declined, Withdrawn, Expired }
+
+public enum PayPeriod { Year, Month, Hour }
+
+/// <summary>Erased: a person's data was removed for privacy (request or retention); the entry itself holds no personal data.</summary>
+public enum AuditAction { Created, Updated, Deleted, Exported, Erased }
 
 /// <summary>Only Approved users may sign in; the other states belong to self-registrations still in progress.</summary>
 public enum RegistrationStatus { Approved, PendingVerification, PendingApproval, Rejected }

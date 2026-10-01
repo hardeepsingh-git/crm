@@ -294,7 +294,32 @@ public static class DemoData
             });
         }
         await SeedInterviewsAsync(db, applications, rnd, now, ct);
+        await SeedOffersAsync(db, applications, jobs, rnd, now, ct);
         return [.. jobs, .. people, .. applications];
+    }
+
+    /// <summary>An open offer for applications at Offer, and an accepted one for hires. Demo links are never usable.</summary>
+    private static async Task SeedOffersAsync(CrmDbContext db, List<CustomRecord> applications, List<CustomRecord> jobs, Random rnd, DateTime now, CancellationToken ct)
+    {
+        var tenantId = db.CurrentTenantId;
+        var currency = await db.Tenants.Where(t => t.Id == tenantId).Select(t => t.Currency).FirstOrDefaultAsync(ct) ?? "AUD";
+        var titles = jobs.ToDictionary(j => j.Id.ToString(), j => j.Name);
+        foreach (var app in applications.Where(a => a.Stage is "offer" or "hired"))
+        {
+            var job = titles.GetValueOrDefault(Cf.AsText(Cf.Parse(app.CustomFields)["position"]) ?? "", "the role");
+            var hired = app.Stage == "hired";
+            var sent = now.AddDays(-rnd.Next(hired ? 10 : 1, hired ? 30 : 4));
+            var offer = new Offer
+            {
+                ApplicationId = app.Id, JobTitle = job, Salary = rnd.Next(70, 170) * 1000m, Currency = currency, PayPeriod = PayPeriod.Year,
+                StartDate = DateOnly.FromDateTime(now).AddDays(hired ? 14 : 30), ExpiresAt = hired ? sent.AddDays(7) : now.AddDays(5),
+                CreatedById = app.OwnerId, SentById = app.OwnerId, SentAt = sent, Status = hired ? OfferStatus.Accepted : OfferStatus.Sent,
+                TokenHash = Features.Offers.OfferEndpoints.HashToken(Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")),
+                Letter = $"Dear {app.Name},\n\nWe are delighted to offer you the position of {job}.\n\nWe look forward to welcoming you to the team.",
+            };
+            if (hired) (offer.RespondedAt, offer.SignedName) = (sent.AddDays(2), app.Name);
+            db.Offers.Add(offer);
+        }
     }
 
     /// <summary>A completed interview with a scorecard for applications past screening, and an upcoming one for those in Interview.</summary>

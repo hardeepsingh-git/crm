@@ -48,6 +48,12 @@ export const PERIODS = [30, 90, 180, 365];
           <div class="value">{{ r.interviewsNext7Days }}</div><div class="muted"><a routerLink="/recruiting/interviews">My interviews</a></div></mat-card>
         <mat-card appearance="outlined" class="kpi" [class.alert]="r.feedbackOutstanding > 0"><div class="label">Feedback outstanding</div>
           <div class="value">{{ r.feedbackOutstanding }}</div><div class="muted">scorecards not yet submitted</div></mat-card>
+        <mat-card appearance="outlined" class="kpi"><div class="label">Offer acceptance</div>
+          <div class="value">{{ r.offers.acceptanceRate === null ? '–' : (r.offers.acceptanceRate | percent: '1.0-0') }}</div>
+          <div class="muted">{{ r.offers.accepted }} accepted, {{ r.offers.declined }} declined, {{ r.offers.expired }} expired</div></mat-card>
+        <mat-card appearance="outlined" class="kpi"><div class="label">Offers awaiting reply</div>
+          <div class="value">{{ r.offers.pending }}</div>
+          <div class="muted">{{ r.offers.averageDaysToRespond === null ? 'of ' + r.offers.sent + ' sent' : 'replies take ' + (r.offers.averageDaysToRespond | number: '1.0-1') + ' days' }}</div></mat-card>
       </section>
 
       <div class="grid">

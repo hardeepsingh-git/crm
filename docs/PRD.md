@@ -232,8 +232,23 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | ANL-2 | **Funnel** from the stage history: how many applications reached each stage, conversion to the next stage and average days in stage; plus **source** quality (hire rate per source) and a per-job stage breakdown. Limited to the applications the user can read. | M |
 | ATS-7 | Recruitment template v5 adds the interview criteria; demo data includes interviews and scorecards. | S |
 
-### 5.16 Future (backlog)
-Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Cloud file storage · Résumé parsing · Careers page branding (logo, colours) and CAPTCHA · Candidate portal and self-scheduling of interview slots · Calendar sync (Outlook/Google) · Offer letters · Export permission per role · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
+### 5.16 Phase 5: offers and candidate privacy (OFFER, PRIV)
+| ID | Requirement | Pri |
+|---|---|---|
+| OFFER-1 | **Draft an offer** on an application: job title, salary and pay period, currency, start date, response deadline (up to 60 days), a letter from the organisation's *Offer letter* template with placeholders, and internal notes. Suggested from the job and the candidate's expected salary. Needs edit access to the application; others never see pay details. | M |
+| OFFER-2 | At most **one open offer** per application, enforced by the database. Drafts can be edited, previewed and deleted. | M |
+| OFFER-3 | **Send** freezes the letter, moves the application to *Offer*, and emails the candidate a personal link (through the outbox and its limits). The link is also shown once to the sender; sending again replaces it. | M |
+| OFFER-4 | **Candidate response page** (no account): read the terms and letter, print or save as PDF, **accept by typing their full name** (matched to the application) and ticking a confirmation, or decline with an optional reason. | M |
+| OFFER-5 | **Evidence and follow-up**: time, IP address, browser and typed name are recorded; a note is added to the application; the sender and owner are notified. Offers can be withdrawn (link stops working) and expire after their deadline. | M |
+| OFFER-6 | **Link security**: 256-bit random token, only its hash stored, never shown on the record timeline, rate-limited, only for active organisations. | M |
+| OFFER-7 | Offer statistics in hiring analytics: sent, accepted, declined, expired, awaiting reply, acceptance rate and time to respond. | S |
+| PRIV-1 | **Subject access**: an administrator downloads everything held about a candidate as a ZIP (data plus files), with scorecards included but interviewers not named. The export is audited. | M |
+| PRIV-2 | **Right to erasure**: an administrator erases a candidate after typing their name: candidate, applications, interviews, scorecards, offers, notes, files, emails and notifications are deleted, and their names and values are removed from the audit log, leaving one anonymous *Erased* entry. | M |
+| PRIV-3 | **Retention policy** (6–120 months, off by default): preview who would be erased (inactive, all applications closed, never hired), then erase them in batches. | M |
+| ATS-8 | Recruitment template v6 adds the *Offer letter* and *Offer email* templates; demo data includes open and accepted offers. | S |
+
+### 5.17 Future (backlog)
+Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Cloud file storage · Résumé parsing · Careers page branding (logo, colours) and CAPTCHA · Candidate portal and self-scheduling of interview slots · Calendar sync (Outlook/Google) · Qualified e-signatures (DocuSign) and PDF offer documents · Offer approval workflows · Scheduled (automatic) retention runs · Export permission per role · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
 
 ## 6. Non-functional requirements
 
@@ -266,9 +281,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (78), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits), date-based rules, the careers page, CSV export, interviews, blind scorecards and hiring analytics
-- [x] UI unit tests green (68), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log, the date-rule editor, careers pages, export, interview scheduling, scorecards and the analytics page
-- [x] Live smoke test green against PostgreSQL (62 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox, date-based rules, an anonymous careers application, CSV export, interviews with a candidate invitation and scorecard, and hiring analytics)
+- [x] API integration tests green (84), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits), date-based rules, the careers page, CSV export, interviews, blind scorecards, hiring analytics, offers (drafting, sending, signing, expiry, withdrawal) and candidate privacy (export, erasure, retention)
+- [x] UI unit tests green (76), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log, the date-rule editor, careers pages, export, interview scheduling, scorecards, the analytics page, offers, the candidate offer page and privacy settings
+- [x] Live smoke test green against PostgreSQL (64 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox, date-based rules, an anonymous careers application, CSV export, interviews with a candidate invitation and scorecard, hiring analytics, an offer signed by the candidate, and a candidate data export and erasure)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

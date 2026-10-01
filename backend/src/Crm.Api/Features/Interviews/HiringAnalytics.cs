@@ -17,10 +17,13 @@ public record SourceRow(string Source, int Applications, int Hired, double HireR
 
 public record JobRow(Guid Id, string Title, int Applications, int Open, int Hired, IReadOnlyDictionary<string, int> ByStage);
 
+/// <param name="AcceptanceRate">Accepted share of the offers candidates answered or let expire.</param>
+public record OfferStats(int Sent, int Accepted, int Declined, int Expired, int Pending, double? AcceptanceRate, double? AverageDaysToRespond);
+
 public record HiringAnalytics(
     int Days, int Applications, int Open, int Hired, int Rejected, double? AverageDaysToHire, double? MedianDaysToHire,
     IReadOnlyList<FunnelStage> Funnel, IReadOnlyList<SourceRow> Sources, IReadOnlyList<JobRow> Jobs,
-    int InterviewsNext7Days, int FeedbackOutstanding);
+    int InterviewsNext7Days, int FeedbackOutstanding, OfferStats Offers);
 
 /// <summary>Recruitment funnel, time to hire, sources and jobs for the applications the caller can read.</summary>
 public static class HiringAnalyticsEndpoints
@@ -110,6 +113,17 @@ public static class HiringAnalyticsEndpoints
                 i.ScheduledAt, i.Status,
                 Pending = i.Participants.Count(x => !i.Scorecards.Any(s => s.InterviewerId == x.UserId)),
             }).ToListAsync(ct);
+        var offers = new List<(OfferStatus Status, DateTime? SentAt, DateTime? RespondedAt)>();
+        foreach (var chunk in ids.Chunk(1000))
+            offers.AddRange((await db.Offers.AsNoTracking().Where(o => chunk.Contains(o.ApplicationId) && o.SentAt != null)
+                .Select(o => new { o.Status, o.ExpiresAt, o.SentAt, o.RespondedAt }).ToListAsync(ct))
+                .Select(o => (o.Status == OfferStatus.Sent && o.ExpiresAt <= now ? OfferStatus.Expired : o.Status, o.SentAt, o.RespondedAt)));
+        var accepted = offers.Count(o => o.Status == OfferStatus.Accepted);
+        var declined = offers.Count(o => o.Status == OfferStatus.Declined);
+        var expired = offers.Count(o => o.Status == OfferStatus.Expired);
+        var responseDays = offers.Where(o => o.RespondedAt is not null).Select(o => (o.RespondedAt!.Value - o.SentAt!.Value).TotalDays).ToList();
+        var offerStats = new OfferStats(offers.Count, accepted, declined, expired, offers.Count(o => o.Status == OfferStatus.Sent),
+            Rate(accepted, accepted + declined + expired), responseDays.Count == 0 ? null : Math.Round(responseDays.Average(), 1));
 
         return TypedResults.Ok(new HiringAnalytics(
             days, apps.Count, apps.Count(a => a.ClosedAt == null), hiredCount,
@@ -118,7 +132,7 @@ public static class HiringAnalyticsEndpoints
             toHire.Count == 0 ? null : Math.Round(toHire.Count % 2 == 1 ? toHire[toHire.Count / 2] : (toHire[toHire.Count / 2 - 1] + toHire[toHire.Count / 2]) / 2, 1),
             funnel, sources, jobs,
             interviews.Count(i => i.Status == InterviewStatus.Scheduled && i.ScheduledAt >= now && i.ScheduledAt < now.AddDays(7)),
-            interviews.Where(i => i.ScheduledAt < now).Sum(i => i.Pending)));
+            interviews.Where(i => i.ScheduledAt < now).Sum(i => i.Pending), offerStats));
     }
 
     private static double? Rate(int part, int whole) => whole == 0 ? null : Math.Round((double)part / whole, 3);

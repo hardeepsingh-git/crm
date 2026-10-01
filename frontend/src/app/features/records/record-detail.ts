@@ -18,12 +18,14 @@ import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip, StagePath } from '../../shared/record-widgets';
 import { InterviewsPanel } from '../recruiting/interviews';
+import { OffersPanel } from '../recruiting/offers';
+import { CandidatePrivacyActions } from '../admin/privacy';
 import { RecordFormDialog } from './record-form-dialog';
 import { RelatedRecords } from './related-records';
 
 @Component({
   selector: 'app-record-detail',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, InterviewsPanel, RecordHistory, RelatedRecords, StageChip, StagePath],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CandidatePrivacyActions, CustomFieldsView, InterviewsPanel, OffersPanel, RecordHistory, RelatedRecords, StageChip, StagePath],
   template: `
     @if (record.isLoading() && !r()) { <mat-progress-bar mode="indeterminate" /> }
     @if (record.error()) { <p class="muted">Record not found or you do not have access to it.</p> }
@@ -36,6 +38,9 @@ import { RelatedRecords } from './related-records';
           <div class="muted">{{ obj.label }} &middot; Owner: {{ r.ownerName }}</div>
         </div>
         <span class="spacer"></span>
+        @if (obj.key === 'candidate' && auth.can('settings', 'manage')) {
+          <app-candidate-privacy [candidateId]="r.id" [candidateName]="r.name" />
+        }
         @if (auth.canModify(obj.key, r.ownerId)) {
           <button mat-stroked-button (click)="edit(r)"><mat-icon>edit</mat-icon> Edit</button>
         }
@@ -75,6 +80,11 @@ import { RelatedRecords } from './related-records';
         <mat-card appearance="outlined" class="interviews"><mat-card-content>
           <app-interviews-panel [applicationId]="r.id" [applicationName]="r.name" [ownerId]="r.ownerId" (updated)="interviewsChanged()" />
         </mat-card-content></mat-card>
+        @if (auth.canModify(obj.key, r.ownerId)) {
+          <mat-card appearance="outlined" class="interviews"><mat-card-content>
+            <app-offers-panel [applicationId]="r.id" (updated)="interviewsChanged()" />
+          </mat-card-content></mat-card>
+        }
       }
       <app-related-records [objectKey]="obj.key" [recordId]="r.id" [recordName]="r.name" />
     }
@@ -102,7 +112,7 @@ export class RecordDetailPage {
     });
   }
 
-  /** Interviews change the record's next interview date, activities and history. */
+  /** Interviews and offers change the record (next interview date, stage), its activities and history. */
   interviewsChanged(): void {
     this.record.reload();
     this.version.update((v) => v + 1);
