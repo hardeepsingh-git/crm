@@ -182,7 +182,20 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | IMP-3 | Friendly values: lookups by name, case-insensitive picklists, common date/yes-no/number formats; ambiguous numbers rejected. | M |
 | IMP-4 | Limits (5 MB / 5,000 rows); automation off by default for imports. | S |
 
-### 5.12 Future (backlog)
+### 5.12 Phase 1: recruitment core (ATS, PLAT)
+| ID | Requirement | Pri |
+|---|---|---|
+| ATS-1 | **Candidates** (talent pool): name, email, phone, location, current title and company, skills, source, LinkedIn, expected salary, notice period, summary, plus files (résumés). | M |
+| ATS-2 | **Applications** link one candidate to one job opening and move through the hiring pipeline. A candidate can apply to several jobs. Each application has a source, rating, interview date and feedback. | M |
+| ATS-3 | **Pipeline per job**: the applications board and list can be narrowed to one job (or one candidate), and the view can be linked to. | M |
+| ATS-4 | Realistic demo data: jobs, candidates and applications spread across the funnel. | S |
+| ATS-5 | Rejections create a follow-up task so candidates hear back. | S |
+| PLAT-1 | **Related lists**: a record's page lists the records that link to it (a job's applicants, a candidate's applications, a company's jobs), with View all, Pipeline and a prefilled New. | M |
+| PLAT-2 | **Unique fields** (text, email, phone, URL), enforced in forms and imports, including duplicates within one file. Emails compare without case. Admins can't switch it on while duplicates exist. | M |
+| PLAT-3 | **Template upgrades**: existing tenants receive new template objects and fields once, additively, without changing their data or reinstating items an admin deleted. | M |
+| PLAT-4 | Lookup filters on lists and boards; a new record's name can come from its main lookup (an application is named after its candidate). | S |
+
+### 5.13 Future (backlog)
 Field-level security · Sharing rules and territories · Formula and roll-up fields · Email and webhook automation actions · Scheduled automation (e.g. "3 days before due") · CSV export and import for standard objects · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Email templates · Cloud file storage · Résumé parsing · Candidate portal and interview scheduling · Offer letters · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
 
 ## 6. Non-functional requirements
@@ -216,9 +229,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (56), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments and CSV import
-- [x] UI unit tests green (40), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments and import
-- [x] Live smoke test green against PostgreSQL (51 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import and attachments)
+- [x] API integration tests green (60), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields and template upgrades
+- [x] UI unit tests green (46), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters and record naming
+- [x] Live smoke test green against PostgreSQL (55 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments and a recruitment tenant)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

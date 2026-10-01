@@ -15,6 +15,7 @@ import { ContactDetail, OpportunityListItem, PagedResult } from '../../core/mode
 import { NotifyService } from '../../core/notify.service';
 import { ActivityPanel } from '../../shared/activity-panel';
 import { AttachmentsPanel } from '../../shared/attachments-panel';
+import { RelatedRecords } from '../records/related-records';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip } from '../../shared/record-widgets';
@@ -22,7 +23,7 @@ import { ContactFormDialog } from './contact-form-dialog';
 
 @Component({
   selector: 'app-contact-detail',
-  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, StageChip],
+  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, RelatedRecords, StageChip],
   template: `
     @if (contact.isLoading() && !c()) { <mat-progress-bar mode="indeterminate" /> }
     @if (c(); as c) {
@@ -85,6 +86,7 @@ import { ContactFormDialog } from './contact-form-dialog';
           }
         </div>
       </div>
+      <app-related-records objectKey="contact" [recordId]="c.id" [recordName]="c.fullName" />
     }
   `,
 })

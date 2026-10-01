@@ -1,36 +1,38 @@
 import { DatePipe, LowerCasePipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
-import { Component, computed, inject, input, linkedSignal, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, linkedSignal, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CrmApi, toParams } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { MetadataService } from '../../core/metadata.service';
 import { RecordItem } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
-import { CfValue } from '../../shared/custom-fields';
+import { CfFilters, CfValue, cfFromQuery } from '../../shared/custom-fields';
+import { ListState } from '../../shared/list';
 import { BoardMove, StageBoard } from '../../shared/record-widgets';
 import { RecordFormDialog } from './record-form-dialog';
 
 /** Kanban board for a custom object with a pipeline; the first currency field is totalled per column. */
 @Component({
   selector: 'app-record-board',
-  imports: [DatePipe, LowerCasePipe, RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule, MatSlideToggleModule, StageBoard, CfValue],
+  imports: [DatePipe, LowerCasePipe, RouterLink, MatButtonModule, MatIconModule, MatProgressBarModule, MatSlideToggleModule, StageBoard, CfValue, CfFilters],
   template: `
     @if (object(); as obj) {
       <div class="page-header">
         <h1>{{ obj.label }} board</h1>
         <span class="spacer"></span>
         <mat-slide-toggle [checked]="mine()" (change)="mine.set($event.checked)">Mine only</mat-slide-toggle>
-        <a mat-stroked-button [routerLink]="['/o', obj.key]"><mat-icon>list</mat-icon> List view</a>
+        <a mat-stroked-button [routerLink]="['/o', obj.key]" [queryParams]="listQuery()"><mat-icon>list</mat-icon> List view</a>
         @if (auth.can(obj.key, 'create')) {
           <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ obj.label | lowercase }}</button>
         }
       </div>
+      <div class="filters"><app-cf-filters [objectKey]="obj.key" [state]="state" /></div>
       <p class="muted">Drag cards between columns to change stage. Closed columns show records closed in the last 30 days.</p>
       @if (data.isLoading()) { <mat-progress-bar mode="indeterminate" /> }
       <app-stage-board [objectKey]="obj.key" [items]="items()" [amount]="amount()" (moved)="drop($event)">
@@ -59,6 +61,9 @@ export class RecordBoard {
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotifyService);
   readonly mine = signal(false);
+  readonly state = new ListState();
+  private readonly route = inject(ActivatedRoute);
+  readonly listQuery = computed(() => Object.fromEntries(Object.entries(this.state.cf()).map(([k, v]) => [`cf.${k}`, v])));
 
   readonly object = computed(() => {
     const o = this.meta.object(this.objectKey());
@@ -71,9 +76,16 @@ export class RecordBoard {
   });
 
   readonly data = httpResource<RecordItem[]>(() =>
-    this.object() ? { url: `/api/records/${this.objectKey()}/board`, params: toParams({ mine: this.mine() }) } : undefined,
+    this.object() ? { url: `/api/records/${this.objectKey()}/board`, params: toParams({ mine: this.mine(), ...this.listQuery() }) } : undefined,
   );
   readonly items = linkedSignal<RecordItem[]>(() => (this.data.hasValue() ? this.data.value() : []));
+
+  constructor() {
+    effect(() => {
+      this.objectKey();
+      untracked(() => this.state.cf.set(cfFromQuery(this.route.snapshot.queryParamMap)));
+    });
+  }
 
   drop({ item, stage }: BoardMove<RecordItem>): void {
     const previous = this.items();
@@ -88,7 +100,7 @@ export class RecordBoard {
   }
 
   create(): void {
-    this.dialog.open(RecordFormDialog, { data: { objectKey: this.objectKey() }, width: '720px' }).afterClosed()
-      .subscribe((saved) => saved && this.data.reload());
+    this.dialog.open(RecordFormDialog, { data: { objectKey: this.objectKey(), defaults: { customFields: this.state.cf() } }, width: '720px' })
+      .afterClosed().subscribe((saved) => saved && this.data.reload());
   }
 }

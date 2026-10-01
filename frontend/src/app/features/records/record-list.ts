@@ -13,12 +13,12 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSortModule } from '@angular/material/sort';
 import { MatTableModule } from '@angular/material/table';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { stableValue } from '../../core/api';
 import { AuthService } from '../../core/auth.service';
 import { MetadataService } from '../../core/metadata.service';
 import { PagedResult, RecordItem } from '../../core/models';
-import { CfFilters, CfValue } from '../../shared/custom-fields';
+import { CfFilters, CfValue, cfFromQuery } from '../../shared/custom-fields';
 import { ListState, inputValue } from '../../shared/list';
 import { StageChip } from '../../shared/record-widgets';
 import { RecordFormDialog } from './record-form-dialog';
@@ -34,7 +34,7 @@ import { ImportDialog } from './import-dialog';
         <h1><mat-icon class="title-icon">{{ obj.icon }}</mat-icon> {{ obj.pluralLabel }}</h1>
         <span class="spacer"></span>
         @if (obj.hasPipeline) {
-          <a mat-stroked-button [routerLink]="['/o', obj.key, 'board']"><mat-icon>view_kanban</mat-icon> Board</a>
+          <a mat-stroked-button [routerLink]="['/o', obj.key, 'board']" [queryParams]="boardQuery()"><mat-icon>view_kanban</mat-icon> Board</a>
         }
         @if (auth.can(obj.key, 'create')) {
           <button mat-stroked-button (click)="importCsv()"><mat-icon>upload_file</mat-icon> Import</button>
@@ -108,6 +108,7 @@ export class RecordList {
   readonly meta = inject(MetadataService);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   readonly inputValue = inputValue;
   readonly state = new ListState();
   readonly stage = signal<string | null>(null);
@@ -118,6 +119,8 @@ export class RecordList {
     return o && !o.isStandard && o.isActive ? o : undefined;
   });
   readonly cfFields = computed(() => this.meta.listFields(this.objectKey()));
+  /** Carries lookup filters to the board, so "applications for this job" stays filtered. */
+  readonly boardQuery = computed(() => Object.fromEntries(Object.entries(this.state.cf()).map(([k, v]) => [`cf.${k}`, v])));
   readonly columns = computed(() => [
     'name', ...(this.object()?.hasPipeline ? ['stage'] : []), ...this.cfFields().map((f) => `cf.${f.key}`), 'owner', 'createdAt',
   ]);
@@ -135,17 +138,17 @@ export class RecordList {
   readonly total = computed(() => this.value()?.totalCount ?? 0);
 
   constructor() {
-    // The component is reused when navigating between objects; reset filters that belong to the previous one.
+    // The component is reused when navigating between objects; filters come from the link (e.g. "View all" on a related list).
     let previous: string | undefined;
     effect(() => {
       const key = this.objectKey();
-      if (previous !== undefined && previous !== key) {
-        untracked(() => {
-          this.state.cf.set({});
+      untracked(() => {
+        if (previous !== undefined && previous !== key) {
           this.state.page.set(0);
           this.stage.set(null);
-        });
-      }
+        }
+        this.state.cf.set(cfFromQuery(this.route.snapshot.queryParamMap));
+      });
       previous = key;
     });
   }

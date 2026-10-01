@@ -167,7 +167,7 @@ public static class OpportunityEndpoints
         if (await Ownership.ValidateAsync(r.OwnerId, currentOwner, R, p, db, ct) is { } ownerError) errors["ownerId"] = [ownerError];
         var stage = (await meta.StagesAsync(R, ct)).FirstOrDefault(s => s.Key == r.Stage);
         if (stage is null) errors["stage"] = ["Unknown stage."];
-        var cf = await validator.ValidateAsync(R, r.CustomFields, o.CustomFields, ct);
+        var cf = await validator.ValidateAsync(R, r.CustomFields, o.CustomFields, o.Id, ct);
         foreach (var (k, v) in cf.Errors) errors[k] = v;
         if (errors.Count > 0) return Errors.Validation(errors);
 

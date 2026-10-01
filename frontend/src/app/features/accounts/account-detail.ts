@@ -16,6 +16,7 @@ import { AccountDetail, ContactListItem, OpportunityListItem, PagedResult } from
 import { NotifyService } from '../../core/notify.service';
 import { ActivityPanel } from '../../shared/activity-panel';
 import { AttachmentsPanel } from '../../shared/attachments-panel';
+import { RelatedRecords } from '../records/related-records';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip } from '../../shared/record-widgets';
@@ -25,7 +26,7 @@ import { AccountFormDialog } from './account-form-dialog';
 
 @Component({
   selector: 'app-account-detail',
-  imports: [CurrencyPipe, DatePipe, DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, MatTabsModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, StageChip],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, MatTabsModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, RelatedRecords, StageChip],
   template: `
     @if (account.isLoading() && !a()) { <mat-progress-bar mode="indeterminate" /> }
     @if (a(); as a) {
@@ -112,6 +113,7 @@ import { AccountFormDialog } from './account-form-dialog';
           </mat-tab-group>
         </mat-card>
       </div>
+      <app-related-records objectKey="account" [recordId]="a.id" [recordName]="a.name" />
     }
   `,
 })

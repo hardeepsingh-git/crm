@@ -13,7 +13,7 @@ namespace Crm.Api.Features.Customization;
 
 public record FieldDto(
     Guid Id, string Key, string Label, FieldType Type, bool IsRequired, string[] Options, string? LookupObjectKey,
-    int? MaxLength, decimal? Min, decimal? Max, string? HelpText, bool ShowInList, int SortOrder);
+    int? MaxLength, decimal? Min, decimal? Max, string? HelpText, bool ShowInList, int SortOrder, bool IsUnique);
 
 public record StageDto(string Key, string Label, int Probability, StageCategory Category, string Color);
 
@@ -46,7 +46,8 @@ public record FieldRequest(
     decimal? Max,
     [MaxLength(500)] string? HelpText,
     bool ShowInList,
-    int SortOrder);
+    int SortOrder,
+    bool IsUnique = false);
 
 public record StagesRequest(StageDto[] Stages);
 
@@ -194,10 +195,20 @@ public static partial class CustomizationEndpoints
         if (field is null) return TypedResults.NotFound();
         if (req.Type != field.Type) return Errors.Validation("type", "A field's type cannot be changed. Create a new field instead.");
         if (await ValidateFieldAsync(req, db, ct) is { } problem) return problem;
+        if (req.IsUnique && !field.IsUnique && await DuplicateCountAsync(key, field, db, ct) is > 0 and var duplicates)
+            return Errors.Validation("isUnique", $"{duplicates} records share a value for this field. Make them unique first.");
 
         Apply(field, req);
         await db.SaveChangesAsync(ct);
         return TypedResults.Ok(ToDto(field));
+    }
+
+    /// <summary>Records whose value for the field also appears on another record of the object.</summary>
+    private static async Task<int> DuplicateCountAsync(string objectKey, FieldDefinition field, CrmDbContext db, CancellationToken ct)
+    {
+        var json = await CustomFieldValidator.CustomFieldsOf(db, objectKey).ToListAsync(ct);
+        return json.Select(j => CustomFieldValidator.UniqueKey(field, Cf.Parse(j)[field.Key]))
+            .Where(v => v is not null).GroupBy(v => v).Where(g => g.Count() > 1).Sum(g => g.Count());
     }
 
     private static async Task<Results<NoContent, NotFound>> DeleteField(string key, string fieldKey, CrmDbContext db, CancellationToken ct)
@@ -221,6 +232,8 @@ public static partial class CustomizationEndpoints
             (req.LookupObjectKey is null || !await db.ObjectDefinitions.AnyAsync(o => o.Key == req.LookupObjectKey, ct)))
             return Errors.Validation("lookupObjectKey", "Choose an existing object to look up.");
         if (req.Min is not null && req.Max is not null && req.Min > req.Max) return Errors.Validation("min", "Min must not exceed max.");
+        if (req.IsUnique && req.Type is not (FieldType.Text or FieldType.Email or FieldType.Phone or FieldType.Url))
+            return Errors.Validation("isUnique", "Only text, email, phone and URL fields can be unique.");
         return null;
     }
 
@@ -236,6 +249,7 @@ public static partial class CustomizationEndpoints
         f.HelpText = r.HelpText;
         f.ShowInList = r.ShowInList;
         f.SortOrder = r.SortOrder;
+        f.IsUnique = r.IsUnique;
     }
 
     // ---------- Stages & picklists ----------
@@ -317,5 +331,5 @@ public static partial class CustomizationEndpoints
 
     private static FieldDto ToDto(FieldDefinition f) => new(
         f.Id, f.Key, f.Label, f.Type, f.IsRequired, Cf.ParseStrings(f.Options), f.LookupObjectKey,
-        f.MaxLength, f.Min, f.Max, f.HelpText, f.ShowInList, f.SortOrder);
+        f.MaxLength, f.Min, f.Max, f.HelpText, f.ShowInList, f.SortOrder, f.IsUnique);
 }

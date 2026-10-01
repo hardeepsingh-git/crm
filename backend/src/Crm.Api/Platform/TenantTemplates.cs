@@ -21,7 +21,7 @@ public static class TenantTemplates
     [
         new(Sales, "Sales CRM", "Accounts, contacts, leads, opportunity pipeline and sales automation."),
         new(HelpDesk, "Help Desk", "Customers, contacts and a ticket pipeline with priority-based alerts."),
-        new(Recruitment, "Recruitment (ATS)", "Job openings and a candidate application pipeline."),
+        new(Recruitment, "Recruitment (ATS)", "Job openings, a candidate talent pool and an application pipeline per job."),
         new(Blank, "Blank", "Standard objects and roles only. Build your own configuration."),
     ];
 
@@ -37,6 +37,28 @@ public static class TenantTemplates
     ];
 
     public static readonly string[] DefaultLeadSources = ["Web", "Referral", "Event", "ColdCall", "Advertisement", "Partner", "Other"];
+
+    /// <summary>Latest revision of each template. Raising it makes startup apply the template's new pieces to existing tenants once.</summary>
+    public static int CurrentVersion(string template) => template == Recruitment ? 2 : 1;
+
+    /// <summary>
+    /// Brings tenants created from an older template revision up to date. Only missing objects, fields, stages and rules are
+    /// added (records and admin changes are never touched), and each tenant is upgraded once, so later deletions stick.
+    /// </summary>
+    public static async Task UpgradeTenantsAsync(CrmDbContext db, TenantContext tenantContext, ILogger logger, CancellationToken ct = default)
+    {
+        var tenants = await db.Tenants.ToListAsync(ct);
+        foreach (var tenant in tenants.Where(t => t.TemplateVersion < CurrentVersion(t.Template)))
+        {
+            using (tenantContext.Use(tenant.Id, userName: "System"))
+            {
+                await ApplyAsync(db, tenant.Template, ct);
+                tenant.TemplateVersion = CurrentVersion(tenant.Template);
+                await db.SaveChangesAsync(ct);
+            }
+            logger.LogInformation("Upgraded tenant {Slug} to {Template} template v{Version}", tenant.Slug, tenant.Template, tenant.TemplateVersion);
+        }
+    }
 
     /// <summary>Idempotent: existing objects, stages, picklists and roles (matched by key/name) are left untouched.</summary>
     public static async Task ApplyAsync(CrmDbContext db, string template, CancellationToken ct = default)
@@ -80,13 +102,14 @@ public static class TenantTemplates
         }
 
         void Field(string objectKey, string key, string label, FieldType type, int order, bool required = false, bool list = false,
-            string[]? options = null, string? lookup = null, decimal? min = null, decimal? max = null, string? help = null)
+            string[]? options = null, string? lookup = null, decimal? min = null, decimal? max = null, string? help = null, bool unique = false)
         {
             if (existingFields.Contains($"{objectKey}.{key}")) return;
             db.FieldDefinitions.Add(new FieldDefinition
             {
                 ObjectKey = objectKey, Key = key, Label = label, Type = type, SortOrder = order, IsRequired = required,
                 ShowInList = list, Options = Cf.Serialize(options ?? []), LookupObjectKey = lookup, Min = min, Max = max, HelpText = help,
+                IsUnique = unique,
             });
             existingFields.Add($"{objectKey}.{key}");
         }
@@ -149,14 +172,18 @@ public static class TenantTemplates
                 break;
 
             case Recruitment:
+                // Applications that predate the candidate object have no candidate, so the link can't be required for them.
+                var upgrading = existingObjects.Contains("application");
                 Object(ObjectKeys.Account, "Company", "Companies", "domain", 30);
                 Object(ObjectKeys.Contact, "Contact", "Contacts", "contacts", 40);
                 Object(ObjectKeys.Lead, "Lead", "Leads", "person_search", 50, active: false);
                 Object(ObjectKeys.Opportunity, "Opportunity", "Opportunities", "paid", 60, active: false, pipeline: true);
                 Object("position", "Job Opening", "Job Openings", "work", 10, standard: false, nameLabel: "Job title",
                     description: "Open roles being recruited for.");
+                Object("candidate", "Candidate", "Candidates", "person", 15, standard: false, nameLabel: "Full name",
+                    description: "Your talent pool: everyone who has applied or been sourced.");
                 Object("application", "Application", "Applications", "assignment_ind", 20, pipeline: true, standard: false,
-                    nameLabel: "Candidate name", description: "Candidates applying for job openings.");
+                    nameLabel: "Candidate name", description: "A candidate applying for a job opening, moving through your hiring stages.");
                 Object(ObjectKeys.Activity, "Activity", "Activities", "event_note", 90);
                 Stages(ObjectKeys.Opportunity, salesStages);
                 Stages("application",
@@ -172,13 +199,33 @@ public static class TenantTemplates
                 Field("position", "openings", "Openings", FieldType.Number, 4, min: 1);
                 Field("position", "salary_max", "Max salary", FieldType.Currency, 5, min: 0);
                 Field("position", "hiring_company", "Company", FieldType.Lookup, 6, lookup: ObjectKeys.Account);
+                Field("position", "employment_type", "Employment type", FieldType.Picklist, 7, list: true,
+                    options: ["Full-time", "Part-time", "Contract", "Temporary"]);
+                Field("position", "closing_date", "Closing date", FieldType.Date, 8);
+                Field("position", "description", "Job description", FieldType.TextArea, 9);
+
+                Field("candidate", "email", "Email", FieldType.Email, 1, list: true, unique: true,
+                    help: "Used to spot duplicates: two candidates can't share an email.");
+                Field("candidate", "phone", "Phone", FieldType.Phone, 2, list: true);
+                Field("candidate", "location", "Location", FieldType.Text, 3, list: true);
+                Field("candidate", "current_title", "Current title", FieldType.Text, 4, list: true);
+                Field("candidate", "current_company", "Current company", FieldType.Text, 5);
+                Field("candidate", "skills", "Skills", FieldType.MultiPicklist, 6,
+                    options: ["Java", ".NET", "Python", "JavaScript", "Angular", "React", "SQL", "Cloud", "DevOps", "Data & analytics",
+                              "UX design", "Project management", "Sales", "Marketing", "Finance", "Customer service"]);
+                Field("candidate", "source", "Source", FieldType.Picklist, 7, list: true,
+                    options: ["Job board", "Referral", "LinkedIn", "Agency", "Website", "Direct"]);
+                Field("candidate", "linkedin", "LinkedIn profile", FieldType.Url, 8);
+                Field("candidate", "expected_salary", "Expected salary", FieldType.Currency, 9, min: 0);
+                Field("candidate", "notice_period", "Notice period", FieldType.Text, 10, help: "e.g. 4 weeks, immediate");
+                Field("candidate", "summary", "Summary", FieldType.TextArea, 11);
+
+                Field("application", "candidate", "Candidate", FieldType.Lookup, 0, required: !upgrading, list: true, lookup: "candidate");
                 Field("application", "position", "Job opening", FieldType.Lookup, 1, required: true, list: true, lookup: "position");
-                Field("application", "email", "Email", FieldType.Email, 2, list: true);
-                Field("application", "phone", "Phone", FieldType.Phone, 3);
                 Field("application", "source", "Source", FieldType.Picklist, 4, list: true, options: ["Job board", "Referral", "LinkedIn", "Agency", "Website"]);
-                Field("application", "expected_salary", "Expected salary", FieldType.Currency, 5, min: 0);
                 Field("application", "rating", "Rating (1-5)", FieldType.Number, 6, list: true, min: 1, max: 5);
-                Field("application", "resume_url", "Résumé link", FieldType.Url, 7);
+                Field("application", "interview_date", "Next interview", FieldType.DateTime, 7);
+                Field("application", "feedback", "Interview feedback", FieldType.TextArea, 8);
                 Rule("Schedule interview", "application", AutomationTrigger.StageChanged,
                     [new("stage", ConditionOperator.Equals, "interview")],
                     [new(AutomationActionType.CreateTask, Subject: "Schedule interview with {{name}}", DueInDays: 2, Priority: ActivityPriority.High)]);
@@ -186,6 +233,9 @@ public static class TenantTemplates
                     [new("stage", ConditionOperator.Equals, "hired")],
                     [new(AutomationActionType.Notify, Message: "{{name}} accepted the offer. Start onboarding."),
                      new(AutomationActionType.CreateTask, Subject: "Prepare onboarding for {{name}}", DueInDays: 5)]);
+                Rule("Rejection follow-up", "application", AutomationTrigger.StageChanged,
+                    [new("stage", ConditionOperator.Equals, "rejected")],
+                    [new(AutomationActionType.CreateTask, Subject: "Let {{name}} know the outcome", DueInDays: 1)]);
                 break;
 
             default:

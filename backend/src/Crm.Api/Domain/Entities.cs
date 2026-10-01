@@ -24,6 +24,8 @@ public class Tenant
     public TenantStatus Status { get; set; } = TenantStatus.Active;
     public string Currency { get; set; } = "AUD";
     public string Template { get; set; } = "sales";
+    /// <summary>Template revision this tenant's configuration is at; startup applies newer revisions once, additively.</summary>
+    public int TemplateVersion { get; set; } = 1;
     /// <summary>Tenant opt-in; also requires the platform-wide switch in <see cref="AppSetting"/>.</summary>
     public bool SelfRegistrationEnabled { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -254,6 +256,8 @@ public class FieldDefinition : AuditableEntity
     public string Label { get; set; } = "";
     public FieldType Type { get; set; }
     public bool IsRequired { get; set; }
+    /// <summary>No two records of the object may share a value (emails compared case-insensitively).</summary>
+    public bool IsUnique { get; set; }
     /// <summary>JSON array of allowed values for Picklist / MultiPicklist.</summary>
     public string Options { get; set; } = "[]";
     public string? LookupObjectKey { get; set; }

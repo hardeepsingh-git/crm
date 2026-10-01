@@ -1,6 +1,6 @@
 # CRM Platform: Data Model
 
-PostgreSQL database **`CRM`**, schema `public`. The schema is created by three EF Core migrations:
+PostgreSQL database **`CRM`**, schema `public`. The schema is created by these EF Core migrations:
 
 | Migration | Contents |
 |---|---|
@@ -8,6 +8,7 @@ PostgreSQL database **`CRM`**, schema `public`. The schema is created by three E
 | `20260930080943_MultiTenantPlatform` | v2: tenants, RBAC, metadata, custom records, automation, notifications and audit. Adds `TenantId` and `CustomFields` to existing tables and **migrates v1 data** (see below). |
 | `20260930112016_SelfRegistration` | `Tenants.SelfRegistrationEnabled` (default false), `AspNetUsers.RegistrationStatus` (existing users default to `Approved`), `AppSettings`, `VerificationCodes` |
 | `*_Phase0FilesAndPasswordReset` | New tables `Attachments` and `PasswordResetTokens` only; no changes to existing data |
+| `20261001050127_Phase1RecruitmentCore` | `Tenants.TemplateVersion` (existing tenants default to 1) and `FieldDefinitions.IsUnique` (default false). No data changes; the recruitment template upgrade then runs at startup (see section 6). |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -48,7 +49,7 @@ erDiagram
 ### 2.1 Tenancy and identity
 | Table | Key columns | Notes |
 |---|---|---|
-| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `SelfRegistrationEnabled`, `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`). The slug doubles as the **organisation code** for self-registration. |
+| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `TemplateVersion`, `SelfRegistrationEnabled`, `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`). The slug doubles as the **organisation code** for self-registration. |
 | `AspNetUsers` | Identity columns + `TenantId` FK (RESTRICT), `FirstName`, `LastName`, `IsActive`, `IsPlatformAdmin`, **`RegistrationStatus`**(32), `CreatedAt` | Email is unique platform-wide. Users are never hard-deleted except when their tenant is deleted. `PhoneNumber` (E.164), `EmailConfirmed` and `PhoneNumberConfirmed` are set by self-registration. Index `(TenantId, RegistrationStatus)`. |
 | `RefreshTokens` | `UserId` FK (CASCADE), `TokenHash`(128, **unique**), `ExpiresAt`, `RevokedAt` | SHA-256 of the token |
 | `VerificationCodes` | `UserId` FK (CASCADE), `Channel` (Email/Sms), `CodeHash`(128), `CreatedAt`, `ExpiresAt`, `Attempts`, `ConsumedAt` | One-time codes. SHA-256 of `userId:channel:code`, never the code itself. Index `(UserId, Channel)`. |
@@ -69,7 +70,7 @@ erDiagram
 | Table | Key columns | Notes |
 |---|---|---|
 | `ObjectDefinitions` | `TenantId`, `Key`(40, unique per tenant), `Label`, `PluralLabel`, `Icon`, `Description`, `NameLabel`, `IsStandard`, `IsActive`, `HasPipeline`, `SortOrder` | Standard keys: `account`, `contact`, `lead`, `opportunity`, `activity` |
-| `FieldDefinitions` | `TenantId`, `ObjectKey`, `Key` (unique per tenant + object), `Label`, `Type`, `IsRequired`, `Options` jsonb, `LookupObjectKey`, `MaxLength`, `Min`, `Max`, `HelpText`, `ShowInList`, `SortOrder` | |
+| `FieldDefinitions` | `TenantId`, `ObjectKey`, `Key` (unique per tenant + object), `Label`, `Type`, `IsRequired`, `IsUnique`, `Options` jsonb, `LookupObjectKey`, `MaxLength`, `Min`, `Max`, `HelpText`, `ShowInList`, `SortOrder` | `IsUnique`: no two records of the object may share a value (Text, Email, Phone, Url) |
 | `PipelineStages` | `TenantId`, `ObjectKey`, `Key`(64, unique per tenant + object), `Label`, `Category` (Open/Won/Lost), `Probability`, `Color`, `SortOrder` | |
 | `Picklists` | `TenantId`, `Key`(64, unique per tenant), `Options` jsonb | `account.industry`, `lead.source` |
 
@@ -162,6 +163,14 @@ Lead sources and opportunity stages are **no longer enums**. They're tenant data
 5. Drops the Identity role tables (`AspNetRoles`, `AspNetUserRoles`, `AspNetRoleClaims`).
 
 At startup, `DbInitializer` applies the sales template to the default tenant if it has no objects yet (objects, stages, picklists, fields, rules). It also makes sure the default roles exist with their grants; the migration creates the roles, and startup adds the grants shown above.
+
+**Template upgrades.** Finally, `DbInitializer` upgrades any tenant whose `TemplateVersion` is below its template's current version, then saves the new version. Upgrades only add what is missing. The Recruitment template is at **v2**, which adds:
+- the **Candidate** object (email unique, phone, location, current title and company, skills, source, LinkedIn, expected salary, notice period, summary);
+- job opening fields (employment type, closing date, description);
+- application fields (**candidate** lookup, source, rating, interview date, feedback);
+- a "Rejection follow-up" rule.
+
+On upgraded tenants, the application's candidate link is optional, so existing applications without one stay valid, and their old email and phone fields remain.
 
 ## 7. Schema changes
 

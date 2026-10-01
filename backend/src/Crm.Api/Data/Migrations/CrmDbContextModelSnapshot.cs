@@ -618,6 +618,9 @@ namespace Crm.Api.Data.Migrations
                     b.Property<bool>("IsRequired")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsUnique")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -1282,6 +1285,9 @@ namespace Crm.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<int>("TemplateVersion")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

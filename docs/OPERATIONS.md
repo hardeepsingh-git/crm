@@ -132,6 +132,7 @@ cd C:\Users\FBPo48p\CRM;          ./scripts/smoke-test.ps1       # live end-to-e
 | Reactivate | **Tenants → play** |
 | Delete | Suspend first, then **delete** and type the workspace ID. This removes **all** of the tenant's users, records and configuration permanently. It isn't possible for the default tenant or your own. |
 | Back up one tenant | `pg_dump` with `--where` isn't supported. Export per table with `COPY (SELECT * FROM "Accounts" WHERE "TenantId" = '…') TO …`, or back up the whole database. |
+| Template upgrades | Automatic. On startup the API upgrades tenants whose `TemplateVersion` is behind their template, and logs `Upgraded tenant <slug> to <template> template v<n>`. Upgrades only add objects, fields, stages and rules; existing data and settings are untouched, and each version is applied once. Back up before deploying a release that raises a template version. |
 
 ## 5. Deployment
 

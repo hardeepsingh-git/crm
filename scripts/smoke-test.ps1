@@ -324,6 +324,52 @@ if ($adminEmail -and $adminPassword) {
         Api PUT '/api/platform/settings' $script:originalPlatform -Token $script:adminToken | Out-Null
         'restored'
     }
+
+    # Recruitment (ATS) tenant: candidates, applications per job, unique emails, pipeline per job.
+    $atsSlug = "$slug-ats"
+    Check 'Provision Recruitment tenant (template v2 with demo data)' {
+        $script:atsTenant = Api POST '/api/platform/tenants' @{
+            name = "E2E Recruiting $slug"; slug = $atsSlug; template = 'recruitment'; currency = 'USD'
+            adminEmail = "admin@$atsSlug.test"; adminFirstName = 'Rita'; adminLastName = 'Cruiter'; adminPassword = 'Tenant#Pass123'; seedDemoData = $true
+        } -Token $script:adminToken
+        $script:atsToken = (Api POST '/api/auth/login' @{ email = "admin@$atsSlug.test"; password = 'Tenant#Pass123' } -Token $null).accessToken
+        $m = Api GET '/api/metadata' -Token $script:atsToken
+        $app = $m.objects | Where-Object key -eq 'application'
+        Assert ($null -ne ($m.objects | Where-Object key -eq 'candidate')) 'candidate object missing'
+        Assert (($app.fields | Where-Object key -eq 'candidate').lookupObjectKey -eq 'candidate') 'application not linked to candidate'
+        $counts = foreach ($k in 'position', 'candidate', 'application') { (Api GET "/api/records/$k`?pageSize=1" -Token $script:atsToken).totalCount }
+        Assert ($counts[0] -gt 0 -and $counts[1] -gt 0 -and $counts[2] -gt 0) "demo data missing: $($counts -join '/')"
+        "$($counts[0]) jobs, $($counts[1]) candidates, $($counts[2]) applications"
+    }
+    Check 'Candidate email is unique (forms and import)' {
+        $c = Api POST '/api/records/candidate' @{ name = 'Smoke Candidate'; customFields = @{ email = "Smoke.Candidate@$atsSlug.test" } } -Token $script:atsToken
+        $script:candidateId = $c.id
+        Assert ($c.customFields.email -eq "smoke.candidate@$atsSlug.test") "email not normalised: $($c.customFields.email)"
+        $s = StatusOf { Api POST '/api/records/candidate' @{ name = 'Duplicate'; customFields = @{ email = "SMOKE.candidate@$atsSlug.test" } } -Token $script:atsToken }
+        Assert ($s -eq 400) "duplicate email returned $s"
+        $csv = "Name,Email`nA One,dup@$atsSlug.test`nA Two,DUP@$atsSlug.test`n"
+        $r = Api POST '/api/import/candidate' @{ csv = $csv; mapping = @{ Name = 'name'; Email = 'cf.email' }; dryRun = $true } -Token $script:atsToken
+        Assert ($r.errorCount -eq 1 -and $r.errors[0].row -eq 3) "in-file duplicate not caught: $($r | ConvertTo-Json -Depth 4 -Compress)"
+        'duplicate rejected (400); import flags row 3'
+    }
+    Check 'Pipeline per job: board and list filter by the linked job' {
+        $job = (Api GET '/api/records/position?pageSize=1' -Token $script:atsToken).items[0]
+        $a = Api POST '/api/records/application' @{ name = 'Smoke Candidate'; customFields = @{ candidate = $script:candidateId; position = $job.id } } -Token $script:atsToken
+        $board = Api GET "/api/records/application/board?cf.position=$($job.id)" -Token $script:atsToken
+        $cards = @($board | ForEach-Object { $_ })
+        Assert (@($cards | Where-Object id -eq $a.id).Count -eq 1) 'new application not on the job board'
+        Assert (@($cards | Where-Object { $_.customFields.position -ne $job.id }).Count -eq 0) 'board shows other jobs'
+        $mine = Api GET "/api/records/application?cf.candidate=$($script:candidateId)" -Token $script:atsToken
+        Assert ($mine.totalCount -eq 1) "candidate has $($mine.totalCount) applications"
+        "$($cards.Count) cards for '$($job.name)'"
+    }
+    if (-not $Keep) {
+        Check 'Delete the recruitment tenant' {
+            Api PUT "/api/platform/tenants/$($script:atsTenant.id)" @{ name = $script:atsTenant.name; currency = 'USD'; status = 'Suspended' } -Token $script:adminToken | Out-Null
+            Api DELETE "/api/platform/tenants/$($script:atsTenant.id)" -Token $script:adminToken | Out-Null
+            'deleted'
+        }
+    }
     if (-not $Keep) {
         Check 'Suspend and delete the test tenant' {
             Api PUT "/api/platform/tenants/$($script:tenant.id)" @{ name = $script:tenant.name; currency = 'USD'; status = 'Suspended' } -Token $script:adminToken | Out-Null

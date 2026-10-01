@@ -66,6 +66,7 @@ public sealed partial class TenantService(
         var tenant = new Tenant
         {
             Name = req.Name.Trim(), Slug = slug, Template = req.Template, Currency = req.Currency.ToUpperInvariant(),
+            TemplateVersion = TenantTemplates.CurrentVersion(req.Template),
             CreatedAt = clock.GetUtcNow().UtcDateTime,
         };
 

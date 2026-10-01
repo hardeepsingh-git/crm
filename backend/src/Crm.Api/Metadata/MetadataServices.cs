@@ -71,10 +71,12 @@ public record CustomFieldResult(string Json, Dictionary<string, string[]> Errors
 public sealed class CustomFieldValidator(MetadataService metadata, CrmDbContext db)
 {
     /// <param name="input">Values to set; null values clear a field. Keys not present keep their existing value.</param>
-    public async Task<CustomFieldResult> ValidateAsync(string objectKey, JsonObject? input, string? existingJson, CancellationToken ct)
+    /// <param name="recordId">The record being saved, excluded from uniqueness checks; null when it doesn't exist yet.</param>
+    public async Task<CustomFieldResult> ValidateAsync(string objectKey, JsonObject? input, string? existingJson, Guid? recordId, CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
         var fields = (await metadata.FieldsAsync(objectKey, ct)).ToDictionary(f => f.Key);
+        var existing = Cf.Parse(existingJson);
         var result = Cf.Parse(existingJson);
         foreach (var stale in result.Select(p => p.Key).Where(k => !fields.ContainsKey(k)).ToList()) result.Remove(stale);
 
@@ -92,13 +94,50 @@ public sealed class CustomFieldValidator(MetadataService metadata, CrmDbContext 
             }
             var (normalized, error) = await NormalizeAsync(field, value, ct);
             if (error is not null) errors[$"customFields.{key}"] = [error];
-            else result[key] = normalized;
+            else result[key] = field.IsUnique && field.Type == FieldType.Email ? JsonValue.Create(Cf.AsText(normalized)!.ToLowerInvariant()) : normalized;
         }
 
         foreach (var field in fields.Values.Where(f => f.IsRequired && result[f.Key] is null))
             errors.TryAdd($"customFields.{field.Key}", [$"{field.Label} is required."]);
 
+        foreach (var field in fields.Values.Where(f => f.IsUnique && result[f.Key] is not null && !errors.ContainsKey($"customFields.{f.Key}")))
+        {
+            var value = result[field.Key]!;
+            if (JsonNode.DeepEquals(value, existing[field.Key])) continue;
+            if (await DuplicateExistsAsync(objectKey, field.Key, value, recordId, ct))
+                errors[$"customFields.{field.Key}"] = [$"Another record already has this {field.Label.ToLowerInvariant()} ({Cf.AsText(value)})."];
+        }
+
         return new CustomFieldResult(result.ToJsonString(), errors);
+    }
+
+    /// <summary>Comparable form of a unique field's value (emails case-insensitive), or null when empty.</summary>
+    public static string? UniqueKey(FieldDefinition field, JsonNode? value) =>
+        Cf.AsText(value)?.Trim() is { Length: > 0 } text ? (field.Type == FieldType.Email ? text.ToLowerInvariant() : text) : null;
+
+    /// <summary>The custom-field JSON of every record of an object in the current tenant.</summary>
+    public static IQueryable<string> CustomFieldsOf(CrmDbContext db, string objectKey) => objectKey switch
+    {
+        ObjectKeys.Account => db.Accounts.Select(x => x.CustomFields),
+        ObjectKeys.Contact => db.Contacts.Select(x => x.CustomFields),
+        ObjectKeys.Lead => db.Leads.Select(x => x.CustomFields),
+        ObjectKeys.Opportunity => db.Opportunities.Select(x => x.CustomFields),
+        ObjectKeys.Activity => db.Activities.Select(x => x.CustomFields),
+        _ => db.CustomRecords.Where(x => x.ObjectDefinition!.Key == objectKey).Select(x => x.CustomFields),
+    };
+
+    private Task<bool> DuplicateExistsAsync(string objectKey, string key, JsonNode value, Guid? excludeId, CancellationToken ct)
+    {
+        var exclude = excludeId ?? Guid.Empty;
+        return objectKey switch
+        {
+            ObjectKeys.Account => db.Accounts.WhereCustomField(db, key, value).AnyAsync(x => x.Id != exclude, ct),
+            ObjectKeys.Contact => db.Contacts.WhereCustomField(db, key, value).AnyAsync(x => x.Id != exclude, ct),
+            ObjectKeys.Lead => db.Leads.WhereCustomField(db, key, value).AnyAsync(x => x.Id != exclude, ct),
+            ObjectKeys.Opportunity => db.Opportunities.WhereCustomField(db, key, value).AnyAsync(x => x.Id != exclude, ct),
+            ObjectKeys.Activity => db.Activities.WhereCustomField(db, key, value).AnyAsync(x => x.Id != exclude, ct),
+            _ => db.CustomRecords.Where(x => x.ObjectDefinition!.Key == objectKey).WhereCustomField(db, key, value).AnyAsync(x => x.Id != exclude, ct),
+        };
     }
 
     private async Task<(JsonNode? Value, string? Error)> NormalizeAsync(FieldDefinition f, JsonNode value, CancellationToken ct)
@@ -205,20 +244,22 @@ public static class CustomFieldQuery
         foreach (var (name, values) in queryString)
         {
             if (!name.StartsWith("cf.", StringComparison.Ordinal) || name.Length <= 3) continue;
-            var key = name[3..];
             var raw = values.ToString();
             JsonNode node = bool.TryParse(raw, out var b) ? JsonValue.Create(b)
                 : decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var d) ? JsonValue.Create(Normalize(d))
                 : JsonValue.Create(raw);
-            var json = new JsonObject { [key] = node }.ToJsonString();
-            if (db.Database.IsNpgsql())
-                query = query.Where(e => EF.Functions.JsonContains(e.CustomFields, json));
-            else
-            {
-                var fragment = json[1..^1];
-                query = query.Where(e => e.CustomFields.Contains(fragment));
-            }
+            query = query.WhereCustomField(db, name[3..], node);
         }
         return query;
+    }
+
+    /// <summary>Exact match on one custom field: <c>jsonb @&gt;</c> on PostgreSQL, a substring match elsewhere (tests).</summary>
+    public static IQueryable<T> WhereCustomField<T>(this IQueryable<T> query, CrmDbContext db, string key, JsonNode value)
+        where T : class, IHasCustomFields
+    {
+        var json = new JsonObject { [key] = value.DeepClone() }.ToJsonString();
+        if (db.Database.IsNpgsql()) return query.Where(e => EF.Functions.JsonContains(e.CustomFields, json));
+        var fragment = json[1..^1];
+        return query.Where(e => e.CustomFields.Contains(fragment));
     }
 }

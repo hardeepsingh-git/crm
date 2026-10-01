@@ -143,6 +143,8 @@ Role (per tenant) ── RolePermission (Resource, Action, Scope)
 
 - `MetadataService` caches the tenant's definitions for each request. The UI loads them once via `GET /api/metadata` (the `metadataGuard` runs before any page renders).
 - `CustomFieldValidator` merges incoming values with stored ones, then validates type, required, range, length, options and lookup existence (in the same tenant). It normalises numbers and returns field-keyed validation errors.
+- **Unique fields** (`FieldDefinitions.IsUnique`) are checked by the same validator with a JSONB containment query on the object's records, excluding the record being saved. Values the record already had are not re-checked, so old duplicates don't block unrelated edits. The CSV import also checks for duplicates within the file. This is an application-level check: two simultaneous saves of the same new value could both succeed. That is acceptable for recruitment data entry; a unique expression index per field would close it if needed.
+- **Template versions.** Each tenant stores the `TemplateVersion` it was provisioned or upgraded with. At startup `TenantTemplates.UpgradeTenantsAsync` re-applies the template to tenants whose version is behind `CurrentVersion(template)`, then records the new version. Applying a template only **adds** missing objects, fields, stages and rules; it never changes or deletes existing configuration or records. Because each version is applied once, anything an admin later removes stays removed.
 - **Filtering:** `?cf.priority=High` becomes `CustomFields @> '{"priority":"High"}'` through `EF.Functions.JsonContains` on PostgreSQL, which can use a GIN index. SQLite, in tests only, falls back to substring matching.
 - Opportunity `Stage` is a string key into the tenant's stages. "Open" means `ClosedAt IS NULL`, set from the stage category.
 
@@ -173,6 +175,8 @@ flowchart LR
   - `CfValue`, `CustomFieldsView` and `CfFilters` display custom fields and provide list filters.
   - `StageChip`, `StagePath` and `StageBoard` (CDK drag-drop, optimistic) show and change stages.
   - `RecordHistory` (lazy-loaded audit) shows each record's change history.
+  - `RelatedRecords` finds every readable object with a lookup to the current object and shows a related list per lookup (latest 10, with View all, Pipeline and a prefilled New). It appears on account, contact and custom-record detail pages.
+  - Lists and boards accept `?cf.<field>=` deep links. `CfFilters` shows a record picker for lookup fields, so a board can be narrowed to one job or one candidate. New records created from a filtered board or a related list inherit the filter values, and a record whose name label refers to a lookup ("Candidate name") takes its name from the chosen record.
 - **Settings hub** (`/settings/*`) and **platform** (`/platform/tenants`) are lazy-loaded and guarded by permission.
 - **Zoneless + signals, `httpResource`** for reads and `HttpClient` for writes. Interceptors attach the JWT, refresh once on 401 and surface errors as snackbars.
 - **Token refresh across tabs:** all tabs share the refresh token in `localStorage`. Rotation runs under a Web Locks (`navigator.locks`) lock and reads the latest stored token inside it, so two tabs never present the same token. The server would treat that as reuse and revoke the session.
@@ -213,3 +217,5 @@ Residual risks:
 | ADR-13 | **Attachments behind `IFileStorage`**, local/shared disk first; server-generated storage keys; one generic table keyed by `(ObjectKey, RecordId)` | Bytes in PostgreSQL (`bytea`: bloats backups and the DB); cloud SDK from day one (no outbound access from dev machines yet) |
 | ADR-14 | **Own password-reset tokens** (hashed, single use, in the DB) instead of Identity's data-protection tokens | Identity tokens need a shared data-protection key ring across nodes and can't be revoked individually |
 | ADR-15 | **CSV import validates everything, then saves in one transaction** (all-or-nothing, automation off) | Row-by-row partial imports (leave half-loaded data to clean up); background jobs (unneeded at 5,000 rows) |
+| ADR-16 | **Versioned, additive template upgrades** applied once per tenant at startup | Re-applying templates on every start (would resurrect fields admins deleted); manual per-tenant migration scripts (error-prone across many tenants); destructive upgrades (risk to customer data) |
+| ADR-17 | **Applications as a separate object** linking candidate × job, rather than stages on the candidate | Candidate-only pipeline: one candidate can't be in several jobs' pipelines at once, and the history per job is lost |

@@ -8,6 +8,7 @@ A configurable, **multi-tenant** relationship-management platform. It ships as a
 - **Automation**: no-code rules that create tasks, send notifications or set fields.
 - **Governance**: field-level audit trail, per-record history and in-app notifications.
 - **Files and data loading**: attach résumés, contracts and other documents to any record, and bulk-load custom-object data from CSV with a validated, all-or-nothing import.
+- **Recruitment (ATS)**: a talent pool of candidates, applications that link a candidate to a job and move through hiring stages, a pipeline per job, and unique candidate emails. Related lists on every record page show what links to it. Existing recruitment tenants are upgraded automatically and additively.
 - **Operations**: password reset by email, error tracking (Sentry, optional) and a backup script.
 - **Self-registration** (optional): people sign up with their organisation's code, optionally verify their email and/or mobile with a one-time code, and can sign in only after an administrator approves them and assigns roles or groups. The platform switches and the email/SMS providers are configured in the UI (**Platform settings**).
 
@@ -38,9 +39,9 @@ To look up a password: `dotnet user-secrets list` in `backend/src/Crm.Api`. Don'
 
 ## Tests
 ```powershell
-cd backend;  dotnet test                    # 56 API integration tests (stop the API first)
-cd frontend; npx ng test --watch=false      # 40 UI unit tests
-./scripts/smoke-test.ps1                    # 51 live end-to-end checks against PostgreSQL (API running)
+cd backend;  dotnet test                    # 60 API integration tests (stop the API first)
+cd frontend; npx ng test --watch=false      # 46 UI unit tests
+./scripts/smoke-test.ps1                    # 55 live end-to-end checks against PostgreSQL (API running)
 ```
 
 ## Documentation

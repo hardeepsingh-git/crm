@@ -133,7 +133,7 @@ The permission resource is the object key, e.g. `ticket:read`.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/` | `search` (name), `stage`, `open`, `ownerId`, `mine`, `cf.*`. Sort: `name`, `stage`, `updatedAt`, `createdAt`. |
-| GET | `/board?mine=` | Pipeline objects only: open records plus those closed in the last 30 days (max 500) |
+| GET | `/board?mine=&cf.*=` | Pipeline objects only: open records plus those closed in the last 30 days (max 500). `cf.*` filters work as on the list, e.g. `/api/records/application/board?cf.position={jobId}` is the pipeline for one job. |
 | GET | `/{id}` | `RecordItem { id, objectKey, name, stage, closedAt, ownerId, ownerName, createdAt, updatedAt, customFields }` |
 | POST | `/` | `{ name*, stage?, ownerId?, customFields }` (stage defaults to the first open stage) |
 | PUT | `/{id}` | same body |
@@ -141,6 +141,10 @@ The permission resource is the object key, e.g. `ticket:read`.
 | DELETE | `/{id}` | Linked activities are deleted too |
 
 Unknown or inactive object keys return 404.
+
+**Lookup filters and related lists.** `cf.<lookupField>=<recordId>` lists the records linked to another record. The UI uses it for the related lists on detail pages, e.g. `/api/records/application?cf.candidate={id}` (a candidate's applications) or `?cf.position={id}` (a job's applicants).
+
+**Unique fields.** On a field marked `isUnique`, saving a value that another record of the same object already has returns 400 with `"Another record already has this {label} ({value})."` under `cf.<key>`. Email comparisons ignore case, and unique emails are stored in lower case. Blank values are not checked.
 
 ## Attachments (`/api/attachments`)
 
@@ -157,7 +161,7 @@ Uploads and deletions appear in the record's history as `attachment: [old, new]`
 
 ## CSV import (`/api/import/{objectKey}`, objectKey:create)
 
-Custom objects only (e.g. the Recruitment template's job openings and applications).
+Custom objects only (e.g. the Recruitment template's candidates, job openings and applications).
 
 | Method | Path | Body | Response |
 |---|---|---|---|
@@ -166,7 +170,7 @@ Custom objects only (e.g. the Recruitment template's job openings and applicatio
 
 - Targets: `name`, `stage` (key or label), `owner` (user email, same assignment rules as forms) and `cf.<fieldKey>`.
 - Values: picklists match case-insensitively; multi-picklists split on `;` or `|`; yes/no accepts Yes/No/True/False/1/0; dates `yyyy-MM-dd` or `dd/MM/yyyy`; numbers `1,234.50` (ambiguous formats such as `1.234,50` are rejected); lookups by the related record's **name** (or id), with an error if a name matches several records.
-- Every row goes through the same validation as the forms. **All-or-nothing:** if any row fails, nothing is saved. `row` is the line number in the file (the header is line 1).
+- Every row goes through the same validation as the forms, including unique fields. Two rows in the same file with the same unique value are also rejected (`"Email: same value as row 2 in this file."`). **All-or-nothing:** if any row fails, nothing is saved. `row` is the line number in the file (the header is line 1).
 - Limits: `Import:MaxFileSizeMb` (default 5) and `Import:MaxRows` (default 5000). Automation rules don't run unless `runAutomation` is true.
 
 ## Diagnostics
@@ -215,8 +219,10 @@ Assignments are checked for escalation: you can't hand out access you don't hold
 | POST | `/objects` | `{ key, label, pluralLabel, icon, description, nameLabel, hasPipeline, isActive, sortOrder }`. The key must match `^[a-z][a-z0-9_]{1,39}$`, and reserved keys are rejected. Pipeline objects get default stages. |
 | PUT | `/objects/{key}` | same (key immutable). Standard objects can't change `hasPipeline`. |
 | DELETE | `/objects/{key}` | Custom objects only. **409** if records exist. |
-| POST | `/objects/{key}/fields` | `{ key, label, type, isRequired, options[], lookupObjectKey, maxLength, min, max, helpText, showInList, sortOrder }` |
+| POST | `/objects/{key}/fields` | `{ key, label, type, isRequired, isUnique, options[], lookupObjectKey, maxLength, min, max, helpText, showInList, sortOrder }` |
 | PUT / DELETE | `/objects/{key}/fields/{fieldKey}` | The type can't change. Deleting a field keeps stored values but hides them. |
+
+`isUnique` is allowed on `Text`, `Email`, `Phone` and `Url` fields. Turning it on for a field whose existing records already share a value returns 400 with the number of duplicates, so they can be cleaned up first.
 | PUT | `/objects/{key}/stages` | `{ stages: [{ key, label, probability, category: Open\|Won\|Lost, color: #RRGGBB }] }` replaces the list (order matters). Needs at least one open stage. **409** if removed stages still have records. |
 | PUT | `/picklists/{key}` | `{ options[] }` for `account.industry` or `lead.source` |
 

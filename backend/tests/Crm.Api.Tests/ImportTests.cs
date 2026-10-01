@@ -54,31 +54,36 @@ public class ImportTests(CrmApiFactory factory) : IClassFixture<CrmApiFactory>
         Assert.Equal("Open", senior.CustomFields["status"]!.GetValue<string>());
         Assert.Equal(150000m, senior.CustomFields["salary_max"]!.GetValue<decimal>());
 
+        var people = await (await ImportAsync(ats, "candidate", "Full name,Email\nJane Doe,jane@example.com\nRaj Patel,raj@example.com\n",
+            new() { ["Full name"] = "name", ["Email"] = "cf.email" })).ReadAsync<ImportResult>();
+        Assert.Equal(2, people.Created);
+
         var mapping = new Dictionary<string, string?>
         {
-            ["Candidate"] = "name", ["Role"] = "cf.position", ["Email"] = "cf.email", ["Stage"] = "stage", ["Rating"] = "cf.rating", ["Source"] = "cf.source",
+            ["Applicant"] = "name", ["Candidate"] = "cf.candidate", ["Role"] = "cf.position", ["Stage"] = "stage", ["Rating"] = "cf.rating", ["Source"] = "cf.source",
         };
-        const string withErrors = "Candidate,Role,Email,Stage,Rating,Source\n" +
-                                  "Jane Doe,senior developer,jane@example.com,Interview,5,linkedin\n" +
-                                  "Bad Row,Unknown Role,not-an-email,Nope,9,Referral\n";
+        const string withErrors = "Applicant,Candidate,Role,Stage,Rating,Source\n" +
+                                  "Jane Doe,jane doe,senior developer,Interview,5,linkedin\n" +
+                                  "Bad Row,Nobody Known,Unknown Role,Nope,9,Referral\n";
         var failed = await (await ImportAsync(ats, "application", withErrors, mapping)).ReadAsync<ImportResult>();
         Assert.Equal(0, failed.Created);
         var rowError = Assert.Single(failed.Errors);
         Assert.Equal(3, rowError.Row);
         Assert.Contains(rowError.Messages, m => m.Contains("No record named 'Unknown Role'"));
+        Assert.Contains(rowError.Messages, m => m.Contains("No record named 'Nobody Known'"));
         Assert.Contains(rowError.Messages, m => m.Contains("Stage 'Nope'"));
-        Assert.Contains(rowError.Messages, m => m.StartsWith("Email:"));
         Assert.Contains(rowError.Messages, m => m.StartsWith("Rating (1-5):"));
         Assert.Empty(await RecordsAsync(ats, "application"));
 
-        var fixedCsv = withErrors.Replace("Bad Row,Unknown Role,not-an-email,Nope,9", "Raj Patel,Data Analyst, Junior,raj@example.com,,4")
-            .Replace("Data Analyst, Junior", "\"Data Analyst, Junior\"");
+        var fixedCsv = withErrors.Replace("Bad Row,Nobody Known,Unknown Role,Nope,9", "Raj Patel,Raj Patel,\"Data Analyst, Junior\",,4");
         var imported = await (await ImportAsync(ats, "application", fixedCsv, mapping)).ReadAsync<ImportResult>();
         Assert.Equal(2, imported.Created);
         var applications = await RecordsAsync(ats, "application");
         var jane = applications.Single(a => a.Name == "Jane Doe");
         Assert.Equal("interview", jane.Stage);
         Assert.Equal(senior.Id.ToString(), jane.CustomFields["position"]!.GetValue<string>());
+        var janeCandidate = (await RecordsAsync(ats, "candidate")).Single(c => c.Name == "Jane Doe");
+        Assert.Equal(janeCandidate.Id.ToString(), jane.CustomFields["candidate"]!.GetValue<string>());
         Assert.Equal("LinkedIn", jane.CustomFields["source"]!.GetValue<string>());
         Assert.Equal("applied", applications.Single(a => a.Name == "Raj Patel").Stage);
     }

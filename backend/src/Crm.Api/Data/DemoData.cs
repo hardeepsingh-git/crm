@@ -141,7 +141,10 @@ public static class DemoData
 
         // Custom objects: records created in definition order so lookups can reference earlier objects.
         var customRecords = new List<CustomRecord>();
-        foreach (var definition in objects.Where(o => !o.IsStandard && o.IsActive).OrderBy(o => o.SortOrder))
+        string[] ats = ["position", "candidate", "application"];
+        var hasAts = ats.All(Active);
+        if (hasAts) customRecords.AddRange(await SeedRecruitmentAsync(db, objects, accounts, owners, rnd, now, ct));
+        foreach (var definition in objects.Where(o => !o.IsStandard && o.IsActive && !(hasAts && ats.Contains(o.Key))).OrderBy(o => o.SortOrder))
         {
             var stages = await db.PipelineStages.Where(s => s.ObjectKey == definition.Key).OrderBy(s => s.SortOrder).ToListAsync(ct);
             for (var i = 0; i < 8; i++)
@@ -205,6 +208,89 @@ public static class DemoData
         logger.LogInformation(
             "Seeded demo data: {Accounts} accounts, {Contacts} contacts, {Leads} leads, {Opps} opportunities, {Records} custom records, {Activities} activities",
             accounts.Count, contacts.Count, leads.Count, opportunities.Count, customRecords.Count, activities.Count);
+    }
+
+    private static readonly (string Title, string Department, string Location, string Type, int Openings, int Salary)[] Jobs =
+    [
+        ("Senior Backend Engineer", "Engineering", "Sydney", "Full-time", 2, 165000),
+        ("Product Designer", "Design", "Melbourne", "Full-time", 1, 130000),
+        ("Data Analyst", "Analytics", "Remote", "Contract", 1, 110000),
+        ("Customer Success Lead", "Customer Success", "Brisbane", "Full-time", 1, 120000),
+        ("DevOps Engineer", "Engineering", "Sydney", "Full-time", 1, 155000),
+        ("Graduate Accountant", "Finance", "Perth", "Full-time", 3, 75000),
+    ];
+
+    private static readonly string[] CandidateTitles =
+        ["Software Engineer", "Senior Developer", "UX Designer", "Business Analyst", "Data Scientist", "Account Manager", "Accountant", "SRE"];
+
+    /// <summary>Job openings, a talent pool and applications spread across the hiring stages, for recruitment tenants.</summary>
+    private static async Task<List<CustomRecord>> SeedRecruitmentAsync(CrmDbContext db, List<ObjectDefinition> objects, List<Account> accounts,
+        List<AppUser> owners, Random rnd, DateTime now, CancellationToken ct)
+    {
+        T Pick<T>(IReadOnlyList<T> items) => items[rnd.Next(items.Count)];
+        var position = objects.Single(o => o.Key == "position");
+        var candidate = objects.Single(o => o.Key == "candidate");
+        var application = objects.Single(o => o.Key == "application");
+        var skills = Cf.ParseStrings(await db.FieldDefinitions.Where(f => f.ObjectKey == "candidate" && f.Key == "skills").Select(f => f.Options).FirstOrDefaultAsync(ct));
+        var stages = await db.PipelineStages.Where(s => s.ObjectKey == "application").OrderBy(s => s.SortOrder).ToListAsync(ct);
+        var today = DateOnly.FromDateTime(now);
+
+        var jobs = Jobs.Select((j, i) => new CustomRecord
+        {
+            ObjectDefinitionId = position.Id, ObjectDefinition = position, Name = j.Title, OwnerId = Pick(owners).Id,
+            CustomFields = new JsonObject
+            {
+                ["department"] = j.Department, ["location"] = j.Location, ["employment_type"] = j.Type,
+                ["status"] = i == Jobs.Length - 1 ? "On hold" : "Open", ["openings"] = j.Openings, ["salary_max"] = j.Salary,
+                ["hiring_company"] = accounts.Count > 0 ? accounts[i % accounts.Count].Id.ToString() : null,
+                ["closing_date"] = today.AddDays(14 + 7 * i).ToString("yyyy-MM-dd"),
+            }.ToJsonString(),
+        }).ToList();
+
+        string[] sources = ["Job board", "Referral", "LinkedIn", "Agency", "Website"];
+        var people = Enumerable.Range(0, 16).Select(i =>
+        {
+            var first = FirstNames[i % FirstNames.Length];
+            var last = LastNames[(i * 7 + 3) % LastNames.Length];
+            return new CustomRecord
+            {
+                ObjectDefinitionId = candidate.Id, ObjectDefinition = candidate, Name = $"{first} {last}", OwnerId = Pick(owners).Id,
+                CustomFields = new JsonObject
+                {
+                    ["email"] = $"{first}.{last}{i}@candidate.example".ToLowerInvariant(),
+                    ["phone"] = $"+61 4{rnd.Next(10, 99)} {rnd.Next(100, 999)} {rnd.Next(100, 999)}",
+                    ["location"] = Pick(["Sydney", "Melbourne", "Brisbane", "Perth", "Remote"]),
+                    ["current_title"] = Pick(CandidateTitles),
+                    ["skills"] = skills.Length == 0 ? null : new JsonArray(skills.OrderBy(_ => rnd.Next()).Take(2).Select(s => (JsonNode?)JsonValue.Create(s)).ToArray()),
+                    ["source"] = Pick(sources),
+                    ["expected_salary"] = rnd.Next(70, 180) * 1000,
+                    ["notice_period"] = Pick(["Immediate", "2 weeks", "4 weeks", "3 months"]),
+                }.ToJsonString(),
+            };
+        }).ToList();
+
+        // Most applications sit in the early stages, as in a real funnel.
+        int[] funnel = [0, 0, 0, 1, 1, 1, 2, 2, 3, 4, 5];
+        var pairs = new HashSet<(int, int)>();
+        var applications = new List<CustomRecord>();
+        while (applications.Count < 22 && stages.Count > 0)
+        {
+            var (c, j) = (rnd.Next(people.Count), rnd.Next(jobs.Count));
+            if (!pairs.Add((c, j))) continue;
+            var stage = stages[Math.Min(Pick(funnel), stages.Count - 1)];
+            applications.Add(new CustomRecord
+            {
+                ObjectDefinitionId = application.Id, ObjectDefinition = application, Name = people[c].Name, OwnerId = jobs[j].OwnerId,
+                Stage = stage.Key, ClosedAt = stage.Category == StageCategory.Open ? null : now.AddDays(-rnd.Next(0, 20)),
+                CustomFields = new JsonObject
+                {
+                    ["candidate"] = people[c].Id.ToString(), ["position"] = jobs[j].Id.ToString(),
+                    ["source"] = Cf.AsText(Cf.Parse(people[c].CustomFields)["source"]),
+                    ["rating"] = stage.SortOrder == 0 ? null : rnd.Next(2, 6),
+                }.ToJsonString(),
+            });
+        }
+        return [.. jobs, .. people, .. applications];
     }
 
     private static string SampleCustomFields(List<FieldDefinition> fields, string objectKey, Random rnd,

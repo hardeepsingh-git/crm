@@ -207,7 +207,7 @@ public static class LeadEndpoints
         if (r.Status == LeadStatus.Converted) errors["status"] = ["Use the convert action to convert a lead."];
         if (await Ownership.ValidateAsync(r.OwnerId, currentOwner, R, p, db, ct) is { } ownerError) errors["ownerId"] = [ownerError];
         if (await meta.CheckPicklistAsync("lead.source", r.Source, l.Source, ct) is { } sourceError) errors["source"] = [sourceError];
-        var cf = await validator.ValidateAsync(R, r.CustomFields, l.CustomFields, ct);
+        var cf = await validator.ValidateAsync(R, r.CustomFields, l.CustomFields, l.Id, ct);
         foreach (var (k, v) in cf.Errors) errors[k] = v;
         if (errors.Count > 0) return Errors.Validation(errors);
 

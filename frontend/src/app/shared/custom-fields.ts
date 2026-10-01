@@ -1,12 +1,12 @@
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, effect, inject, input } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AbstractControl, FormControl, FormGroup, ReactiveFormsModule, ValidatorFn, Validators } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { RouterLink } from '@angular/router';
+import { ParamMap, RouterLink } from '@angular/router';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { switchMap } from 'rxjs';
 import { RecordNameService } from '../core/api';
@@ -189,33 +189,72 @@ export class CustomFieldsView {
   readonly values = input.required<CustomFields>();
 }
 
-/** Filter dropdowns for the object's picklist and yes/no custom fields that are shown in lists. */
+/** Filter controls for the object's custom fields: picklist and yes/no fields shown in lists, plus lookups (also any lookup filter set by a link). */
 @Component({
   selector: 'app-cf-filters',
-  imports: [MatFormFieldModule, MatSelectModule],
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatSelectModule, EntityPicker],
   host: { style: 'display: contents' },
   template: `
     @for (f of filterable(); track f.key) {
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
-        <mat-label>{{ f.label }}</mat-label>
-        <mat-select [value]="state().cf()[f.key] ?? ''" (selectionChange)="state().setCf(f.key, $event.value)">
-          <mat-option value="">All</mat-option>
-          @if (f.type === 'Boolean') {
-            <mat-option value="true">Yes</mat-option>
-            <mat-option value="false">No</mat-option>
-          } @else {
-            @for (o of f.options; track o) { <mat-option [value]="o">{{ o }}</mat-option> }
-          }
-        </mat-select>
-      </mat-form-field>
+      @if (f.type === 'Lookup') {
+        <app-entity-picker class="lookup-filter" [label]="f.label" [kind]="f.lookupObjectKey!" [formControl]="lookup(f.key)" [compact]="true" />
+      } @else {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>{{ f.label }}</mat-label>
+          <mat-select [value]="state().cf()[f.key] ?? ''" (selectionChange)="state().setCf(f.key, $event.value)">
+            <mat-option value="">All</mat-option>
+            @if (f.type === 'Boolean') {
+              <mat-option value="true">Yes</mat-option>
+              <mat-option value="false">No</mat-option>
+            } @else {
+              @for (o of f.options; track o) { <mat-option [value]="o">{{ o }}</mat-option> }
+            }
+          </mat-select>
+        </mat-form-field>
+      }
     }
   `,
+  styles: `.lookup-filter { display: inline-block; width: 220px; }`,
 })
 export class CfFilters {
   readonly objectKey = input.required<string>();
   readonly state = input.required<ListState>();
   private readonly meta = inject(MetadataService);
-  readonly filterable = computed(() =>
-    this.meta.listFields(this.objectKey()).filter((f) => f.type === 'Picklist' || f.type === 'Boolean'),
-  );
+  private readonly lookups = new Map<string, FormControl<string | null>>();
+
+  readonly filterable = computed(() => {
+    const active = this.state().cf();
+    return this.meta.fields(this.objectKey()).filter((f) =>
+      f.type === 'Lookup' ? f.showInList || !!active[f.key] : (f.type === 'Picklist' || f.type === 'Boolean') && f.showInList,
+    );
+  });
+
+  constructor() {
+    // Keeps the pickers in step when filters change elsewhere, e.g. a deep link or switching objects.
+    effect(() => {
+      const cf = this.state().cf();
+      const prefix = `${this.objectKey()}.`;
+      for (const [id, control] of this.lookups) {
+        if (!id.startsWith(prefix)) continue;
+        const value = cf[id.slice(prefix.length)] ?? null;
+        if (control.value !== value) control.setValue(value, { emitEvent: false });
+      }
+    });
+  }
+
+  lookup(key: string): FormControl<string | null> {
+    const id = `${this.objectKey()}.${key}`;
+    let control = this.lookups.get(id);
+    if (!control) {
+      control = new FormControl<string | null>(this.state().cf()[key] ?? null);
+      control.valueChanges.subscribe((value) => this.state().setCf(key, value));
+      this.lookups.set(id, control);
+    }
+    return control;
+  }
+}
+
+/** Reads ?cf.key=value parameters (e.g. from a related-records link) into a filter map. */
+export function cfFromQuery(params: ParamMap): Record<string, string> {
+  return Object.fromEntries(params.keys.filter((k) => k.startsWith('cf.') && k.length > 3).map((k) => [k.slice(3), params.get(k)!]));
 }

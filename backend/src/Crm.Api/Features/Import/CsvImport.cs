@@ -218,6 +218,7 @@ public static class ImportEndpoints
         var now = clock.GetUtcNow().UtcDateTime;
         var records = new List<CustomRecord>();
         var errors = new List<ImportRowError>();
+        var seen = new Dictionary<(string Field, string Value), int>();
         foreach (var row in dataRows)
         {
             var messages = new List<string>();
@@ -248,9 +249,19 @@ public static class ImportEndpoints
                 if (error is not null) messages.Add($"{field.Label}: {error}");
                 else input[key] = value;
             }
-            var cf = await validator.ValidateAsync(objectKey, input, null, ct);
+            var cf = await validator.ValidateAsync(objectKey, input, null, null, ct);
             messages.AddRange(cf.Errors.Select(e => fields.TryGetValue(e.Key.Replace("customFields.", ""), out var f) && !e.Value[0].StartsWith(f.Label)
                 ? $"{f.Label}: {e.Value[0]}" : e.Value[0]));
+            if (cf.IsValid)
+            {
+                var values = Cf.Parse(cf.Json);
+                foreach (var f in fields.Values.Where(f => f.IsUnique))
+                {
+                    if (CustomFieldValidator.UniqueKey(f, values[f.Key]) is not { } unique) continue;
+                    if (!seen.TryAdd((f.Key, unique), row.Line))
+                        messages.Add($"{f.Label}: same value as row {seen[(f.Key, unique)]} in this file.");
+                }
+            }
 
             if (messages.Count > 0)
             {

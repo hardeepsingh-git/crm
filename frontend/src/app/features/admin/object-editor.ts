@@ -14,7 +14,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { Router, RouterLink } from '@angular/router';
 import { CrmApi, FieldRequest } from '../../core/api';
 import { MetadataService } from '../../core/metadata.service';
-import { FIELD_TYPES, FieldDef, ObjectDef, StageCategory, StageDef } from '../../core/models';
+import { FIELD_TYPES, FieldDef, ObjectDef, StageCategory, StageDef, UNIQUE_TYPES } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { confirm } from '../../shared/confirm-dialog';
 import { HumanizePipe } from '../../shared/list';
@@ -88,7 +88,10 @@ interface FieldDialogData {
           <input matInput formControlName="helpText" maxlength="500" />
         </mat-form-field>
         <mat-checkbox formControlName="isRequired">Required</mat-checkbox>
-        <mat-checkbox formControlName="showInList">Show as a list column (and filter, for picklists/yes-no)</mat-checkbox>
+        <mat-checkbox formControlName="showInList">Show as a list column (and filter, for picklists/yes-no/lookups)</mat-checkbox>
+        @if (canBeUnique()) {
+          <mat-checkbox formControlName="isUnique" class="span-2">Unique: no two records can share a value (e.g. a candidate's email)</mat-checkbox>
+        }
       </form>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -119,9 +122,11 @@ export class FieldFormDialog {
     max: [this.item?.max ?? (null as number | null)],
     helpText: [this.item?.helpText ?? ''],
     showInList: [this.item?.showInList ?? false],
+    isUnique: [this.item?.isUnique ?? false],
     sortOrder: [this.item?.sortOrder ?? this.data.nextSortOrder],
   });
   readonly type = signal(this.form.controls.type.value);
+  readonly canBeUnique = computed(() => UNIQUE_TYPES.includes(this.type()));
 
   constructor() {
     this.form.controls.type.valueChanges.subscribe((t) => this.type.set(t));
@@ -151,6 +156,7 @@ export class FieldFormDialog {
       helpText: v.helpText.trim() || null,
       showInList: v.showInList,
       sortOrder: Number(v.sortOrder),
+      isUnique: UNIQUE_TYPES.includes(v.type) && v.isUnique,
     };
     this.saving.set(true);
     this.api.saveField(this.data.objectKey, this.item?.key ?? null, body).subscribe({
@@ -201,7 +207,7 @@ const CATEGORIES: StageCategory[] = ['Open', 'Won', 'Lost'];
           @if (o.isStandard) { <p class="muted">Built-in fields (name, owner, etc.) are always present; add your own below.</p> }
           <table mat-table [dataSource]="o.fields">
             <ng-container matColumnDef="label"><th mat-header-cell *matHeaderCellDef>Label</th>
-              <td mat-cell *matCellDef="let f">{{ f.label }} @if (f.isRequired) { <span class="req" matTooltip="Required">*</span> }</td></ng-container>
+              <td mat-cell *matCellDef="let f">{{ f.label }} @if (f.isRequired) { <span class="req" matTooltip="Required">*</span> } @if (f.isUnique) { <mat-icon inline matTooltip="Unique">fingerprint</mat-icon> }</td></ng-container>
             <ng-container matColumnDef="key"><th mat-header-cell *matHeaderCellDef>Key</th><td mat-cell *matCellDef="let f"><code>{{ f.key }}</code></td></ng-container>
             <ng-container matColumnDef="type"><th mat-header-cell *matHeaderCellDef>Type</th>
               <td mat-cell *matCellDef="let f">{{ f.type | humanize }}

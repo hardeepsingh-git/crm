@@ -144,7 +144,7 @@ public static class AccountEndpoints
         var errors = new Dictionary<string, string[]>();
         if (await Ownership.ValidateAsync(r.OwnerId, currentOwner, R, p, db, ct) is { } ownerError) errors["ownerId"] = [ownerError];
         if (await meta.CheckPicklistAsync("account.industry", r.Industry, a.Industry, ct) is { } industryError) errors["industry"] = [industryError];
-        var cf = await validator.ValidateAsync(R, r.CustomFields, a.CustomFields, ct);
+        var cf = await validator.ValidateAsync(R, r.CustomFields, a.CustomFields, a.Id, ct);
         foreach (var (k, v) in cf.Errors) errors[k] = v;
         if (errors.Count > 0) return Errors.Validation(errors);
 

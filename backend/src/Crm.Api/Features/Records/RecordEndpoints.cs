@@ -75,12 +75,13 @@ public static class RecordEndpoints
     }
 
     private static async Task<Results<Ok<List<RecordItem>>, NotFound>> Board(
-        string objectKey, Access access, CrmDbContext db, MetadataService meta, TimeProvider clock, CancellationToken ct, bool mine = false)
+        string objectKey, HttpRequest http, Access access, CrmDbContext db, MetadataService meta, TimeProvider clock, CancellationToken ct, bool mine = false)
     {
         if (await ResolveAsync(objectKey, meta, ct) is not { HasPipeline: true } definition) return TypedResults.NotFound();
         var p = await access.GetAsync(ct);
         var since = clock.GetUtcNow().UtcDateTime.AddDays(-30);
         var query = p.Filter(db.CustomRecords.AsNoTracking().Where(r => r.ObjectDefinitionId == definition.Id), objectKey)
+            .WhereCustomFields(http.Query, db)
             .Where(r => r.ClosedAt == null || r.ClosedAt >= since);
         if (mine) query = query.Where(r => r.OwnerId == p.UserId);
         return TypedResults.Ok(await Project(query.OrderByDescending(r => r.UpdatedAt), objectKey).Take(500).ToListAsync(ct));
@@ -179,7 +180,7 @@ public static class RecordEndpoints
             if (stage is null) errors["stage"] = ["Unknown stage."];
         }
 
-        var cf = await validator.ValidateAsync(definition.Key, r.CustomFields, record.CustomFields, ct);
+        var cf = await validator.ValidateAsync(definition.Key, r.CustomFields, record.CustomFields, record.Id, ct);
         foreach (var (k, v) in cf.Errors) errors[k] = v;
         if (errors.Count > 0) return Errors.Validation(errors);
 

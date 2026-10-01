@@ -25,16 +25,23 @@ The left navigation is built from **your organisation's configuration and your p
 | **Settings** | Only if you administer something (see §5) |
 | **Tenants** | Platform operators only (see §6) |
 
-Every list has **search**, **Mine only**, **column sorting**, **paging**, and **filters** for picklist and yes/no fields. Click a row to open the record.
+Every list has **search**, **Mine only**, **column sorting**, **paging**, and **filters** for picklist and yes/no fields, and for lookup fields shown in the list (e.g. pick a job opening to see only its applications). Click a row to open the record.
 
 ## 3. Working with records
 - **Create**: use *New …* at the top of a list. Required fields are marked with *.
 - **Custom fields** appear in forms, on the detail page and as list columns (if your admin enabled that). Lookup fields show as links to the related record.
 - **Stages**: on records with a pipeline, click a stage in the chevron bar or drag the card on the board. The green and red buttons close the record as won or lost; your organisation may name them differently, e.g. *Resolved* or *Hired*.
+- **Related lists**: below a record's details you see the records that link to it, such as a job opening's applications, a candidate's applications or a company's job openings. Each list shows the latest 10 with their stage. **View all** opens the full filtered list, **Pipeline** opens the board for just this record, and **New** starts a record already linked to it.
+- **Unique fields**: some fields, such as a candidate's email, can't be shared by two records. If you enter a value that's already used, the form tells you, so you can open the existing record instead of creating a duplicate.
 - **Activities**: every record page has a timeline. Use *Log call*, *Note* or *Task*, and tick a task to complete it.
 - **History**: expand **History** on a record to see who changed what, and when.
 - **Files**: every record page (except activities) has a **Files** panel. *Upload* résumés, contracts, IDs or spreadsheets (PDF, Word, Excel, PowerPoint, text, CSV and images, up to 10 MB each); click a file to download it. You need edit rights on the record to upload or delete. Deleting a record deletes its files.
-- **Import from CSV** (custom objects such as Job Openings or Applications, if you can create them): *Import* on the list page. Choose a CSV file (or *Download a template* first), check how its columns map to fields, then **Check file**. Problems are listed by row number and nothing is saved until every row is valid; then **Import**. Link to other records by their name, e.g. the job opening's title, so import job openings before applications.
+- **Import from CSV** (custom objects such as Candidates, Job Openings or Applications, if you can create them): *Import* on the list page. Choose a CSV file (or *Download a template* first), check how its columns map to fields, then **Check file**. Problems are listed by row number and nothing is saved until every row is valid; then **Import**. Link to other records by their name, e.g. the job opening's title or the candidate's full name, so import job openings and candidates before applications. Duplicate values in unique fields are reported, including two rows of the same file.
+- **Recruitment** (organisations using the Recruitment template):
+  - **Candidates** is your talent pool. Add each person once, with their résumé under **Files**.
+  - **Applications** connect a candidate to a job opening and move through the hiring stages (Applied, Screening, Interview, Offer, Hired or Rejected). One candidate can apply for several jobs.
+  - To work one job, open it and click **Pipeline** on its Applications list, or pick the job in the board's filter. Drag cards between stages. **New Application** from there fills in the job, and the application takes the candidate's name.
+  - Rejecting an application creates a follow-up task to let the candidate know.
 - **Lead conversion** (if you may create accounts and contacts): *Convert* creates a contact, an account (new or existing) and optionally an opportunity.
 
 What you can edit depends on your role. If you don't see *Edit* or *Delete*, you don't have that permission for this record. The **Owner** picker only appears if you're allowed to assign records to others.
@@ -60,7 +67,7 @@ You see only the areas you're allowed to manage.
 | **Users** | Add users with an initial password. Edit names, active status, roles and groups. Reset passwords, which also unlocks accounts. **Awaiting approval** lists self-registered people: check the verified ticks, then **Approve** with at least one role or group, or **Reject**. You also get a notification for each new request. |
 | **Groups** | Teams, regions or departments. Members share records under *Group* scope and inherit the group's roles. |
 | **Roles & permissions** | Define roles as a matrix. **All objects** is the role's default for every object, including ones added later. Set a specific object to override it (choose **None** to hide it). Tick the administration areas the role can manage. The **Administrator** role always has full access. |
-| **Objects & fields** | Rename or switch off standard objects. Create new objects with an icon, name field label and optional pipeline. Add fields (text, number, currency, date, yes/no, picklists, email, phone, URL, lookup). Edit pipeline stages (order, colour, probability, open/won/lost). |
+| **Objects & fields** | Rename or switch off standard objects. Create new objects with an icon, name field label and optional pipeline. Add fields (text, number, currency, date, yes/no, picklists, email, phone, URL, lookup). Tick **Unique** on a text, email, phone or URL field to stop two records sharing a value (clean up existing duplicates first). Tick **Show in list** on a lookup to make it a list column and a filter. Edit pipeline stages (order, colour, probability, open/won/lost). |
 | **Picklists** | Industries and lead sources. Records that already use a removed value keep it. |
 | **Automation** | Rules: *When a [object] [is created / is updated / changes stage] and [conditions] → create a task / notify someone / set a field*. Use `{{name}}`, `{{stage}}` or `{{cf.fieldkey}}` in text. The toggle switches a rule on or off, and **Runs** shows how often it fired. |
 | **Audit log** | Search all changes by object, action, user or record name |

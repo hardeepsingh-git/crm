@@ -18,10 +18,11 @@ import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip, StagePath } from '../../shared/record-widgets';
 import { RecordFormDialog } from './record-form-dialog';
+import { RelatedRecords } from './related-records';
 
 @Component({
   selector: 'app-record-detail',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, StageChip, StagePath],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, RelatedRecords, StageChip, StagePath],
   template: `
     @if (record.isLoading() && !r()) { <mat-progress-bar mode="indeterminate" /> }
     @if (record.error()) { <p class="muted">Record not found or you do not have access to it.</p> }
@@ -69,6 +70,7 @@ import { RecordFormDialog } from './record-form-dialog';
           </mat-card-content></mat-card>
         }
       </div>
+      <app-related-records [objectKey]="obj.key" [recordId]="r.id" [recordName]="r.name" />
     }
   `,
 })

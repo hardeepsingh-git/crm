@@ -7,14 +7,14 @@
 | API integration | xUnit, `WebApplicationFactory`, SQLite in-memory | Full HTTP pipeline: auth, tenancy, RBAC, validation, customization, automation, audit | `backend/tests/Crm.Api.Tests` |
 | UI unit | Vitest, `HttpTestingController` | Session handling, permission resolution, metadata, custom-field forms, list helpers | `frontend/src/**/*.spec.ts` |
 | Build gates | `ng build` (AOT, strict templates), `dotnet build` | Type safety | CI |
-| Live end-to-end | `scripts/smoke-test.ps1` (51 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, clean-up | `scripts/` |
+| Live end-to-end | `scripts/smoke-test.ps1` (55 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, clean-up | `scripts/` |
 | Browser end-to-end | Manual/Playwright checklist (§4) | Settings screens, custom objects, role matrix, restricted users, tenant lifecycle | UAT |
 
 The SQLite tests exercise the same EF model and query filters. PostgreSQL-specific behaviour (`jsonb @>` filters) is covered by the live smoke test.
 
 ## 2. Automated test inventory
 
-### API (`dotnet test`): 56 tests
+### API (`dotnet test`): 60 tests
 | Test | Covers |
 |---|---|
 | `Liveness_endpoint_is_anonymous` | NFR-4 |
@@ -59,14 +59,18 @@ The SQLite tests exercise the same EF model and query filters. PostgreSQL-specif
 | `Unsafe_or_oversized_files_are_rejected` | FILE-2 |
 | `Access_follows_the_record_permissions` | FILE-1 |
 | `File_names_are_sanitised` (5 cases) | FILE-2 |
-| `Positions_and_applications_import_with_suggested_mapping_lookups_by_name_and_all_or_nothing` | IMP-1..4 |
+| `Positions_and_applications_import_with_suggested_mapping_lookups_by_name_and_all_or_nothing` | IMP-1..4 (candidates imported first, applications linked to candidate and job by name) |
 | `Bad_files_and_mappings_are_rejected_before_anything_is_saved` | IMP-2, IMP-4 |
 | `Csv_parser_handles_quotes_line_breaks_delimiters_and_reports_line_numbers` | IMP-1, IMP-4 |
 | `Numbers_are_parsed_strictly` (7 cases) | IMP-3 |
+| `Recruitment_template_has_a_talent_pool_and_applications_link_candidates_to_jobs` | ATS-1, ATS-2, ATS-4, ATS-5 |
+| `Unique_fields_block_duplicates_in_forms_imports_and_settings` | PLAT-2 |
+| `Boards_and_lists_filter_by_linked_job_or_candidate` | ATS-3, PLAT-1 |
+| `Older_recruitment_tenants_are_upgraded_once_without_touching_their_data` | PLAT-3 |
 
 The registration tests replace the email and SMS senders with an in-memory capture (`CapturedMessages`), so they read the real codes that were sent.
 
-### UI (`ng test`): 40 tests
+### UI (`ng test`): 46 tests
 | Spec | Tests |
 |---|---|
 | `auth.spec.ts` (10) | login stores session · metadata cleared when the session ends · bearer token added · refresh once on 401 and retry · session cleared on rejected refresh · session kept on 429 · restore keeps the token when the server is down · guard restores the session · refresh serialized across tabs using the latest stored token · no token to non-API URLs |
@@ -74,14 +78,15 @@ The registration tests replace the email and SMS senders with an in-memory captu
 | `platform.spec.ts` (10) | Own/Group/All scopes on ownership · `*` default with resolved object overrides and admin areas excluded · assignment only with Group/All · administrators · partial admin access · metadata labels, routes, API URLs, stages and picklists · custom-field controls and validators · custom-field value conversion · legacy picklist values · `cf.` filter parameters |
 | `registration.spec.ts` (8) | unavailable organisation message · mobile required when SMS is on, trimmed payload, continue to verification · password mismatch blocked, done message without verification · per-channel verify and resend, then pending approval · sign-in page offers registration only when the platform allows it · Enter in the code forms is handled in-app (real DOM submit) · platform settings: flags, log-only warning, secret status, clean save payload · phone pattern |
 | `phase0.spec.ts` (7) | forgot password via Enter, no account disclosure · reset with token: mismatch blocked, expired-link message, success · attachments listed, upload only for editors · attachment pre-checks and sizes · CSV import: mapping, required fields, row errors, dry run then import · template CSV quoting · browser error reporting (once, not for HTTP errors or signed-out users) |
+| `phase1.spec.ts` (6) | related objects found only where readable · name source lookup from the name label · new application prefilled, named after the chosen candidate, typed names kept · related list query, count, Pipeline and View all links · `cf.` deep links become lookup filters and stay in sync · Unique option only for text-like fields |
 
-### Live smoke test (`scripts/smoke-test.ps1`): 51 checks
+### Live smoke test (`scripts/smoke-test.ps1`): 55 checks
 1. Health and authentication (7)
 2. Read every module with seeded data (11)
 3. End-to-end sales workflow with tagged records (11)
 4. Standard User permissions (5)
 5. Clean-up (1)
-6. Platform (16): provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · suspend and delete (removes the tenant's files too)
+6. Platform (20): provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · provision a Recruitment tenant with demo jobs, candidates and applications · duplicate candidate email refused (any case) and flagged within an import file · pipeline per job (board and list filtered by job or candidate) · delete the recruitment tenant · suspend and delete (removes the tenant's files too)
 
 The registration checks temporarily switch on global self-registration (with verification off) and always put the original platform settings back.
 
@@ -121,3 +126,8 @@ VS Code tasks: *CRM: Backend tests*, *CRM: Frontend tests*, *CRM: Smoke test (AP
 | 22 | Sign in as the new user before approval | "Waiting for administrator approval" (not a generic error) |
 | 23 | As admin: bell notification → **Users → Awaiting approval → Approve** without a role, then with a role | Refused without a role. With one, the user can sign in. |
 | 24 | Turn the platform switch off | *Create an account* disappears and `/register/<code>` says registration isn't available |
+| 25 | Recruitment tenant: open **Candidates**, then a candidate | Their **Applications** list shows each job they applied for, with stage chips |
+| 26 | Open a job opening → **Applications** → **Pipeline** | The board shows only that job's applicants, with the job in the filter bar. **List view** keeps the filter. |
+| 27 | On that board, **New Application**, pick a candidate | The job is already filled in, and the name fills in with the candidate's name |
+| 28 | Create a candidate with an email another candidate has (different case) | "Another record already has this Email" |
+| 29 | **Objects & fields** → a text field → tick **Unique** while duplicates exist | Refused, with the number of duplicates |

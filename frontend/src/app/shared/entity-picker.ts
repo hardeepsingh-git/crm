@@ -38,7 +38,7 @@ const toOption = (x: Named): Option => ({ id: x.id, name: x.name ?? x.fullName ?
   imports: [ReactiveFormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule],
   providers: [{ provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => EntityPicker), multi: true }],
   template: `
-    <mat-form-field appearance="outline" class="full">
+    <mat-form-field appearance="outline" class="full" [subscriptSizing]="compact() ? 'dynamic' : 'fixed'">
       <mat-label>{{ label() }}</mat-label>
       <input matInput [formControl]="text" [matAutocomplete]="auto" [required]="required()" (blur)="onTouched()" />
       @if (selectedId() && !disabled()) {
@@ -65,6 +65,8 @@ export class EntityPicker implements ControlValueAccessor {
   /** Object key (e.g. "account", "ticket"). */
   readonly kind = input.required<string>();
   readonly required = input(false);
+  /** Filter-bar sizing: no reserved space for hints. */
+  readonly compact = input(false);
   readonly extraParams = input<Record<string, string | null>>({});
 
   private url(): string {

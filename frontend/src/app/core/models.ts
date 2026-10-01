@@ -20,6 +20,9 @@ export const PRIORITIES: ActivityPriority[] = ['Low', 'Normal', 'High'];
 export const FIELD_TYPES: FieldType[] = [
   'Text', 'TextArea', 'Number', 'Currency', 'Date', 'DateTime', 'Boolean', 'Picklist', 'MultiPicklist', 'Email', 'Phone', 'Url', 'Lookup',
 ];
+
+/** Field types the API allows to be marked unique. */
+export const UNIQUE_TYPES: FieldType[] = ['Text', 'Email', 'Phone', 'Url'];
 export const SCOPES: PermissionScope[] = ['None', 'Own', 'Group', 'All'];
 export const RECORD_ACTIONS: RecordAction[] = ['read', 'create', 'update', 'delete'];
 export const ADMIN_RESOURCES: { key: AdminResource; label: string; action: 'manage' | 'read' }[] = [
@@ -85,6 +88,7 @@ export interface FieldDef {
   helpText: string | null;
   showInList: boolean;
   sortOrder: number;
+  isUnique?: boolean;
 }
 
 export interface StageDef {

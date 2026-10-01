@@ -133,7 +133,7 @@ public static class ContactEndpoints
         var errors = new Dictionary<string, string[]>();
         if (r.AccountId is not null && !await db.Accounts.AnyAsync(a => a.Id == r.AccountId, ct)) errors["accountId"] = ["Account does not exist."];
         if (await Ownership.ValidateAsync(r.OwnerId, currentOwner, R, p, db, ct) is { } ownerError) errors["ownerId"] = [ownerError];
-        var cf = await validator.ValidateAsync(R, r.CustomFields, c.CustomFields, ct);
+        var cf = await validator.ValidateAsync(R, r.CustomFields, c.CustomFields, c.Id, ct);
         foreach (var (k, v) in cf.Errors) errors[k] = v;
         if (errors.Count > 0) return Errors.Validation(errors);
 

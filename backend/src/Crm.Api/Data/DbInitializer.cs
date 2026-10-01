@@ -57,6 +57,8 @@ public static class DbInitializer
 
         if (admin is not null && config.GetValue<bool>("Seed:DemoData") && !await db.Accounts.AnyAsync())
             await DemoData.SeedAsync(db, users, admin, config["Seed:DemoUserPassword"], logger);
+
+        await TenantTemplates.UpgradeTenantsAsync(db, tenantContext, logger);
     }
 
     private static async Task<AppUser?> EnsurePlatformAdminAsync(CrmDbContext db, UserManager<AppUser> users, IConfiguration config, ILogger logger)
