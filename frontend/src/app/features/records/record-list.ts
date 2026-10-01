@@ -22,6 +22,7 @@ import { CfFilters, CfValue } from '../../shared/custom-fields';
 import { ListState, inputValue } from '../../shared/list';
 import { StageChip } from '../../shared/record-widgets';
 import { RecordFormDialog } from './record-form-dialog';
+import { ImportDialog } from './import-dialog';
 
 /** List page for any tenant-defined object: columns and filters come from its field definitions. */
 @Component({
@@ -36,6 +37,7 @@ import { RecordFormDialog } from './record-form-dialog';
           <a mat-stroked-button [routerLink]="['/o', obj.key, 'board']"><mat-icon>view_kanban</mat-icon> Board</a>
         }
         @if (auth.can(obj.key, 'create')) {
+          <button mat-stroked-button (click)="importCsv()"><mat-icon>upload_file</mat-icon> Import</button>
           <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ obj.label | lowercase }}</button>
         }
       </div>
@@ -157,5 +159,12 @@ export class RecordList {
       .open(RecordFormDialog, { data: { objectKey: this.objectKey() }, width: '720px' })
       .afterClosed()
       .subscribe((saved?: RecordItem) => saved && this.router.navigate(['/o', this.objectKey(), saved.id]));
+  }
+
+  importCsv(): void {
+    this.dialog
+      .open(ImportDialog, { data: { objectKey: this.objectKey() }, width: '760px', disableClose: true })
+      .afterClosed()
+      .subscribe((created?: number) => created && this.data.reload());
   }
 }

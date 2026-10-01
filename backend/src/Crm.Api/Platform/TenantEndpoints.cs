@@ -4,6 +4,7 @@ using Crm.Api.Auth;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Files;
 using Crm.Api.Messaging;
 using Crm.Api.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -36,7 +37,7 @@ public record PlatformSettingsView(PlatformSettings Settings, bool SmtpPasswordC
 public record TestMessageRequest([Required, MaxLength(256)] string To);
 
 public sealed partial class TenantService(
-    CrmDbContext db, UserManager<AppUser> users, TenantContext tenantContext, TimeProvider clock, ILogger<TenantService> logger)
+    CrmDbContext db, UserManager<AppUser> users, TenantContext tenantContext, IFileStorage storage, TimeProvider clock, ILogger<TenantService> logger)
 {
     [GeneratedRegex("^[a-z0-9][a-z0-9-]{1,62}$")]
     private static partial Regex SlugPattern();
@@ -102,6 +103,7 @@ public sealed partial class TenantService(
         var groupIds = await db.Groups.IgnoreQueryFilters().Where(g => g.TenantId == tenantId).Select(g => g.Id).ToListAsync(ct);
 
         await db.Activities.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
+        await db.Attachments.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.CustomRecords.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.Leads.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.Opportunities.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
@@ -122,10 +124,19 @@ public sealed partial class TenantService(
         await db.Roles.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.RefreshTokens.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync(ct);
         await db.VerificationCodes.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync(ct);
+        await db.PasswordResetTokens.Where(x => userIds.Contains(x.UserId)).ExecuteDeleteAsync(ct);
         await db.Users.Where(u => u.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.Tenants.Where(t => t.Id == tenantId).ExecuteDeleteAsync(ct);
         await tx.CommitAsync(ct);
         PermissionService.Invalidate(tenantId);
+        try
+        {
+            await storage.DeleteTenantAsync(tenantId, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Tenant {TenantId} deleted but its stored files could not be removed", tenantId);
+        }
         logger.LogWarning("Deleted tenant {TenantId} and all of its data", tenantId);
     }
 }

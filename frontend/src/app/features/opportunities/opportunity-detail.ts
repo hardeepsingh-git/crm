@@ -13,6 +13,7 @@ import { MetadataService } from '../../core/metadata.service';
 import { OpportunityDetail, StageDef } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ActivityPanel } from '../../shared/activity-panel';
+import { AttachmentsPanel } from '../../shared/attachments-panel';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip, StagePath } from '../../shared/record-widgets';
@@ -20,7 +21,7 @@ import { OpportunityFormDialog } from './opportunity-form-dialog';
 
 @Component({
   selector: 'app-opportunity-detail',
-  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, CustomFieldsView, RecordHistory, StageChip, StagePath],
+  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, StageChip, StagePath],
   template: `
     @if (opportunity.isLoading() && !o()) { <mat-progress-bar mode="indeterminate" /> }
     @if (o(); as o) {
@@ -58,6 +59,7 @@ import { OpportunityFormDialog } from './opportunity-form-dialog';
               <dt>Updated</dt><dd>{{ o.updatedAt | date: 'medium' }}</dd>
             </dl>
             @if (o.description) { <p class="desc">{{ o.description }}</p> }
+            <app-attachments-panel objectKey="opportunity" [recordId]="o.id" [ownerId]="o.ownerId" (changed)="version.set(version() + 1)" />
             <app-record-history entityType="opportunity" [entityId]="o.id" [version]="version()" />
           </mat-card-content>
         </mat-card>

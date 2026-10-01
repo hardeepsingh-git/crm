@@ -241,6 +241,46 @@ if ($adminEmail -and $adminPassword) {
         Assert (@($f.items | Where-Object id -eq $a.id).Count -eq 1) 'not found by custom field'; 'filter by cf.tier works'
     }
 
+    Check 'CSV import: dry run reports bad rows, then imports all-or-nothing' {
+        $before = (Api GET '/api/records/ticket?pageSize=1' -Token $script:hdToken).totalCount
+        $mapping = @{ Subject = 'name'; Priority = 'cf.priority'; Due = 'cf.due_date' }
+        $bad = "Subject,Priority,Due`nPrinter offline,high,31/12/2026`nBroken row,Whenever,not-a-date`n"
+        $r = Api POST '/api/import/ticket' @{ csv = $bad; mapping = $mapping; dryRun = $false } -Token $script:hdToken
+        Assert ($r.created -eq 0 -and $r.errorCount -eq 1 -and $r.errors[0].row -eq 3) "expected row 3 to fail, got $($r | ConvertTo-Json -Depth 4 -Compress)"
+        $good = "Subject,Priority,Due`n""Printer offline, 3rd floor"",high,31/12/2026`nVPN drops,Urgent,2026-11-01`n"
+        $dry = Api POST '/api/import/ticket' @{ csv = $good; mapping = $mapping; dryRun = $true } -Token $script:hdToken
+        Assert ($dry.errorCount -eq 0 -and $dry.created -eq 0) 'dry run should validate without saving'
+        $done = Api POST '/api/import/ticket' @{ csv = $good; mapping = $mapping; dryRun = $false } -Token $script:hdToken
+        $after = (Api GET '/api/records/ticket?pageSize=1' -Token $script:hdToken).totalCount
+        Assert ($done.created -eq 2 -and $after -eq $before + 2) "created $($done.created), count $before -> $after"
+        "2 tickets imported; bad file rejected at row 3"
+    }
+    Check 'Attachments: upload, download and delete a file on a record' {
+        $ticket = (Api GET '/api/records/ticket?pageSize=1' -Token $script:hdToken).items[0]
+        $tmp = Join-Path ([IO.Path]::GetTempPath()) "smoke-$([guid]::NewGuid().ToString('N')).pdf"
+        [IO.File]::WriteAllText($tmp, '%PDF-1.4 smoke test')
+        try {
+            $headers = @{ Authorization = "Bearer $script:hdToken" }
+            $item = Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/attachments?objectKey=ticket&recordId=$($ticket.id)" -Headers $headers -Form @{ file = Get-Item $tmp }
+            $download = Invoke-WebRequest -Uri "$BaseUrl/api/attachments/$($item.id)/content" -Headers $headers -UseBasicParsing
+            $contentType = "$($download.Headers['Content-Type'])"
+            Assert ($contentType -like 'application/pdf*') "content type $contentType"
+            Assert ([Text.Encoding]::ASCII.GetString($download.Content) -eq '%PDF-1.4 smoke test') 'downloaded bytes differ'
+            $s = StatusOf { Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/attachments?objectKey=ticket&recordId=$($ticket.id)" -Headers $headers -Form @{ file = Get-Item $PSCommandPath } }
+            Assert ($s -eq 400) ".ps1 upload returned $s"
+            Api DELETE "/api/attachments/$($item.id)" -Token $script:hdToken | Out-Null
+            $left = Api GET "/api/attachments?objectKey=ticket&recordId=$($ticket.id)" -Token $script:hdToken
+            Assert ($left.Count -eq 0) "file not deleted ($($left.Count) left)"
+        } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
+        'round trip ok; script upload refused'
+    }
+    Check 'Password reset requests never reveal whether an account exists' {
+        $known = (Invoke-WebRequest -Method Post -Uri "$BaseUrl/api/auth/forgot-password" -ContentType 'application/json' -Body (@{ email = "admin@$slug.test" } | ConvertTo-Json) -UseBasicParsing).StatusCode
+        $unknown = (Invoke-WebRequest -Method Post -Uri "$BaseUrl/api/auth/forgot-password" -ContentType 'application/json' -Body (@{ email = "nobody-$slug@example.test" } | ConvertTo-Json) -UseBasicParsing).StatusCode
+        Assert ($known -eq 202 -and $unknown -eq 202) "known $known, unknown $unknown"
+        '202 for both'
+    }
+
     # Self-registration: global platform settings are changed temporarily and always restored below.
     $regEmail = "joiner@$slug.test"
     Check 'Self-registration needs both the platform switch and the organisation opt-in' {

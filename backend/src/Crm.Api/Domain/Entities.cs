@@ -65,6 +65,18 @@ public class VerificationCode
     public DateTime? ConsumedAt { get; set; }
 }
 
+/// <summary>Single-use link token for "forgot password"; only the hash is stored.</summary>
+public class PasswordResetToken
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid UserId { get; set; }
+    public AppUser? User { get; set; }
+    public string TokenHash { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
+    public DateTime? ConsumedAt { get; set; }
+}
+
 public class RefreshToken
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
@@ -305,6 +317,22 @@ public class Notification : ITenantEntity
     public string? Link { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? ReadAt { get; set; }
+}
+
+/// <summary>A file attached to a record; the bytes live in <c>IFileStorage</c> under <see cref="StorageKey"/>.</summary>
+public class Attachment : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid TenantId { get; set; }
+    public string ObjectKey { get; set; } = "";
+    public Guid RecordId { get; set; }
+    public string FileName { get; set; } = "";
+    public string ContentType { get; set; } = "";
+    public long Size { get; set; }
+    public string StorageKey { get; set; } = "";
+    public Guid UploadedById { get; set; }
+    public string UploadedByName { get; set; } = "";
+    public DateTime CreatedAt { get; set; }
 }
 
 public class AuditLog : ITenantEntity

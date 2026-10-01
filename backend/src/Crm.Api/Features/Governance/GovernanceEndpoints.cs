@@ -69,15 +69,7 @@ public static class GovernanceEndpoints
         string entityType, Guid entityId, Access access, CrmDbContext db, CancellationToken ct)
     {
         var p = await access.GetAsync(ct);
-        var owner = entityType switch
-        {
-            ObjectKeys.Account => await db.Accounts.Where(x => x.Id == entityId).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct),
-            ObjectKeys.Contact => await db.Contacts.Where(x => x.Id == entityId).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct),
-            ObjectKeys.Lead => await db.Leads.Where(x => x.Id == entityId).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct),
-            ObjectKeys.Opportunity => await db.Opportunities.Where(x => x.Id == entityId).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct),
-            ObjectKeys.Activity => await db.Activities.Where(x => x.Id == entityId).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct),
-            _ => await db.CustomRecords.Where(x => x.Id == entityId && x.ObjectDefinition!.Key == entityType).Select(x => (Guid?)x.OwnerId).SingleOrDefaultAsync(ct),
-        };
+        var owner = await RecordOwners.OwnerOfAsync(db, entityType, entityId, ct);
         if (owner is null || !p.CanAccess(entityType, PermissionActions.Read, owner.Value)) return TypedResults.NotFound();
         return TypedResults.Ok(await Project(db.AuditLogs.AsNoTracking().Where(a => a.EntityId == entityId).OrderByDescending(a => a.Timestamp))
             .Take(200).ToListAsync(ct));

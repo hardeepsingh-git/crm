@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Crm.Api.Automation;
 using Crm.Api.Common;
 using Crm.Api.Domain;
+using Crm.Api.Files;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -37,6 +38,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     public DbSet<GroupRole> GroupRoles => Set<GroupRole>();
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
     public DbSet<VerificationCode> VerificationCodes => Set<VerificationCode>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<Attachment> Attachments => Set<Attachment>();
 
     /// <summary>Referenced by the global query filters; EF evaluates it per query.</summary>
     public Guid? CurrentTenantId => tenant.TenantId;
@@ -44,6 +47,9 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     public TenantContext TenantContext => tenant;
 
     private bool _runningAutomation;
+
+    /// <summary>Skips automation rules for this context's saves, e.g. bulk imports.</summary>
+    public bool SuppressAutomation { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -82,11 +88,13 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         var now = clock.GetUtcNow().UtcDateTime;
+        var orphanedFiles = await RemoveAttachmentsOfDeletedRecordsAsync(cancellationToken);
         StampAndGuard(now);
-        var automationChanges = _runningAutomation ? [] : CaptureAutomationChanges();
+        var automationChanges = _runningAutomation || SuppressAutomation ? [] : CaptureAutomationChanges();
         await WriteAuditAsync(now, cancellationToken);
 
         var result = await base.SaveChangesAsync(cancellationToken);
+        if (orphanedFiles.Count > 0) await DeleteFilesAsync(orphanedFiles);
 
         if (automationChanges.Count > 0 && services.GetService(typeof(AutomationEngine)) is AutomationEngine engine)
         {
@@ -150,6 +158,32 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
                 e.Entity is IStaged && e.State == EntityState.Modified && e.Property(nameof(IStaged.Stage)).IsModified))
             .ToList();
 
+    // ---------- Attachments ----------
+
+    /// <summary>Files belong to their record: deleting the record deletes them (and, after commit, their stored bytes).</summary>
+    private async Task<List<string>> RemoveAttachmentsOfDeletedRecordsAsync(CancellationToken ct)
+    {
+        var deleted = ChangeTracker.Entries<OwnedEntity>()
+            .Where(e => e.State == EntityState.Deleted && e.Entity is not Activity).Select(e => e.Entity.Id).ToList();
+        if (deleted.Count == 0) return [];
+        var attachments = await Attachments.Where(a => deleted.Contains(a.RecordId)).ToListAsync(ct);
+        Attachments.RemoveRange(attachments);
+        return attachments.Select(a => a.StorageKey).ToList();
+    }
+
+    private async Task DeleteFilesAsync(List<string> keys)
+    {
+        if (services.GetService(typeof(IFileStorage)) is not IFileStorage storage) return;
+        foreach (var key in keys)
+        {
+            try { await storage.DeleteAsync(key, CancellationToken.None); }
+            catch (Exception ex)
+            {
+                (services.GetService(typeof(ILogger<CrmDbContext>)) as ILogger)?.LogError(ex, "Could not delete stored file {Key}", key);
+            }
+        }
+    }
+
     // ---------- Audit ----------
 
     private static readonly HashSet<string> NeverAudited =
@@ -168,12 +202,18 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
         if (entries.Count == 0) return;
 
         var definitionIds = entries.Select(e => e.Entity).OfType<CustomRecord>().Select(r => r.ObjectDefinitionId).Distinct().ToList();
+        var deletedRecordIds = entries.Where(e => e.State == EntityState.Deleted).Select(e => e.Entity).OfType<OwnedEntity>().Select(r => r.Id).ToHashSet();
         var objectKeys = definitionIds.Count == 0
             ? new Dictionary<Guid, string>()
             : await ObjectDefinitions.IgnoreQueryFilters().Where(d => definitionIds.Contains(d.Id)).ToDictionaryAsync(d => d.Id, d => d.Key, ct);
 
         foreach (var entry in entries)
         {
+            if (entry.Entity is Attachment file)
+            {
+                AuditAttachment(entry, file, deletedRecordIds, now);
+                continue;
+            }
             var changes = new JsonObject();
             foreach (var prop in entry.Properties)
             {
@@ -206,6 +246,24 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options, TimeProvider c
                 Changes = changes.ToJsonString(),
             });
         }
+    }
+
+    /// <summary>File changes appear in the parent record's history, e.g. <c>attachment: [null, "cv.pdf"]</c>.</summary>
+    private void AuditAttachment(EntityEntry<ITenantEntity> entry, Attachment file, HashSet<Guid> deletedRecordIds, DateTime now)
+    {
+        if (entry.State == EntityState.Modified || deletedRecordIds.Contains(file.RecordId)) return;
+        var added = entry.State == EntityState.Added;
+        AuditLogs.Add(new AuditLog
+        {
+            TenantId = file.TenantId,
+            EntityType = file.ObjectKey,
+            EntityId = file.RecordId,
+            Action = AuditAction.Updated,
+            UserId = tenant.UserId,
+            UserName = tenant.UserName ?? "System",
+            Timestamp = now,
+            Changes = new JsonObject { ["attachment"] = new JsonArray(added ? null : file.FileName, added ? file.FileName : null) }.ToJsonString(),
+        });
     }
 
     private static void DiffCustomFields(JsonObject changes, string? before, string? after)

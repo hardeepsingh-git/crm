@@ -7,6 +7,8 @@ A configurable, **multi-tenant** relationship-management platform. It ships as a
 - **Customization**: rename or disable standard objects, create custom objects with their own pipelines, add 13 types of custom fields, and edit stages and picklists. Lists, forms, filters, boards and dashboards adapt automatically.
 - **Automation**: no-code rules that create tasks, send notifications or set fields.
 - **Governance**: field-level audit trail, per-record history and in-app notifications.
+- **Files and data loading**: attach résumés, contracts and other documents to any record, and bulk-load custom-object data from CSV with a validated, all-or-nothing import.
+- **Operations**: password reset by email, error tracking (Sentry, optional) and a backup script.
 - **Self-registration** (optional): people sign up with their organisation's code, optionally verify their email and/or mobile with a one-time code, and can sign in only after an administrator approves them and assigns roles or groups. The platform switches and the email/SMS providers are configured in the UI (**Platform settings**).
 
 | Layer | Stack |
@@ -36,9 +38,9 @@ To look up a password: `dotnet user-secrets list` in `backend/src/Crm.Api`. Don'
 
 ## Tests
 ```powershell
-cd backend;  dotnet test                    # 36 API integration tests (stop the API first)
-cd frontend; npx ng test --watch=false      # 33 UI unit tests
-./scripts/smoke-test.ps1                    # 48 live end-to-end checks against PostgreSQL (API running)
+cd backend;  dotnet test                    # 56 API integration tests (stop the API first)
+cd frontend; npx ng test --watch=false      # 40 UI unit tests
+./scripts/smoke-test.ps1                    # 51 live end-to-end checks against PostgreSQL (API running)
 ```
 
 ## Documentation
@@ -56,6 +58,6 @@ cd frontend; npx ng test --watch=false      # 33 UI unit tests
 ```
 backend/   ASP.NET Core API (src/Crm.Api), integration tests, database/crm-schema.sql
 frontend/  Angular app (metadata-driven UI, settings hub, platform console), nginx config
-scripts/   start-dev.ps1 (run locally), smoke-test.ps1 (live end-to-end test)
+scripts/   start-dev.ps1 (run locally), smoke-test.ps1 (live end-to-end test), backup-db.ps1 (nightly pg_dump with retention)
 docs/      Documentation
 ```

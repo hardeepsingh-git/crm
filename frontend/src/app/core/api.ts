@@ -5,6 +5,9 @@ import {
   AccountDetail,
   AccountRequest,
   ActivityItem,
+  AttachmentItem,
+  ImportAnalysis,
+  ImportResult,
   ActivityRequest,
   AuditItem,
   AutomationField,
@@ -169,6 +172,16 @@ export class CrmApi {
     return this.http.post<UserItem>(`/api/users/${id}/reject`, {});
   }
 
+  // ---------- Password reset (anonymous) ----------
+
+  forgotPassword(email: string): Observable<void> {
+    return this.http.post<void>('/api/auth/forgot-password', { email });
+  }
+
+  resetPasswordWithToken(token: string, newPassword: string): Observable<void> {
+    return this.http.post<void>('/api/auth/reset-password', { token, newPassword });
+  }
+
   // ---------- Self-registration (anonymous) ----------
 
   registrationOptions(tenantCode: string): Observable<RegistrationOptions> {
@@ -285,6 +298,33 @@ export class CrmApi {
 
   testMessage(channel: VerificationChannel, to: string): Observable<void> {
     return this.http.post<void>(`/api/platform/settings/test-${channel === 'Email' ? 'email' : 'sms'}`, { to });
+  }
+
+  // ---------- Attachments ----------
+
+  uploadAttachment(objectKey: string, recordId: string, file: File): Observable<AttachmentItem> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<AttachmentItem>('/api/attachments', form, { params: { objectKey, recordId } });
+  }
+
+  /** Fetched as a blob because a plain link can't carry the bearer token. */
+  downloadAttachment(id: string): Observable<Blob> {
+    return this.http.get(`/api/attachments/${id}/content`, { responseType: 'blob' });
+  }
+
+  deleteAttachment(id: string): Observable<void> {
+    return this.http.delete<void>(`/api/attachments/${id}`);
+  }
+
+  // ---------- CSV import ----------
+
+  analyzeImport(objectKey: string, csv: string): Observable<ImportAnalysis> {
+    return this.http.post<ImportAnalysis>(`/api/import/${objectKey}/analyze`, { csv });
+  }
+
+  runImport(objectKey: string, body: { csv: string; mapping: Record<string, string | null>; dryRun: boolean; runAutomation: boolean }): Observable<ImportResult> {
+    return this.http.post<ImportResult>(`/api/import/${objectKey}`, body);
   }
 }
 

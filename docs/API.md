@@ -34,6 +34,10 @@
 | POST | `/logout` | `{ refreshToken }` | 204 |
 | GET | `/me` | none | `UserInfo` |
 | POST | `/change-password` | `{ currentPassword, newPassword }` | 204 (all sessions revoked) |
+| POST | `/forgot-password` | `{ email }` | **202** always. Emails a single-use link `<App:PublicUrl>/reset-password?token=…` (valid `PasswordReset:TokenMinutes`, default 60) to active, approved users of active organisations. One email per user per minute. |
+| POST | `/reset-password` | `{ token, newPassword }` | 204 (all sessions revoked, lockout cleared, "password changed" email sent) · 400 (invalid or expired link, or weak password) |
+
+Forgot and reset are anonymous and share the `RateLimiting:PasswordResetPermitPerMinute` limit (default 5 per IP).
 
 ### Self-registration (anonymous, rate limit `RateLimiting:RegisterPermitPerMinute` per IP)
 
@@ -137,6 +141,39 @@ The permission resource is the object key, e.g. `ticket:read`.
 | DELETE | `/{id}` | Linked activities are deleted too |
 
 Unknown or inactive object keys return 404.
+
+## Attachments (`/api/attachments`)
+
+Files on any record except activities. Reading needs **read** access to the record; uploading and deleting need **update** access. Hidden records return 404.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/?objectKey=&recordId=` | `AttachmentItem { id, fileName, contentType, size, uploadedById, uploadedByName, createdAt }[]`, newest first |
+| POST | `/?objectKey=&recordId=` | `multipart/form-data` with one `file` → 201. Max `Attachments:MaxFileSizeMb` (default 10), 100 files per record. Allowed: .pdf .doc .docx .rtf .odt .txt .csv .xls .xlsx .ppt .pptx .png .jpg .jpeg .gif .webp. The content type is set from the extension; the file name is sanitised. |
+| GET | `/{id}/content` | Download (`Content-Disposition: attachment`, `nosniff`) |
+| DELETE | `/{id}` | 204 |
+
+Uploads and deletions appear in the record's history as `attachment: [old, new]`. Deleting a record deletes its files.
+
+## CSV import (`/api/import/{objectKey}`, objectKey:create)
+
+Custom objects only (e.g. the Recruitment template's job openings and applications).
+
+| Method | Path | Body | Response |
+|---|---|---|---|
+| POST | `/analyze` | `{ csv }` | `{ headers[], rowCount, sample[][] (5 rows), suggestedMapping: { header: target \| null }, targets[] }` |
+| POST | `/` | `{ csv, mapping: { header: target }, dryRun = true, runAutomation = false }` | `{ dryRun, total, created, errorCount, errors: [{ row, messages[] }] }` (first 200 errors) |
+
+- Targets: `name`, `stage` (key or label), `owner` (user email, same assignment rules as forms) and `cf.<fieldKey>`.
+- Values: picklists match case-insensitively; multi-picklists split on `;` or `|`; yes/no accepts Yes/No/True/False/1/0; dates `yyyy-MM-dd` or `dd/MM/yyyy`; numbers `1,234.50` (ambiguous formats such as `1.234,50` are rejected); lookups by the related record's **name** (or id), with an error if a name matches several records.
+- Every row goes through the same validation as the forms. **All-or-nothing:** if any row fails, nothing is saved. `row` is the line number in the file (the header is line 1).
+- Limits: `Import:MaxFileSizeMb` (default 5) and `Import:MaxRows` (default 5000). Automation rules don't run unless `runAutomation` is true.
+
+## Diagnostics
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/client-errors` | `{ message, stack?, url? }` from the UI's error handler (signed-in users, `RateLimiting:ClientErrorPermitPerMinute`, default 30). Logged at Error level, so it reaches Sentry when configured. |
 
 ## Administration
 

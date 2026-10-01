@@ -31,6 +31,14 @@ Configuration is read in this order: `appsettings.json`, then `appsettings.{Envi
 | `RateLimiting:AuthPermitPerMinute` | | `10` | Sign-in attempts per IP per minute |
 | `RateLimiting:RefreshPermitPerMinute` | | `120` | Token refreshes per IP per minute |
 | `RateLimiting:RegisterPermitPerMinute` | | `10` | Self-registration, verify and resend-code calls per IP per minute |
+| `RateLimiting:PasswordResetPermitPerMinute` | | `5` | Forgot-password and reset-password calls per IP per minute |
+| `RateLimiting:ClientErrorPermitPerMinute` | | `30` | Browser error reports per IP per minute |
+| `App:PublicUrl` | ✔ outside Development | `http://localhost:4200` in Development | The UI's public address, used in password-reset links (never taken from the request's Host header). Without it, reset emails aren't sent. |
+| `PasswordReset:TokenMinutes` | | `60` | How long a reset link is valid |
+| `Storage:LocalPath` | | `<content root>/App_Data/files` | Where attachments are stored. Use a persistent, backed-up volume (shared between nodes if you run several). |
+| `Attachments:MaxFileSizeMb` | | `10` | Per file. Above 28 MB also raise Kestrel/IIS/proxy request size limits. |
+| `Import:MaxFileSizeMb` / `Import:MaxRows` | | `5` / `5000` | CSV import limits |
+| `Sentry:Dsn` | | none | Enables error tracking (see §2.3). Also `Sentry:Environment`, `Sentry:TracesSampleRate`. |
 | `Email:SmtpPassword` | with the SMTP provider | none | SMTP password. The rest of the SMTP settings are in **Platform settings** (UI). |
 | `Sms:ApiKey` | with the HTTP SMS provider | none | Sent as `<SmsAuthHeader>: <SmsAuthScheme> <key>` to the SMS gateway configured in **Platform settings** |
 | `ForwardedHeaders:Enabled` | | `false` | `true` only when the API is reachable **only** through a trusted reverse proxy |
@@ -51,6 +59,25 @@ Tenant-level settings (name, currency, objects, fields, roles…) are **data**, 
    The HTTP gateway receives `POST <url>` with JSON `{ "to": "+61…", "from": "<sender id>", "message": "…" }`. With the *Log* providers, messages are only written to the API log (including the code, in Development only), which is fine for testing but means real users receive nothing.
 3. Each organisation's administrator switches on *Allow self-registration* under **Settings → Organisation** and shares the link `https://<host>/register/<workspace id>`.
 4. New requests appear under **Settings → Users → Awaiting approval**, with a notification to every user administrator.
+
+### 2.2 Transactional email (password reset, verification, approvals)
+Use a transactional email provider rather than a mailbox server; they handle deliverability (SPF/DKIM, reputation, bounces). Both of these work through the built-in SMTP provider, so **no code change** is needed:
+
+| Provider | SMTP host | Port | Username | `Email:SmtpPassword` |
+|---|---|---|---|---|
+| Postmark | `smtp.postmarkapp.com` | 587 | Server API token | Server API token |
+| SendGrid | `smtp.sendgrid.net` | 587 | `apikey` | API key |
+
+1. Verify your sending domain with the provider (it gives you DNS records for SPF and DKIM) and use an address on that domain as the *From address*.
+2. In **Platform settings → Email provider**, choose *SMTP server*, enter host, port **587** and username, and keep *Use TLS (STARTTLS)* on. Port 465 (implicit TLS) isn't supported.
+3. Set the secret: `dotnet user-secrets set "Email:SmtpPassword" "<token>"` (production: `Email__SmtpPassword`), restart the API, and use **Send test**.
+4. Set `App:PublicUrl` so password-reset links point at the real site.
+
+### 2.3 Error tracking (Sentry)
+Off unless `Sentry:Dsn` is set (environment variable `Sentry__Dsn`). When on, unhandled API exceptions and every Error-level log (including browser errors the UI reports to `/api/client-errors`) are sent to Sentry. Personal data and request bodies are **not** sent (`SendDefaultPii=false`, `MaxRequestBodySize=None`). Without a DSN the same events are in the API log.
+
+### 2.4 Attachments storage
+Files are stored under `Storage:LocalPath` as `<tenant>/<yyyyMM>/<random id>` (no user-supplied names on disk); names and types are in the `Attachments` table. Back up this folder together with the database (§5.3). Deleting a record deletes its files; deleting a tenant deletes its folder. For several API nodes, point `Storage:LocalPath` at a shared volume; cloud object storage (Azure Blob/S3) can be added as another `IFileStorage` implementation.
 
 ## 3. Local development (Windows)
 
@@ -141,8 +168,20 @@ To use the remote server instead of the bundled PostgreSQL, remove the `db` serv
 - [ ] Add GIN indexes on `CustomFields` for large tables (see DATA-MODEL §3).
 - [ ] Plan retention for `AuditLogs` and `Notifications` (e.g. archive audit rows older than 2 years).
 - [ ] Keep `OpenApi:Enabled=false` unless needed.
-- [ ] Monitor `/health/ready`. Back up nightly (`pg_dump -Fc CRM`) with WAL archiving.
+- [ ] Monitor `/health/ready`. Back up nightly with `scripts/backup-db.ps1` (§5.4) plus WAL archiving, and back up `Storage:LocalPath`.
+- [ ] Set `App:PublicUrl`, a transactional email provider (§2.2) and `Sentry:Dsn` (§2.3).
 - [ ] Run a Fortify SAST scan before release.
+
+### 5.4 Backups
+`scripts/backup-db.ps1` runs `pg_dump --format=custom`, checks the archive can be read back with `pg_restore --list`, and deletes backups older than `-RetentionDays` (default 14). It reads `ConnectionStrings__Crm` / `Database__Password` from the environment (or the API's user-secrets on a developer machine) and passes the password only through `PGPASSWORD` for that process. It needs the PostgreSQL client tools (same major version as the server).
+```powershell
+./scripts/backup-db.ps1 -OutputDir D:\Backups\crm -RetentionDays 30
+# Nightly at 02:00 (Windows Task Scheduler, run as the service account):
+schtasks /Create /TN "CRM backup" /SC DAILY /ST 02:00 /TR "pwsh -NoProfile -File C:\crm\scripts\backup-db.ps1 -OutputDir D:\Backups\crm"
+# Restore into an empty database:
+pg_restore --clean --if-exists --no-owner -d CRM D:\Backups\crm\CRM-20261001-020000.dump
+```
+Copy backups off the server, and test a restore regularly.
 
 ## 6. Troubleshooting
 
@@ -158,6 +197,9 @@ To use the remote server instead of the bundled PostgreSQL, remove the `db` serv
 | Automation rule didn't fire | Is the rule active? Do all conditions match? Stage-change rules need a pipeline object. Changes made by automation don't trigger other rules. Check **Runs** on the Automation page. |
 | `429 Too Many Requests` on sign-in | Wait a minute, or raise `RateLimiting:AuthPermitPerMinute` |
 | *Create an account* isn't shown / "Self-registration isn't available" | The platform switch (**Platform settings**) and the organisation opt-in (**Settings → Organisation**) must both be on, the organisation must be active, and the code must be its workspace ID. |
+| Password reset emails don't arrive | The email provider is still *Log*, `App:PublicUrl` isn't set (the API logs an error), or the user is inactive or pending approval. One email per minute per user. |
+| "This file type isn't allowed" / file too large | See the allow-list in API.md; raise `Attachments:MaxFileSizeMb` if needed. |
+| CSV import says "No record named …" | Lookups match the related record's exact name (any case). Import the related records first (e.g. job openings before applications), or use the record ID. |
 | Registered users get no code | The provider is still *Log* (check the API log), or delivery fails: use **Send test** and check `Email:SmtpPassword` / `Sms:ApiKey`. Send failures are logged but don't fail the registration; the user can request a new code. |
 | A user says they're "waiting for approval" | Approve them under **Settings → Users → Awaiting approval** with at least one role or group. |
 | `dotnet test` fails with file-lock errors | Stop the running API first (it locks `bin/`) |

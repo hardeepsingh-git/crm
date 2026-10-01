@@ -166,8 +166,24 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | REG-9 | No account enumeration: registering an existing email, verifying and resending give the same responses as for unknown emails. Registration endpoints are rate-limited. | M |
 | REG-10 | Only platform admins can change platform settings. | M |
 
-### 5.11 Future (backlog)
-Field-level security · Sharing rules and territories · Formula and roll-up fields · Email and webhook automation actions · Scheduled automation (e.g. "3 days before due") · CSV import/export · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Forgot-password by email · Email templates · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
+### 5.11 Phase 0: launch foundations (OPS, FILE, IMP)
+| ID | Requirement | Pri |
+|---|---|---|
+| OPS-1 | **Forgot password**: emailed single-use link (60 min), same response whether or not the account exists, resend cooldown, sessions revoked and lockout cleared on reset, "password changed" notice. Links use the configured public URL. | M |
+| OPS-2 | **Transactional email** through a provider (Postmark/SendGrid via SMTP), configured in Platform settings. | M |
+| OPS-3 | **Error tracking**: server exceptions and browser errors reach Sentry when configured, without personal data. | M |
+| OPS-4 | **Backups**: scripted nightly `pg_dump` with verification and retention. | M |
+| FILE-1 | **Attachments** on any record (except activities): upload, list, download, delete. Read access to see, update access to change. | M |
+| FILE-2 | Allow-listed file types, size limit (10 MB default), sanitised names, content type set by the server, downloads never rendered inline. | M |
+| FILE-3 | File changes appear in the record's history. | S |
+| FILE-4 | Deleting a record deletes its files; deleting a tenant deletes all of its files. | M |
+| IMP-1 | **CSV import** for custom objects with suggested column mapping and a downloadable template. | M |
+| IMP-2 | Dry run first; **all-or-nothing** import with per-row errors by line number. | M |
+| IMP-3 | Friendly values: lookups by name, case-insensitive picklists, common date/yes-no/number formats; ambiguous numbers rejected. | M |
+| IMP-4 | Limits (5 MB / 5,000 rows); automation off by default for imports. | S |
+
+### 5.12 Future (backlog)
+Field-level security · Sharing rules and territories · Formula and roll-up fields · Email and webhook automation actions · Scheduled automation (e.g. "3 days before due") · CSV export and import for standard objects · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Email templates · Cloud file storage · Résumé parsing · Candidate portal and interview scheduling · Offer letters · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
 
 ## 6. Non-functional requirements
 
@@ -200,9 +216,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (36), including tenancy, RBAC override and escalation, customization, automation, audit and self-registration
-- [x] UI unit tests green (33), including permission resolution, metadata/custom-field helpers, cross-tab token refresh and the registration pages
-- [x] Live smoke test green against PostgreSQL (48 checks, including tenant provisioning, JSONB filters, automation, isolation and self-registration approval)
+- [x] API integration tests green (56), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments and CSV import
+- [x] UI unit tests green (40), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments and import
+- [x] Live smoke test green against PostgreSQL (51 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import and attachments)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

@@ -62,6 +62,30 @@ public class VerificationCodeConfiguration : IEntityTypeConfiguration<Verificati
     }
 }
 
+public class AttachmentConfiguration : IEntityTypeConfiguration<Attachment>
+{
+    public void Configure(EntityTypeBuilder<Attachment> b)
+    {
+        b.Property(x => x.ObjectKey).HasMaxLength(40).IsRequired();
+        b.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+        b.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+        b.Property(x => x.StorageKey).HasMaxLength(200).IsRequired();
+        b.Property(x => x.UploadedByName).HasMaxLength(200).IsRequired();
+        b.HasIndex(x => new { x.TenantId, x.ObjectKey, x.RecordId });
+    }
+}
+
+public class PasswordResetTokenConfiguration : IEntityTypeConfiguration<PasswordResetToken>
+{
+    public void Configure(EntityTypeBuilder<PasswordResetToken> b)
+    {
+        b.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+        b.HasIndex(x => x.TokenHash).IsUnique();
+        b.HasIndex(x => x.UserId);
+        b.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
 {
     public void Configure(EntityTypeBuilder<RefreshToken> b)

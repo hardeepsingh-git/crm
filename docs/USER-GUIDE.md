@@ -6,7 +6,11 @@ Open the CRM (development: http://localhost:4200) and sign in with the email and
 **Creating your own account** (if your organisation allows it): use the link your administrator shared (`…/register/<organisation code>`), or *Create an account* on the sign-in page and enter the organisation code.
 1. Fill in your name, email, mobile number and a password.
 2. If asked, enter the codes sent to your email and/or mobile. *Send a new code* works after a short wait.
-3. An administrator reviews your request and gives you access. Until then, signing in tells you the request is waiting for approval. Use the menu under your name to **change your password** or **sign out**. The menu also shows your organisation and roles.
+3. An administrator reviews your request and gives you access. Until then, signing in tells you the request is waiting for approval.
+
+**Forgot your password?** Use *Forgot password?* on the sign-in page and enter your email. If you have an account you'll get a link (valid for an hour, usable once) to choose a new password; you're then signed out on all devices.
+
+Use the menu under your name to **change your password** or **sign out**. The menu also shows your organisation and roles.
 
 ## 2. Finding your way around
 The left navigation is built from **your organisation's configuration and your permissions**. You only see the objects you're allowed to read, with the names your organisation uses: for example *Customers* instead of *Accounts*, or extra objects like *Tickets* or *Support Cases*.
@@ -29,6 +33,8 @@ Every list has **search**, **Mine only**, **column sorting**, **paging**, and **
 - **Stages**: on records with a pipeline, click a stage in the chevron bar or drag the card on the board. The green and red buttons close the record as won or lost; your organisation may name them differently, e.g. *Resolved* or *Hired*.
 - **Activities**: every record page has a timeline. Use *Log call*, *Note* or *Task*, and tick a task to complete it.
 - **History**: expand **History** on a record to see who changed what, and when.
+- **Files**: every record page (except activities) has a **Files** panel. *Upload* résumés, contracts, IDs or spreadsheets (PDF, Word, Excel, PowerPoint, text, CSV and images, up to 10 MB each); click a file to download it. You need edit rights on the record to upload or delete. Deleting a record deletes its files.
+- **Import from CSV** (custom objects such as Job Openings or Applications, if you can create them): *Import* on the list page. Choose a CSV file (or *Download a template* first), check how its columns map to fields, then **Check file**. Problems are listed by row number and nothing is saved until every row is valid; then **Import**. Link to other records by their name, e.g. the job opening's title, so import job openings before applications.
 - **Lead conversion** (if you may create accounts and contacts): *Convert* creates a contact, an account (new or existing) and optionally an opportunity.
 
 What you can edit depends on your role. If you don't see *Edit* or *Delete*, you don't have that permission for this record. The **Owner** picker only appears if you're allowed to assign records to others.

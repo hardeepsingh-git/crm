@@ -566,3 +566,42 @@ export interface TemplateInfo {
   name: string;
   description: string;
 }
+
+export interface AttachmentItem {
+  id: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  uploadedById: string;
+  uploadedByName: string;
+  createdAt: string;
+}
+
+export interface ImportTarget {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  help: string | null;
+}
+
+export interface ImportAnalysis {
+  headers: string[];
+  rowCount: number;
+  sample: string[][];
+  suggestedMapping: Record<string, string | null>;
+  targets: ImportTarget[];
+}
+
+export interface ImportRowError {
+  row: number;
+  messages: string[];
+}
+
+export interface ImportResult {
+  dryRun: boolean;
+  total: number;
+  created: number;
+  errorCount: number;
+  errors: ImportRowError[];
+}

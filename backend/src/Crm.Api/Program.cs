@@ -5,12 +5,15 @@ using Crm.Api.Automation;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Files;
 using Crm.Api.Features.Accounts;
 using Crm.Api.Features.Activities;
+using Crm.Api.Features.Attachments;
 using Crm.Api.Features.Contacts;
 using Crm.Api.Features.Customization;
 using Crm.Api.Features.Dashboard;
 using Crm.Api.Features.Governance;
+using Crm.Api.Features.Import;
 using Crm.Api.Features.Leads;
 using Crm.Api.Features.Opportunities;
 using Crm.Api.Features.Records;
@@ -34,6 +37,15 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 var services = builder.Services;
 
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Sentry:Dsn"]))
+{
+    builder.WebHost.UseSentry(o =>
+    {
+        o.SendDefaultPii = false;
+        o.MaxRequestBodySize = Sentry.Extensibility.RequestSize.None;
+    });
+}
+
 services.AddSingleton(TimeProvider.System);
 services.AddMemoryCache();
 services.AddScoped<TenantContext>();
@@ -45,6 +57,8 @@ services.AddScoped<AutomationEngine>();
 services.AddScoped<TenantService>();
 services.AddScoped<PlatformSettingsService>();
 services.AddScoped<RegistrationService>();
+services.AddScoped<PasswordResetService>();
+services.AddSingleton<IFileStorage, LocalFileStorage>();
 services.AddScoped<IEmailSender, ConfiguredEmailSender>();
 services.AddScoped<ISmsSender, ConfiguredSmsSender>();
 services.AddHttpClient(ConfiguredSmsSender.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15));
@@ -102,6 +116,8 @@ services.AddRateLimiter(o =>
     // Refresh runs on every page load; tokens are 512-bit random so a looser limit is safe.
     o.AddPolicy(AuthEndpoints.RefreshRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:RefreshPermitPerMinute", 120));
     o.AddPolicy(RegistrationEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:RegisterPermitPerMinute", 10));
+    o.AddPolicy(PasswordResetEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:PasswordResetPermitPerMinute", 5));
+    o.AddPolicy(ClientErrorEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:ClientErrorPermitPerMinute", 30));
 
     static RateLimitPartition<string> PerIpPerMinute(HttpContext ctx, string setting, int defaultLimit) =>
         RateLimitPartition.GetFixedWindowLimiter(
@@ -156,6 +172,7 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c
 var api = app.MapGroup("/api");
 api.MapAuth();
 api.MapRegistration();
+api.MapPasswordReset();
 var secured = api.MapGroup("").RequireAuthorization();
 secured.MapDashboard();
 secured.MapAccounts();
@@ -164,12 +181,15 @@ secured.MapLeads();
 secured.MapOpportunities();
 secured.MapActivities();
 secured.MapRecords();
+secured.MapAttachments();
+secured.MapImport();
 secured.MapUsers();
 secured.MapSecurity();
 secured.MapCustomization();
 secured.MapAutomation();
 secured.MapGovernance();
 secured.MapPlatform();
+secured.MapClientErrors();
 
 await DbInitializer.InitializeAsync(app.Services, app.Configuration, app.Logger);
 await app.RunAsync();

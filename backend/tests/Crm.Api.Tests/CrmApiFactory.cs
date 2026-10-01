@@ -30,6 +30,8 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
 
+    public string StoragePath { get; } = Path.Combine(Path.GetTempPath(), "crm-tests", Guid.NewGuid().ToString("N"));
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         _connection.Open();
@@ -42,6 +44,9 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Seed:DemoData", "false");
         builder.UseSetting("RateLimiting:AuthPermitPerMinute", "10000");
         builder.UseSetting("RateLimiting:RegisterPermitPerMinute", "10000");
+        builder.UseSetting("RateLimiting:PasswordResetPermitPerMinute", "10000");
+        builder.UseSetting("App:PublicUrl", "https://crm.test");
+        builder.UseSetting("Storage:LocalPath", StoragePath);
         builder.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Error).AddConsole());
         builder.ConfigureServices(services =>
         {
@@ -92,7 +97,11 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing) _connection.Dispose();
+        if (disposing)
+        {
+            _connection.Dispose();
+            if (Directory.Exists(StoragePath)) Directory.Delete(StoragePath, recursive: true);
+        }
     }
 }
 

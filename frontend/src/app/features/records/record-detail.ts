@@ -13,6 +13,7 @@ import { MetadataService } from '../../core/metadata.service';
 import { RecordItem, StageDef } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ActivityPanel } from '../../shared/activity-panel';
+import { AttachmentsPanel } from '../../shared/attachments-panel';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip, StagePath } from '../../shared/record-widgets';
@@ -20,7 +21,7 @@ import { RecordFormDialog } from './record-form-dialog';
 
 @Component({
   selector: 'app-record-detail',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, CustomFieldsView, RecordHistory, StageChip, StagePath],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, StageChip, StagePath],
   template: `
     @if (record.isLoading() && !r()) { <mat-progress-bar mode="indeterminate" /> }
     @if (record.error()) { <p class="muted">Record not found or you do not have access to it.</p> }
@@ -58,6 +59,7 @@ import { RecordFormDialog } from './record-form-dialog';
               <dt>Created</dt><dd>{{ r.createdAt | date: 'medium' }}</dd>
               <dt>Updated</dt><dd>{{ r.updatedAt | date: 'medium' }}</dd>
             </dl>
+            <app-attachments-panel [objectKey]="obj.key" [recordId]="r.id" [ownerId]="r.ownerId" (changed)="version.set(version() + 1)" />
             <app-record-history [entityType]="obj.key" [entityId]="r.id" [version]="version()" />
           </mat-card-content>
         </mat-card>

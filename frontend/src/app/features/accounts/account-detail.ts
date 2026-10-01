@@ -15,6 +15,7 @@ import { MetadataService } from '../../core/metadata.service';
 import { AccountDetail, ContactListItem, OpportunityListItem, PagedResult } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ActivityPanel } from '../../shared/activity-panel';
+import { AttachmentsPanel } from '../../shared/attachments-panel';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip } from '../../shared/record-widgets';
@@ -24,7 +25,7 @@ import { AccountFormDialog } from './account-form-dialog';
 
 @Component({
   selector: 'app-account-detail',
-  imports: [CurrencyPipe, DatePipe, DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, MatTabsModule, ActivityPanel, CustomFieldsView, RecordHistory, StageChip],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, MatTabsModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, StageChip],
   template: `
     @if (account.isLoading() && !a()) { <mat-progress-bar mode="indeterminate" /> }
     @if (a(); as a) {
@@ -59,6 +60,7 @@ import { AccountFormDialog } from './account-form-dialog';
               <dt>Updated</dt><dd>{{ a.updatedAt | date: 'medium' }}</dd>
             </dl>
             @if (a.description) { <p class="desc">{{ a.description }}</p> }
+            <app-attachments-panel objectKey="account" [recordId]="a.id" [ownerId]="a.ownerId" (changed)="version.set(version() + 1)" />
             <app-record-history entityType="account" [entityId]="a.id" [version]="version()" />
           </mat-card-content>
         </mat-card>

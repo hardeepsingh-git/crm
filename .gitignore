@@ -1,6 +1,10 @@
 # Secrets
 .env
 
+# Database backups (scripts/backup-db.ps1) and uploaded files (local storage)
+backups/
+backend/src/Crm.Api/App_Data/
+
 # .NET
 backend/**/bin/
 backend/**/obj/

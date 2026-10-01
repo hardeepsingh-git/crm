@@ -14,6 +14,7 @@ import { MetadataService } from '../../core/metadata.service';
 import { ContactDetail, OpportunityListItem, PagedResult } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ActivityPanel } from '../../shared/activity-panel';
+import { AttachmentsPanel } from '../../shared/attachments-panel';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip } from '../../shared/record-widgets';
@@ -21,7 +22,7 @@ import { ContactFormDialog } from './contact-form-dialog';
 
 @Component({
   selector: 'app-contact-detail',
-  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, ActivityPanel, CustomFieldsView, RecordHistory, StageChip],
+  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, MatTableModule, ActivityPanel, AttachmentsPanel, CustomFieldsView, RecordHistory, StageChip],
   template: `
     @if (contact.isLoading() && !c()) { <mat-progress-bar mode="indeterminate" /> }
     @if (c(); as c) {
@@ -56,6 +57,7 @@ import { ContactFormDialog } from './contact-form-dialog';
               <dt>Updated</dt><dd>{{ c.updatedAt | date: 'medium' }}</dd>
             </dl>
             @if (c.description) { <p class="desc">{{ c.description }}</p> }
+            <app-attachments-panel objectKey="contact" [recordId]="c.id" [ownerId]="c.ownerId" (changed)="version.set(version() + 1)" />
             <app-record-history entityType="contact" [entityId]="c.id" [version]="version()" />
           </mat-card-content>
         </mat-card>

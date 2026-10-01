@@ -7,6 +7,7 @@ PostgreSQL database **`CRM`**, schema `public`. The schema is created by three E
 | `20260930041532_InitialCreate` | v1: Identity tables, accounts, contacts, leads, opportunities, activities, refresh tokens |
 | `20260930080943_MultiTenantPlatform` | v2: tenants, RBAC, metadata, custom records, automation, notifications and audit. Adds `TenantId` and `CustomFields` to existing tables and **migrates v1 data** (see below). |
 | `20260930112016_SelfRegistration` | `Tenants.SelfRegistrationEnabled` (default false), `AspNetUsers.RegistrationStatus` (existing users default to `Approved`), `AppSettings`, `VerificationCodes` |
+| `*_Phase0FilesAndPasswordReset` | New tables `Attachments` and `PasswordResetTokens` only; no changes to existing data |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -51,6 +52,7 @@ erDiagram
 | `AspNetUsers` | Identity columns + `TenantId` FK (RESTRICT), `FirstName`, `LastName`, `IsActive`, `IsPlatformAdmin`, **`RegistrationStatus`**(32), `CreatedAt` | Email is unique platform-wide. Users are never hard-deleted except when their tenant is deleted. `PhoneNumber` (E.164), `EmailConfirmed` and `PhoneNumberConfirmed` are set by self-registration. Index `(TenantId, RegistrationStatus)`. |
 | `RefreshTokens` | `UserId` FK (CASCADE), `TokenHash`(128, **unique**), `ExpiresAt`, `RevokedAt` | SHA-256 of the token |
 | `VerificationCodes` | `UserId` FK (CASCADE), `Channel` (Email/Sms), `CodeHash`(128), `CreatedAt`, `ExpiresAt`, `Attempts`, `ConsumedAt` | One-time codes. SHA-256 of `userId:channel:code`, never the code itself. Index `(UserId, Channel)`. |
+| `PasswordResetTokens` | `UserId` FK (CASCADE), `TokenHash`(128, **unique**), `CreatedAt`, `ExpiresAt`, `ConsumedAt` | SHA-256 of the emailed 256-bit token. Issuing or using one consumes the user's other open tokens. |
 | `AppSettings` | PK `Key`(100), `Value`(2000, JSON), `UpdatedAt` | **Global** (not tenant-owned) platform settings, one row per `PlatformSettings` property, e.g. `SelfRegistrationEnabled = true`. No secrets. |
 
 ### 2.2 Security
@@ -89,6 +91,7 @@ All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NU
 | `AutomationRules` | `TenantId`, `Name`, `ObjectKey`, `Trigger`, `Conditions` jsonb, `Actions` jsonb, `IsActive`, `RunCount`, `LastRunAt` | Index `(TenantId, ObjectKey)` |
 | `Notifications` | `TenantId`, `UserId`, `Title`(200), `Message`(1000), `Link`(300), `CreatedAt`, `ReadAt` | Index `(TenantId, UserId, ReadAt)` |
 | `AuditLogs` | `TenantId`, `EntityType`(64, the object key), `EntityId`, `EntityName`, `Action` (Created/Updated/Deleted), `UserId`, `UserName`, `Timestamp`, `Changes` jsonb | Indexes `(TenantId, EntityId)`, `(TenantId, Timestamp)` |
+| `Attachments` | `TenantId`, `ObjectKey`(40), `RecordId`, `FileName`(255), `ContentType`(100), `Size`, `StorageKey`(200), `UploadedById`, `UploadedByName`, `CreatedAt` | Index `(TenantId, ObjectKey, RecordId)`. The bytes live in file storage under `StorageKey` (`<tenant>/<yyyyMM>/<id>`). Rows are removed with their record. |
 
 ## 3. JSON columns
 

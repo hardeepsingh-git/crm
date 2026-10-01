@@ -13,6 +13,7 @@ import { MetadataService } from '../../core/metadata.service';
 import { LeadConvertResult, LeadDetail } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { ActivityPanel } from '../../shared/activity-panel';
+import { AttachmentsPanel } from '../../shared/attachments-panel';
 import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { HumanizePipe } from '../../shared/list';
@@ -22,7 +23,7 @@ import { LeadFormDialog } from './lead-form-dialog';
 
 @Component({
   selector: 'app-lead-detail',
-  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, HumanizePipe, CustomFieldsView, RecordHistory],
+  imports: [CurrencyPipe, DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, HumanizePipe, CustomFieldsView, RecordHistory],
   template: `
     @if (lead.isLoading() && !l()) { <mat-progress-bar mode="indeterminate" /> }
     @if (l(); as l) {
@@ -66,6 +67,7 @@ import { LeadFormDialog } from './lead-form-dialog';
               <dt>Updated</dt><dd>{{ l.updatedAt | date: 'medium' }}</dd>
             </dl>
             @if (l.description) { <p class="desc">{{ l.description }}</p> }
+            <app-attachments-panel objectKey="lead" [recordId]="l.id" [ownerId]="l.ownerId" (changed)="version.set(version() + 1)" />
             <app-record-history entityType="lead" [entityId]="l.id" [version]="version()" />
           </mat-card-content>
         </mat-card>

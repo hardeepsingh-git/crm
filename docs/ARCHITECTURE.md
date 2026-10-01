@@ -42,7 +42,7 @@ CRM/
 │   ├── layout/shell.ts                # dynamic navigation, notifications bell, user menu
 │   └── features/                      # dashboard, accounts, contacts, leads, opportunities, activities,
 │                                      #   records (generic custom objects), admin (settings hub), platform (tenants)
-├── scripts/                           # start-dev.ps1, smoke-test.ps1
+├── scripts/                           # start-dev.ps1, smoke-test.ps1, backup-db.ps1
 └── docs/
 ```
 
@@ -189,7 +189,7 @@ flowchart LR
 | A07 Authentication failures | Strong password policy, lockout, short-lived tokens, server-side logout, suspended-tenant sign-in blocked. Self-registration: hashed single-use codes with attempt limits and expiry, and no account enumeration (identical responses for existing and unknown emails). |
 | A08 Integrity | Lockfiles and CI builds from source |
 | A09 Logging | Audit log for business data. Tenant lifecycle is logged. ProblemDetails responses carry trace IDs. |
-| A10 SSRF | The only outbound calls are SMTP and the SMS gateway, to hosts that only platform admins can configure (absolute http(s) URL, validated). Users can't influence the destination. Automation has no webhook action. |
+| A10 SSRF | The only outbound calls are SMTP, the SMS gateway and Sentry, to hosts that only platform admins or operators configure (absolute http(s) URL, validated). Users can't influence the destination. Automation has no webhook action. |
 
 Residual risks:
 - The refresh token lives in `localStorage` (mitigated by CSP, rotation and reuse detection).
@@ -210,3 +210,6 @@ Residual risks:
 | ADR-10 | Automation runs in-process after `SaveChanges` | A queue/outbox: more robust at scale, but more infrastructure. The outbox is the planned next step for email/webhook actions. |
 | ADR-11 | Metadata loaded once per session in the SPA, reloaded after customization | Per-page fetches: more requests, flicker |
 | ADR-12 | **Self-registration gated twice** (platform + organisation). Verification flags and providers are **global platform settings stored in the database** and edited in the UI; secrets stay in configuration. The tenant slug is the organisation code. | Per-tenant providers (duplicated SMTP/SMS setup per organisation); flags in `appsettings` (needs a redeploy to change); a separate invitation-code table (more admin work for the same outcome) |
+| ADR-13 | **Attachments behind `IFileStorage`**, local/shared disk first; server-generated storage keys; one generic table keyed by `(ObjectKey, RecordId)` | Bytes in PostgreSQL (`bytea`: bloats backups and the DB); cloud SDK from day one (no outbound access from dev machines yet) |
+| ADR-14 | **Own password-reset tokens** (hashed, single use, in the DB) instead of Identity's data-protection tokens | Identity tokens need a shared data-protection key ring across nodes and can't be revoked individually |
+| ADR-15 | **CSV import validates everything, then saves in one transaction** (all-or-nothing, automation off) | Row-by-row partial imports (leave half-loaded data to clean up); background jobs (unneeded at 5,000 rows) |

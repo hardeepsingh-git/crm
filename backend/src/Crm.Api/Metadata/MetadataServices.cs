@@ -176,15 +176,21 @@ public sealed class CustomFieldValidator(MetadataService metadata, CrmDbContext 
         }
     }
 
-    private async Task<bool> LookupExistsAsync(string objectKey, Guid id, CancellationToken ct) => objectKey switch
+    private readonly Dictionary<(string ObjectKey, Guid Id), bool> _lookups = [];
+
+    private async Task<bool> LookupExistsAsync(string objectKey, Guid id, CancellationToken ct)
     {
-        ObjectKeys.Account => await db.Accounts.AnyAsync(x => x.Id == id, ct),
-        ObjectKeys.Contact => await db.Contacts.AnyAsync(x => x.Id == id, ct),
-        ObjectKeys.Lead => await db.Leads.AnyAsync(x => x.Id == id, ct),
-        ObjectKeys.Opportunity => await db.Opportunities.AnyAsync(x => x.Id == id, ct),
-        ObjectKeys.Activity => await db.Activities.AnyAsync(x => x.Id == id, ct),
-        _ => await db.CustomRecords.AnyAsync(x => x.Id == id && x.ObjectDefinition!.Key == objectKey, ct),
-    };
+        if (_lookups.TryGetValue((objectKey, id), out var known)) return known;
+        return _lookups[(objectKey, id)] = objectKey switch
+        {
+            ObjectKeys.Account => await db.Accounts.AnyAsync(x => x.Id == id, ct),
+            ObjectKeys.Contact => await db.Contacts.AnyAsync(x => x.Id == id, ct),
+            ObjectKeys.Lead => await db.Leads.AnyAsync(x => x.Id == id, ct),
+            ObjectKeys.Opportunity => await db.Opportunities.AnyAsync(x => x.Id == id, ct),
+            ObjectKeys.Activity => await db.Activities.AnyAsync(x => x.Id == id, ct),
+            _ => await db.CustomRecords.AnyAsync(x => x.Id == id && x.ObjectDefinition!.Key == objectKey, ct),
+        };
+    }
 }
 
 public static class CustomFieldQuery

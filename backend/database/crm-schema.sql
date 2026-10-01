@@ -1272,3 +1272,71 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001033627_Phase0FilesAndPasswordReset') THEN
+    CREATE TABLE "Attachments" (
+        "Id" uuid NOT NULL,
+        "TenantId" uuid NOT NULL,
+        "ObjectKey" character varying(40) NOT NULL,
+        "RecordId" uuid NOT NULL,
+        "FileName" character varying(255) NOT NULL,
+        "ContentType" character varying(100) NOT NULL,
+        "Size" bigint NOT NULL,
+        "StorageKey" character varying(200) NOT NULL,
+        "UploadedById" uuid NOT NULL,
+        "UploadedByName" character varying(200) NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_Attachments" PRIMARY KEY ("Id")
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001033627_Phase0FilesAndPasswordReset') THEN
+    CREATE TABLE "PasswordResetTokens" (
+        "Id" uuid NOT NULL,
+        "UserId" uuid NOT NULL,
+        "TokenHash" character varying(128) NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "ExpiresAt" timestamp with time zone NOT NULL,
+        "ConsumedAt" timestamp with time zone,
+        CONSTRAINT "PK_PasswordResetTokens" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_PasswordResetTokens_AspNetUsers_UserId" FOREIGN KEY ("UserId") REFERENCES "AspNetUsers" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001033627_Phase0FilesAndPasswordReset') THEN
+    CREATE INDEX "IX_Attachments_TenantId_ObjectKey_RecordId" ON "Attachments" ("TenantId", "ObjectKey", "RecordId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001033627_Phase0FilesAndPasswordReset') THEN
+    CREATE UNIQUE INDEX "IX_PasswordResetTokens_TokenHash" ON "PasswordResetTokens" ("TokenHash");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001033627_Phase0FilesAndPasswordReset') THEN
+    CREATE INDEX "IX_PasswordResetTokens_UserId" ON "PasswordResetTokens" ("UserId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001033627_Phase0FilesAndPasswordReset') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261001033627_Phase0FilesAndPasswordReset', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

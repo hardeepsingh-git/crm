@@ -8,6 +8,8 @@ export const routes: Routes = [
   { path: 'register', title: 'Register | CRM', loadComponent: () => import('./features/auth/registration').then((m) => m.Register) },
   { path: 'register/:tenantCode', title: 'Register | CRM', loadComponent: () => import('./features/auth/registration').then((m) => m.Register) },
   { path: 'verify', title: 'Verify | CRM', loadComponent: () => import('./features/auth/registration').then((m) => m.Verify) },
+  { path: 'forgot-password', title: 'Forgot password | CRM', loadComponent: () => import('./features/auth/password-reset').then((m) => m.ForgotPassword) },
+  { path: 'reset-password', title: 'Reset password | CRM', loadComponent: () => import('./features/auth/password-reset').then((m) => m.ResetPassword) },
   {
     path: '',
     canActivate: [authGuard],

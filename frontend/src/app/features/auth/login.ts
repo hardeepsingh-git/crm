@@ -48,6 +48,7 @@ import { errorMessage } from '../../core/notify.service';
             }
             <button mat-flat-button class="full" type="submit" [disabled]="busy()">Sign in</button>
           </form>
+          <p class="forgot"><a routerLink="/forgot-password">Forgot password?</a></p>
           @if (registration.hasValue() && registration.value().available) {
             <p class="register"><a routerLink="/register">New here? Create an account</a></p>
           }
@@ -62,6 +63,7 @@ import { errorMessage } from '../../core/notify.service';
     form { margin-top: 16px; }
     .error { color: var(--mat-sys-error); margin: 0 0 12px; }
     .register { margin: 16px 0 0; text-align: center; }
+    .forgot { margin: 12px 0 0; text-align: center; }
   `,
 })
 export class Login {
