@@ -1432,6 +1432,13 @@ namespace Crm.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("CareersEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CareersIntro")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

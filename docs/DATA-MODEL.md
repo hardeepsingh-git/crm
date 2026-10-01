@@ -10,6 +10,7 @@ PostgreSQL database **`CRM`**, schema `public`. The schema is created by these E
 | `*_Phase0FilesAndPasswordReset` | New tables `Attachments` and `PasswordResetTokens` only; no changes to existing data |
 | `20261001050127_Phase1RecruitmentCore` | `Tenants.TemplateVersion` (existing tenants default to 1) and `FieldDefinitions.IsUnique` (default false). No data changes; the recruitment template upgrade then runs at startup (see section 6). |
 | `20261001061040_Phase2EmailAndScheduling` | New tables `EmailTemplates`, `OutboundEmails`, `ScheduledRuleRuns`; `AutomationRules.ScheduleField` and `ScheduleOffsetMinutes` (default 0). No data changes; recruitment tenants then get template v3 at startup. |
+| `20261001071143_Phase3CareersAndExport` | `Tenants.CareersEnabled` (default false) and `Tenants.CareersIntro`. No data changes; recruitment tenants then get template v4 at startup. |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -50,7 +51,7 @@ erDiagram
 ### 2.1 Tenancy and identity
 | Table | Key columns | Notes |
 |---|---|---|
-| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `TemplateVersion`, `SelfRegistrationEnabled`, `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`). The slug doubles as the **organisation code** for self-registration. |
+| `Tenants` | `Id`, `Name`(200), `Slug`(64, **unique**), `Status` (Active/Suspended), `Currency`(3), `Template`(32), `TemplateVersion`, `SelfRegistrationEnabled`, `CareersEnabled`, `CareersIntro`(2000), `CreatedAt` | The default tenant is `0199a000-0000-7000-8000-000000000001` (slug `default`). The slug doubles as the **organisation code** for self-registration. |
 | `AspNetUsers` | Identity columns + `TenantId` FK (RESTRICT), `FirstName`, `LastName`, `IsActive`, `IsPlatformAdmin`, **`RegistrationStatus`**(32), `CreatedAt` | Email is unique platform-wide. Users are never hard-deleted except when their tenant is deleted. `PhoneNumber` (E.164), `EmailConfirmed` and `PhoneNumberConfirmed` are set by self-registration. Index `(TenantId, RegistrationStatus)`. |
 | `RefreshTokens` | `UserId` FK (CASCADE), `TokenHash`(128, **unique**), `ExpiresAt`, `RevokedAt` | SHA-256 of the token |
 | `VerificationCodes` | `UserId` FK (CASCADE), `Channel` (Email/Sms), `CodeHash`(128), `CreatedAt`, `ExpiresAt`, `Attempts`, `ConsumedAt` | One-time codes. SHA-256 of `userId:channel:code`, never the code itself. Index `(UserId, Channel)`. |
@@ -95,7 +96,7 @@ All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NU
 | `OutboundEmails` | `TenantId`, `To`(320), `ReplyTo`, `Subject`(300), `Body`(10000), `ObjectKey`, `RecordId`, `RecordName`, `RuleId`, `TemplateId`, `ActivityId`, `SentById`, `SentByName`, `Status` (Pending/Sent/Failed/Cancelled), `Attempts`, `NextAttemptAt`, `LockedUntil`, `LastError`(1000), `CreatedAt`, `SentAt` | The transactional outbox. Indexes `(Status, NextAttemptAt)` for the dispatcher (across tenants), `(TenantId, CreatedAt)`, `(TenantId, RuleId, RecordId)` |
 | `ScheduledRuleRuns` | `TenantId`, `RuleId`, `RecordId`, `DueAt`, `RanAt`, `Matched` | **Unique `(RuleId, RecordId, DueAt)`**: each due date fires once, even with several API instances |
 | `Notifications` | `TenantId`, `UserId`, `Title`(200), `Message`(1000), `Link`(300), `CreatedAt`, `ReadAt` | Index `(TenantId, UserId, ReadAt)` |
-| `AuditLogs` | `TenantId`, `EntityType`(64, the object key), `EntityId`, `EntityName`, `Action` (Created/Updated/Deleted), `UserId`, `UserName`, `Timestamp`, `Changes` jsonb | Indexes `(TenantId, EntityId)`, `(TenantId, Timestamp)` |
+| `AuditLogs` | `TenantId`, `EntityType`(64, the object key), `EntityId`, `EntityName`, `Action` (Created/Updated/Deleted/Exported), `UserId`, `UserName`, `Timestamp`, `Changes` jsonb | Indexes `(TenantId, EntityId)`, `(TenantId, Timestamp)`. *Exported* rows have an empty `EntityId`, a count as `EntityName` and the filters in `Changes`. |
 | `Attachments` | `TenantId`, `ObjectKey`(40), `RecordId`, `FileName`(255), `ContentType`(100), `Size`, `StorageKey`(200), `UploadedById`, `UploadedByName`, `CreatedAt` | Index `(TenantId, ObjectKey, RecordId)`. The bytes live in file storage under `StorageKey` (`<tenant>/<yyyyMM>/<id>`). Rows are removed with their record. |
 
 ## 3. JSON columns
@@ -177,6 +178,8 @@ At startup, `DbInitializer` applies the sales template to the default tenant if 
 On upgraded tenants, the application's candidate link is optional, so existing applications without one stay valid, and their old email and phone fields remain.
 
 Recruitment **v3** adds four email templates (*Application received*, *Interview invitation*, *Application outcome*, *Job offer*) and four rules: *Interview reminder* (notify the owner a day before the interview, on), *Chase stalled applications* (task 7 days after the last update, off), and *Acknowledge new applications* and *Email rejected candidates* (email the candidate, **off** until an admin reviews the wording).
+
+Recruitment **v4** adds the careers page fields: *Show on careers page* (`position.publish`, yes/no), *Cover note* (`application.cover_note`) and *Privacy consent* (`candidate.privacy_consent`, date/time). Upgraded tenants start with no job published and the careers page off.
 
 ## 7. Schema changes
 

@@ -18,15 +18,17 @@ import { MetadataService } from '../../core/metadata.service';
 import { AccountDetail, AccountListItem, PagedResult } from '../../core/models';
 import { CfFilters, CfValue } from '../../shared/custom-fields';
 import { ListState, inputValue } from '../../shared/list';
+import { ExportButton } from '../../shared/export-button';
 import { AccountFormDialog } from './account-form-dialog';
 
 @Component({
   selector: 'app-account-list',
-  imports: [DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters],
+  imports: [DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters, ExportButton],
   template: `
     <div class="page-header">
       <h1>{{ meta.label('account', true) }}</h1>
       <span class="spacer"></span>
+      <app-export-button objectKey="account" [params]="state.params()" />
       @if (auth.can('account', 'create')) {
         <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('account') | lowercase }}</button>
       }

@@ -50,6 +50,8 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
         // Tests drive the dispatcher and scheduler directly, with explicit times.
         builder.UseSetting("BackgroundJobs:Enabled", "false");
         builder.UseSetting("RateLimiting:EmailSendPermitPerMinute", "10000");
+        builder.UseSetting("RateLimiting:CareersPermitPerMinute", "10000");
+        builder.UseSetting("RateLimiting:CareersApplyPermitPerMinute", "10000");
         builder.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Error).AddConsole());
         builder.ConfigureServices(services =>
         {

@@ -20,16 +20,18 @@ import { MetadataService } from '../../core/metadata.service';
 import { OpportunityDetail, OpportunityListItem, PagedResult } from '../../core/models';
 import { CfFilters, CfValue } from '../../shared/custom-fields';
 import { ListState, inputValue } from '../../shared/list';
+import { ExportButton } from '../../shared/export-button';
 import { StageChip } from '../../shared/record-widgets';
 import { OpportunityFormDialog } from './opportunity-form-dialog';
 
 @Component({
   selector: 'app-opportunity-list',
-  imports: [CurrencyPipe, DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters, StageChip],
+  imports: [CurrencyPipe, DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters, ExportButton, StageChip],
   template: `
     <div class="page-header">
       <h1>{{ meta.label('opportunity', true) }}</h1>
       <span class="spacer"></span>
+      <app-export-button objectKey="opportunity" [params]="state.params({ stage: stage(), open: open() })" />
       <a mat-stroked-button routerLink="/pipeline"><mat-icon>view_kanban</mat-icon> Board</a>
       @if (auth.can('opportunity', 'create')) {
         <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('opportunity') | lowercase }}</button>

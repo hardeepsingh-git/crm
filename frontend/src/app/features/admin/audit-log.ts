@@ -62,7 +62,7 @@ import { SettingsBack } from './settings-home';
         <ng-container matColumnDef="record"><th mat-header-cell *matHeaderCellDef>Record</th>
           <td mat-cell *matCellDef="let a">
             <span class="muted">{{ meta.label(a.entityType) }}:</span>
-            @if (a.action !== 'Deleted' && meta.object(a.entityType)) {
+            @if (a.action !== 'Deleted' && a.action !== 'Exported' && meta.object(a.entityType)) {
               <a [routerLink]="meta.route(a.entityType, a.entityId)">{{ a.entityName ?? a.entityId }}</a>
             } @else { {{ a.entityName ?? a.entityId }} }
           </td></ng-container>
@@ -83,7 +83,7 @@ export class AuditLog {
   readonly meta = inject(MetadataService);
   readonly lookup = inject(UserLookupService);
   readonly inputValue = inputValue;
-  readonly actions: AuditAction[] = ['Created', 'Updated', 'Deleted'];
+  readonly actions: AuditAction[] = ['Created', 'Updated', 'Deleted', 'Exported'];
   readonly columns = ['timestamp', 'user', 'action', 'record', 'changes'];
   readonly search = signal('');
   readonly entityType = signal<string | null>(null);
@@ -113,6 +113,10 @@ export class AuditLog {
   }
 
   changes(a: AuditItem): string[] {
+    if (a.action === 'Exported') {
+      const filters = Object.entries((a.changes as unknown as { filters?: Record<string, string> }).filters ?? {});
+      return filters.length ? filters.map(([k, v]) => `${k} = ${v}`) : ['No filters'];
+    }
     if (a.action !== 'Updated') return [];
     const show = (v: unknown) => (v === null || v === undefined || v === '' ? '∅' : Array.isArray(v) ? v.join(', ') : String(v));
     return Object.entries(a.changes).map(([k, [from, to]]) => `${k}: ${show(from)} → ${show(to)}`);

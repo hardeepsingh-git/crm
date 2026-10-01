@@ -1502,3 +1502,28 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001071143_Phase3CareersAndExport') THEN
+    ALTER TABLE "Tenants" ADD "CareersEnabled" boolean NOT NULL DEFAULT FALSE;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001071143_Phase3CareersAndExport') THEN
+    ALTER TABLE "Tenants" ADD "CareersIntro" character varying(2000);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261001071143_Phase3CareersAndExport') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261001071143_Phase3CareersAndExport', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

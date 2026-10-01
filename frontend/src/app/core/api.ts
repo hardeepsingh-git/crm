@@ -58,8 +58,17 @@ export function toParams(query: QueryParams): HttpParams {
   return params;
 }
 
-/** Keeps the last successful value while a resource reloads, avoiding table flicker. */
-export function stableValue<T>(resource: Resource<T | undefined>) {
+/** Hands a downloaded file to the browser as a download. */
+export function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url));
+}
+
+/** Keeps the last successful value while a resource reloads, avoiding table flicker. */export function stableValue<T>(resource: Resource<T | undefined>) {
   return linkedSignal<T | undefined, T | undefined>({
     source: () => (resource.hasValue() ? resource.value() : undefined),
     computation: (value, previous) => value ?? previous?.value,
@@ -301,8 +310,28 @@ export class CrmApi {
     return this.http.post<OutboundEmailItem>(`/api/admin/emails/${id}/cancel`, null);
   }
 
-  saveSettings(body: { name: string; currency: string; selfRegistrationEnabled?: boolean }): Observable<OrganisationSettings> {
+  saveSettings(body: { name: string; currency: string; selfRegistrationEnabled?: boolean; careersEnabled?: boolean; careersIntro?: string | null }): Observable<OrganisationSettings> {
     return this.http.put<OrganisationSettings>('/api/settings', body);
+  }
+
+  // ---------- Careers (anonymous) ----------
+
+  applyForJob(slug: string, jobId: string, form: FormData): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`/api/careers/${encodeURIComponent(slug)}/jobs/${jobId}/apply`, form);
+  }
+
+  // ---------- Export ----------
+
+  /** Downloads a CSV export of an object's list with the list's current filters. */
+  exportCsv(objectKey: string, params: HttpParams): Observable<void> {
+    return this.http
+      .get(`/api/export/${objectKey}`, { params: params.delete('page').delete('pageSize'), responseType: 'blob', observe: 'response' })
+      .pipe(
+        map((response) => {
+          const name = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(response.headers.get('Content-Disposition') ?? '')?.[1] ?? `${objectKey}.csv`;
+          saveBlob(response.body!, decodeURIComponent(name));
+        }),
+      );
   }
 
   recordHistory(entityType: string, id: string): Observable<AuditItem[]> {

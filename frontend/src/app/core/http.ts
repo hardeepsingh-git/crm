@@ -29,13 +29,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   );
 };
 
-/** Surfaces unexpected failures globally. 400 (validation), 401 (auth) and auth endpoints are handled by callers. */
+/** Surfaces unexpected failures globally. 400 (validation), 401 (auth), auth and public careers endpoints are handled by callers. */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const notify = inject(NotifyService);
+  const quiet = req.url.startsWith('/api/auth/') || req.url.startsWith('/api/careers/');
   return next(req).pipe(
     catchError((err: unknown) => {
-      if (err instanceof HttpErrorResponse && err.status !== 400 && err.status !== 401 && !req.url.startsWith('/api/auth/'))
-        notify.error(err);
+      if (err instanceof HttpErrorResponse && err.status !== 400 && err.status !== 401 && !quiet) notify.error(err);
       return throwError(() => err);
     }),
   );

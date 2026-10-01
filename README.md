@@ -7,6 +7,7 @@ A configurable, **multi-tenant** relationship-management platform. It ships as a
 - **Customization**: rename or disable standard objects, create custom objects with their own pipelines, add 13 types of custom fields, and edit stages and picklists. Lists, forms, filters, boards and dashboards adapt automatically.
 - **Automation**: no-code rules that create tasks, send notifications, set fields or send emails, when records change or relative to a date (e.g. a day before an interview).
 - **Email**: email templates with placeholders, an Email button on every record (logged on its timeline, sent to the record's own addresses only), and a delivery log with automatic retries.
+- **Careers page and export**: a public job board per recruitment organisation where candidates apply with their CV straight into the job's pipeline, and CSV export of any list (filtered, permission-aware, audited).
 - **Governance**: field-level audit trail, per-record history and in-app notifications.
 - **Files and data loading**: attach résumés, contracts and other documents to any record, and bulk-load custom-object data from CSV with a validated, all-or-nothing import.
 - **Recruitment (ATS)**: a talent pool of candidates, applications that link a candidate to a job and move through hiring stages, a pipeline per job, and unique candidate emails. Related lists on every record page show what links to it. Existing recruitment tenants are upgraded automatically and additively.
@@ -40,9 +41,9 @@ To look up a password: `dotnet user-secrets list` in `backend/src/Crm.Api`. Don'
 
 ## Tests
 ```powershell
-cd backend;  dotnet test                    # 67 API integration tests (stop the API first)
-cd frontend; npx ng test --watch=false      # 53 UI unit tests
-./scripts/smoke-test.ps1                    # 58 live end-to-end checks against PostgreSQL (API running)
+cd backend;  dotnet test                    # 74 API integration tests (stop the API first)
+cd frontend; npx ng test --watch=false      # 60 UI unit tests
+./scripts/smoke-test.ps1                    # 60 live end-to-end checks against PostgreSQL (API running)
 ```
 
 ## Documentation

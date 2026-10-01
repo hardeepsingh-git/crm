@@ -186,6 +186,14 @@ flowchart LR
 - **Rendering.** `EmailComposer.ContextAsync` builds placeholder values once per record: formatted custom fields, lookups resolved to names, one level of linked-record fields, owner, organisation and a link. For user-initiated emails, linked records the user can't read stay blank. Emails are plain text, so record data can't inject markup.
 - **Date rules** compare custom date fields in memory (they live in JSON); `createdAt`/`updatedAt` are filtered in SQL. Each run scans at most 20,000 records per rule.
 
+### 6.2 Careers page and export
+
+- **Anonymous entry into a tenant.** `/api/careers/{slug}` resolves an active tenant with the careers page on, then sets the request's `TenantContext` (user name *Careers site*, no user id). From there the normal global filters, save guard, audit and automation apply, so the public endpoints can only reach that tenant's published job openings and can only *add* candidates, applications, notes and files.
+- **No overwrite, no enumeration.** A known email links the new application to the existing candidate without changing them; the submitted details go into a note. New, repeated and honeypot submissions get identical 202 responses.
+- **Upload checks.** Allow-listed extensions, a size limit and a file-signature check (`%PDF`, ZIP for docx/odt, OLE for doc, `{\rtf`), on top of the attachment rules (server-chosen storage keys, server-set content types, downloads never inline).
+- **Abuse limits.** Per-IP rate limits for reading and applying, a honeypot field and server-side validation. A CAPTCHA isn't included because the platform makes no outbound calls to third parties; it can be added in front of `apply` if spam appears.
+- **Export** builds one query per object from the caller's read scope plus the list filters (custom-field filters, standard-field equality built from the entity's properties, search, owner, stage/open, activity status). It resolves linked-record names in one query per object, honours read scope for those names too, writes RFC 4180 CSV with formula-injection protection, and audits the export.
+
 ## 7. Frontend design
 
 - **Metadata-driven UI.** `MetadataService` exposes labels, icons, fields, stages, picklists and currency as signals. Navigation, list columns, filters, forms, detail views, stage paths and boards are all generated from it.
@@ -207,8 +215,8 @@ flowchart LR
 |---|---|
 | A01 Broken access control | Tenant query filters and a write guard. Per-endpoint permission filters. Per-record scope checks, with 404 for hidden records. Anti-escalation on resolved scopes. Administrator role protected. Tests for isolation, group scope, deny override and escalation. |
 | A02 Cryptographic failures | PBKDF2 password hashes, SHA-256 hashed refresh tokens, a ≥ 256-bit JWT key from secrets, HTTPS/HSTS in production |
-| A03 Injection | EF Core parameterised queries only. The JSONB filter value is serialised with `System.Text.Json` and passed as a parameter. Object, field and stage keys are validated against strict regexes. |
-| A04 Insecure design | Lockout, rate limits (including a separate self-registration policy), token reuse detection, automation loop guard, stage and object deletion blocked while in use, tenant deletion only when suspended. Self-registered users start inactive with no roles and need admin approval. |
+| A03 Injection | EF Core parameterised queries only. The JSONB filter value is serialised with `System.Text.Json` and passed as a parameter. Object, field and stage keys are validated against strict regexes. Export filters on standard fields are built as typed expressions from known properties. CSV exports neutralise spreadsheet formulas. |
+| A04 Insecure design | Lockout, rate limits (including separate self-registration and careers policies), token reuse detection, automation loop guard, stage and object deletion blocked while in use, tenant deletion only when suspended. Self-registered users start inactive with no roles and need admin approval. Anonymous careers applications can only add records, never change existing ones. |
 | A05 Misconfiguration | Secrets in user-secrets or environment only (including the SMTP password and SMS API key, which the API never stores or returns). OpenAPI UI only in Development by default. CSP and security headers. |
 | A07 Authentication failures | Strong password policy, lockout, short-lived tokens, server-side logout, suspended-tenant sign-in blocked. Self-registration: hashed single-use codes with attempt limits and expiry, and no account enumeration (identical responses for existing and unknown emails). |
 | A08 Integrity | Lockfiles and CI builds from source |
@@ -242,3 +250,5 @@ Residual risks:
 | ADR-18 | **Transactional outbox in PostgreSQL** with an in-process dispatcher and lease-based claiming | Sending inside the request (slow, lost on SMTP errors, sent even if the transaction rolls back); a message broker (more infrastructure than needed today) |
 | ADR-19 | **Polling scheduler with a unique run key** for date-based rules | Per-record scheduled jobs (must be rescheduled whenever a date changes); Quartz/Hangfire (extra dependency and tables for one feature) |
 | ADR-20 | **Recipients limited to the record's own addresses** for user-sent email | Free-text recipients (turns the CRM into an open relay for any signed-in user) |
+| ADR-21 | **Careers endpoints in the main API**, entering the tenant by slug, and **append-only** for anonymous callers | A separate public service (more deployment for the same data); updating existing candidates from the form (lets anyone change a candidate's details by knowing their email) |
+| ADR-22 | **Export uses read permission plus an audit entry**, not a separate export permission | A new "export" action in every role (more admin work; anyone who can read a list can already copy it). Can be added later if customers ask. |

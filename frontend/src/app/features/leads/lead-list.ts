@@ -19,15 +19,17 @@ import { MetadataService } from '../../core/metadata.service';
 import { LEAD_STATUSES, LeadDetail, LeadListItem, LeadStatus, PagedResult } from '../../core/models';
 import { CfFilters, CfValue } from '../../shared/custom-fields';
 import { HumanizePipe, ListState, inputValue } from '../../shared/list';
+import { ExportButton } from '../../shared/export-button';
 import { LeadFormDialog } from './lead-form-dialog';
 
 @Component({
   selector: 'app-lead-list',
-  imports: [CurrencyPipe, DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule, HumanizePipe, CfValue, CfFilters],
+  imports: [CurrencyPipe, DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatSlideToggleModule, MatProgressBarModule, HumanizePipe, CfValue, CfFilters, ExportButton],
   template: `
     <div class="page-header">
       <h1>{{ meta.label('lead', true) }}</h1>
       <span class="spacer"></span>
+      <app-export-button objectKey="lead" [params]="state.params({ status: status(), source: source() })" />
       @if (auth.can('lead', 'create')) {
         <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('lead') | lowercase }}</button>
       }

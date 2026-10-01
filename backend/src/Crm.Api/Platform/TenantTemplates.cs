@@ -21,7 +21,7 @@ public static class TenantTemplates
     [
         new(Sales, "Sales CRM", "Accounts, contacts, leads, opportunity pipeline and sales automation."),
         new(HelpDesk, "Help Desk", "Customers, contacts and a ticket pipeline with priority-based alerts."),
-        new(Recruitment, "Recruitment (ATS)", "Job openings, a candidate talent pool, an application pipeline per job, candidate emails and interview reminders."),
+        new(Recruitment, "Recruitment (ATS)", "Job openings, a public careers page, a candidate talent pool, an application pipeline per job, candidate emails and interview reminders."),
         new(Blank, "Blank", "Standard objects and roles only. Build your own configuration."),
     ];
 
@@ -39,7 +39,7 @@ public static class TenantTemplates
     public static readonly string[] DefaultLeadSources = ["Web", "Referral", "Event", "ColdCall", "Advertisement", "Partner", "Other"];
 
     /// <summary>Latest revision of each template. Raising it makes startup apply the template's new pieces to existing tenants once.</summary>
-    public static int CurrentVersion(string template) => template == Recruitment ? 3 : 1;
+    public static int CurrentVersion(string template) => template == Recruitment ? 4 : 1;
 
     /// <summary>
     /// Brings tenants created from an older template revision up to date. Only missing objects, fields, stages and rules are
@@ -215,6 +215,8 @@ public static class TenantTemplates
                     options: ["Full-time", "Part-time", "Contract", "Temporary"]);
                 Field("position", "closing_date", "Closing date", FieldType.Date, 8);
                 Field("position", "description", "Job description", FieldType.TextArea, 9);
+                Field("position", "publish", "Show on careers page", FieldType.Boolean, 10, list: true,
+                    help: "Open jobs with this ticked are listed on your public careers page (Settings > Organisation).");
 
                 Field("candidate", "email", "Email", FieldType.Email, 1, list: true, unique: true,
                     help: "Used to spot duplicates: two candidates can't share an email.");
@@ -231,6 +233,8 @@ public static class TenantTemplates
                 Field("candidate", "expected_salary", "Expected salary", FieldType.Currency, 9, min: 0);
                 Field("candidate", "notice_period", "Notice period", FieldType.Text, 10, help: "e.g. 4 weeks, immediate");
                 Field("candidate", "summary", "Summary", FieldType.TextArea, 11);
+                Field("candidate", "privacy_consent", "Privacy consent", FieldType.DateTime, 12,
+                    help: "When the candidate agreed to the privacy notice (set by careers page applications).");
 
                 Field("application", "candidate", "Candidate", FieldType.Lookup, 0, required: !upgrading, list: true, lookup: "candidate");
                 Field("application", "position", "Job opening", FieldType.Lookup, 1, required: true, list: true, lookup: "position");
@@ -238,6 +242,7 @@ public static class TenantTemplates
                 Field("application", "rating", "Rating (1-5)", FieldType.Number, 6, list: true, min: 1, max: 5);
                 Field("application", "interview_date", "Next interview", FieldType.DateTime, 7);
                 Field("application", "feedback", "Interview feedback", FieldType.TextArea, 8);
+                Field("application", "cover_note", "Cover note", FieldType.TextArea, 9);
                 Rule("Schedule interview", "application", AutomationTrigger.StageChanged,
                     [new("stage", ConditionOperator.Equals, "interview")],
                     [new(AutomationActionType.CreateTask, Subject: "Schedule interview with {{name}}", DueInDays: 2, Priority: ActivityPriority.High)]);

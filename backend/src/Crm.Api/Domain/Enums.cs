@@ -25,7 +25,7 @@ public enum AutomationActionType { CreateTask, Notify, SetField, SendEmail }
 
 public enum OutboundEmailStatus { Pending, Sent, Failed, Cancelled }
 
-public enum AuditAction { Created, Updated, Deleted }
+public enum AuditAction { Created, Updated, Deleted, Exported }
 
 /// <summary>Only Approved users may sign in; the other states belong to self-registrations still in progress.</summary>
 public enum RegistrationStatus { Approved, PendingVerification, PendingApproval, Rejected }

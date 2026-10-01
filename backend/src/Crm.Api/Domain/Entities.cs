@@ -28,6 +28,9 @@ public class Tenant
     public int TemplateVersion { get; set; } = 1;
     /// <summary>Tenant opt-in; also requires the platform-wide switch in <see cref="AppSetting"/>.</summary>
     public bool SelfRegistrationEnabled { get; set; }
+    /// <summary>Public job board at /careers/{slug}; recruitment-shaped tenants only.</summary>
+    public bool CareersEnabled { get; set; }
+    public string? CareersIntro { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

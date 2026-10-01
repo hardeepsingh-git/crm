@@ -207,8 +207,19 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | SCHED-2 | Date rules never fire for dates that passed before the rule existed, and catch up after short outages. | M |
 | ATS-6 | Recruitment template v3: candidate email templates, interview reminders and stalled-application chasers; candidate emails start switched off. | S |
 
-### 5.14 Future (backlog)
-Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · CSV export and import for standard objects · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Email templates · Cloud file storage · Résumé parsing · Candidate portal and interview scheduling · Offer letters · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
+### 5.14 Phase 3: careers page and data export (CAR, EXP)
+| ID | Requirement | Pri |
+|---|---|---|
+| CAR-1 | **Public careers page** per recruitment organisation (`/careers/<workspace id>`), switched on by its administrator, with an introduction text. Lists open job openings marked *Show on careers page* whose closing date hasn't passed; job pages show the description but no internal data (salary, company, owner). | M |
+| CAR-2 | **Online application**: name, email, phone, location, LinkedIn, cover note, CV (PDF/Word, 5 MB) and privacy consent. Creates the candidate (or reuses one with the same email) and an application in the job's pipeline, owned by the job's owner, with the CV on both records and a notification to the owner. Automation applies (e.g. acknowledgement email). | M |
+| CAR-3 | **Safe by design**: existing candidates are never changed by the form; one open application per candidate and job; identical responses whatever the outcome; file type checked by content; per-IP rate limits; honeypot. | M |
+| CAR-4 | Consent is recorded on the candidate (time of consent). | S |
+| EXP-1 | **CSV export** of every list (standard and custom objects) with the list's filters, limited to the records the user can read. | M |
+| EXP-2 | Readable files: field labels as headers (re-importable), linked records by name, stage labels; protected against CSV/formula injection; Excel-friendly UTF-8. | M |
+| EXP-3 | Every export is recorded in the audit log with its filters; very large exports are refused with advice to filter. | M |
+
+### 5.15 Future (backlog)
+Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Cloud file storage · Résumé parsing · Careers page branding (logo, colours) and CAPTCHA · Candidate portal and interview scheduling · Offer letters · Export permission per role · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
 
 ## 6. Non-functional requirements
 
@@ -241,9 +252,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (67), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits) and date-based rules
-- [x] UI unit tests green (53), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log and the date-rule editor
-- [x] Live smoke test green against PostgreSQL (58 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox and date-based rules)
+- [x] API integration tests green (74), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits), date-based rules, the careers page and CSV export
+- [x] UI unit tests green (60), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log, the date-rule editor, careers pages and export
+- [x] Live smoke test green against PostgreSQL (60 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox, date-based rules, an anonymous careers application and CSV export)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

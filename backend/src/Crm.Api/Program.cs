@@ -9,10 +9,12 @@ using Crm.Api.Files;
 using Crm.Api.Features.Accounts;
 using Crm.Api.Features.Activities;
 using Crm.Api.Features.Attachments;
+using Crm.Api.Features.Careers;
 using Crm.Api.Features.Contacts;
 using Crm.Api.Features.Customization;
 using Crm.Api.Features.Dashboard;
 using Crm.Api.Features.Email;
+using Crm.Api.Features.Export;
 using Crm.Api.Features.Governance;
 using Crm.Api.Features.Import;
 using Crm.Api.Features.Leads;
@@ -128,6 +130,8 @@ services.AddRateLimiter(o =>
     o.AddPolicy(RegistrationEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:RegisterPermitPerMinute", 10));
     o.AddPolicy(PasswordResetEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:PasswordResetPermitPerMinute", 5));
     o.AddPolicy(ClientErrorEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:ClientErrorPermitPerMinute", 30));
+    o.AddPolicy(CareersEndpoints.ReadRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:CareersPermitPerMinute", 120));
+    o.AddPolicy(CareersEndpoints.ApplyRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:CareersApplyPermitPerMinute", 5));
     o.AddPolicy(EmailEndpoints.SendRateLimitPolicy, ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.User.FindFirst(Claims.Subject)?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
@@ -190,6 +194,7 @@ var api = app.MapGroup("/api");
 api.MapAuth();
 api.MapRegistration();
 api.MapPasswordReset();
+api.MapCareers();
 var secured = api.MapGroup("").RequireAuthorization();
 secured.MapDashboard();
 secured.MapAccounts();
@@ -200,6 +205,7 @@ secured.MapActivities();
 secured.MapRecords();
 secured.MapAttachments();
 secured.MapImport();
+secured.MapExport();
 secured.MapUsers();
 secured.MapSecurity();
 secured.MapCustomization();

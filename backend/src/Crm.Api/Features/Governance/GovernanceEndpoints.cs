@@ -4,6 +4,8 @@ using Crm.Api.Auth;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Features.Careers;
+using Crm.Api.Metadata;
 using Crm.Api.Platform;
 using Crm.Api.Security;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -22,12 +24,16 @@ public record AuditQuery(
 public record SettingsRequest(
     [Required, MaxLength(200)] string Name,
     [Required, StringLength(3, MinimumLength = 3)] string Currency,
-    bool? SelfRegistrationEnabled = null);
+    bool? SelfRegistrationEnabled = null,
+    bool? CareersEnabled = null,
+    [MaxLength(2000)] string? CareersIntro = null);
 
 /// <summary>Organisation settings plus the platform switches that decide whether self-registration can work at all.</summary>
+/// <param name="CareersAvailable">The organisation has job openings, candidates and applications, which the careers page needs.</param>
 public record OrganisationSettings(
     Guid Id, string Name, string Slug, string Currency, string Template, bool SelfRegistrationEnabled,
-    bool SelfRegistrationAllowedByPlatform, bool EmailVerification, bool SmsVerification);
+    bool SelfRegistrationAllowedByPlatform, bool EmailVerification, bool SmsVerification,
+    bool CareersEnabled, string? CareersIntro, bool CareersAvailable);
 
 public record NotificationItem(Guid Id, string Title, string Message, string? Link, DateTime CreatedAt, DateTime? ReadAt);
 
@@ -78,26 +84,33 @@ public static class GovernanceEndpoints
     private static IQueryable<AuditItem> Project(IQueryable<AuditLog> q) => q.Select(a => new AuditItem(
         a.Id, a.EntityType, a.EntityId, a.EntityName, a.Action, a.UserId, a.UserName, a.Timestamp, Cf.Parse(a.Changes)));
 
-    private static async Task<Ok<OrganisationSettings>> GetSettings(Access access, CrmDbContext db, PlatformSettingsService platform, CancellationToken ct)
+    private static async Task<Ok<OrganisationSettings>> GetSettings(
+        Access access, CrmDbContext db, MetadataService meta, PlatformSettingsService platform, CancellationToken ct)
     {
         var t = await db.Tenants.AsNoTracking().SingleAsync(x => x.Id == access.TenantId, ct);
-        return TypedResults.Ok(ToSettings(t, await platform.GetAsync(ct)));
+        return TypedResults.Ok(ToSettings(t, await platform.GetAsync(ct), await CareersEndpoints.AvailableAsync(meta, ct)));
     }
 
-    private static async Task<Ok<OrganisationSettings>> UpdateSettings(
-        SettingsRequest req, Access access, CrmDbContext db, PlatformSettingsService platform, CancellationToken ct)
+    private static async Task<Results<Ok<OrganisationSettings>, ValidationProblem>> UpdateSettings(
+        SettingsRequest req, Access access, CrmDbContext db, MetadataService meta, PlatformSettingsService platform, CancellationToken ct)
     {
+        var available = await CareersEndpoints.AvailableAsync(meta, ct);
+        if (req.CareersEnabled == true && !available)
+            return Errors.Validation("careersEnabled", "The careers page needs the Job opening, Candidate and Application objects (Recruitment template).");
         var t = await db.Tenants.SingleAsync(x => x.Id == access.TenantId, ct);
         t.Name = req.Name.Trim();
         t.Currency = req.Currency.ToUpperInvariant();
         if (req.SelfRegistrationEnabled is { } enabled) t.SelfRegistrationEnabled = enabled;
+        if (req.CareersEnabled is { } careers) t.CareersEnabled = careers;
+        if (req.CareersIntro is not null) t.CareersIntro = string.IsNullOrWhiteSpace(req.CareersIntro) ? null : req.CareersIntro.Trim();
         await db.SaveChangesAsync(ct);
-        return TypedResults.Ok(ToSettings(t, await platform.GetAsync(ct)));
+        return TypedResults.Ok(ToSettings(t, await platform.GetAsync(ct), available));
     }
 
-    private static OrganisationSettings ToSettings(Tenant t, PlatformSettings p) => new(
+    private static OrganisationSettings ToSettings(Tenant t, PlatformSettings p, bool careersAvailable) => new(
         t.Id, t.Name, t.Slug, t.Currency, t.Template, t.SelfRegistrationEnabled,
-        p.SelfRegistrationEnabled, p.EmailVerificationEnabled, p.SmsVerificationEnabled);
+        p.SelfRegistrationEnabled, p.EmailVerificationEnabled, p.SmsVerificationEnabled,
+        t.CareersEnabled, t.CareersIntro, careersAvailable);
 
     private static async Task<Ok<NotificationList>> Notifications(Access access, CrmDbContext db, CancellationToken ct)
     {

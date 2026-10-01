@@ -411,6 +411,42 @@ if ($adminEmail -and $adminPassword) {
         Assert ($reminder.isActive -and $reminder.scheduleField -eq 'cf.interview_date') 'template reminder missing'
         '400 for a text field; 1 hour before Next interview saved'
     }
+    Check 'Careers page: publish, apply anonymously with a CV, application arrives in the pipeline' {
+        Api PUT '/api/settings' @{ name = $script:atsTenant.name; currency = 'USD'; careersEnabled = $true; careersIntro = 'Smoke test careers' } -Token $script:atsToken | Out-Null
+        $page = Api GET "/api/careers/$atsSlug" -Token $null
+        $jobs = @($page.jobs | ForEach-Object { $_ })
+        Assert ($jobs.Count -gt 0 -and $page.intro -eq 'Smoke test careers') "careers page has $($jobs.Count) jobs"
+        $tmp = Join-Path ([IO.Path]::GetTempPath()) "smoke-cv-$([guid]::NewGuid().ToString('N')).pdf"
+        [IO.File]::WriteAllText($tmp, "%PDF-1.4`n% smoke CV`n")
+        try {
+            $applicant = "careers.applicant@$atsSlug.test"
+            $form = @{ name = 'Careers Applicant'; email = $applicant; consent = 'true'; coverNote = 'Applied by the smoke test'; cv = Get-Item $tmp }
+            $r = Invoke-WebRequest -Method Post -Uri "$BaseUrl/api/careers/$atsSlug/jobs/$($jobs[0].id)/apply" -Form $form -UseBasicParsing
+            Assert ($r.StatusCode -eq 202) "apply returned $($r.StatusCode)"
+            $bad = StatusOf { Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/careers/$atsSlug/jobs/$($jobs[0].id)/apply" -Form @{ name = 'X'; email = 'x@example.test'; consent = 'true'; cv = Get-Item $PSCommandPath } }
+            Assert ($bad -eq 400) "script upload returned $bad"
+        } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
+        $candidate = (Api GET "/api/records/candidate?cf.email=$applicant" -Token $script:atsToken).items[0]
+        Assert ($null -ne $candidate -and $candidate.customFields.source -eq 'Website') 'candidate not created from the careers page'
+        $application = (Api GET "/api/records/application?cf.candidate=$($candidate.id)" -Token $script:atsToken).items[0]
+        Assert ($application.stage -eq 'applied' -and $application.customFields.position -eq $jobs[0].id) 'application not in the job pipeline'
+        $files = @(Api GET "/api/attachments?objectKey=application&recordId=$($application.id)" -Token $script:atsToken | ForEach-Object { $_ })
+        Assert ($files.Count -eq 1 -and $files[0].contentType -eq 'application/pdf') "application has $($files.Count) files"
+        $script:careersCandidate = $candidate
+        "$($jobs.Count) jobs listed; '$($application.name)' applied for '$($jobs[0].title)' with a CV; .ps1 refused"
+    }
+    Check 'CSV export: filtered list, readable names, audited' {
+        $r = Invoke-WebRequest -Uri "$BaseUrl/api/export/application?cf.candidate=$($script:careersCandidate.id)" -Headers @{ Authorization = "Bearer $script:atsToken" } -UseBasicParsing
+        $disposition = "$($r.Headers['Content-Disposition'])"
+        Assert ($disposition -like 'attachment*.csv*') "disposition $disposition"
+        $text = if ($r.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($r.Content) } else { [string]$r.Content }
+        $lines = @($text.TrimStart([char]0xFEFF).Trim() -split "`r`n")
+        Assert ($lines.Count -eq 2) "expected header + 1 row, got $($lines.Count) lines"
+        Assert ($lines[0] -like 'Id,*Candidate name*Job opening*' -and $lines[1] -like '*Careers Applicant*') 'unexpected CSV content'
+        $audit = Api GET '/api/admin/audit?action=Exported' -Token $script:atsToken
+        Assert ($audit.totalCount -ge 1) 'export not audited'
+        "$($lines.Count - 1) row; audit entry '$($audit.items[0].entityName)'"
+    }
     if (-not $Keep) {
         Check 'Delete the recruitment tenant' {
             Api PUT "/api/platform/tenants/$($script:atsTenant.id)" @{ name = $script:atsTenant.name; currency = 'USD'; status = 'Suspended' } -Token $script:adminToken | Out-Null

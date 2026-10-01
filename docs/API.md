@@ -173,6 +173,31 @@ Custom objects only (e.g. the Recruitment template's candidates, job openings an
 - Every row goes through the same validation as the forms, including unique fields. Two rows in the same file with the same unique value are also rejected (`"Email: same value as row 2 in this file."`). **All-or-nothing:** if any row fails, nothing is saved. `row` is the line number in the file (the header is line 1).
 - Limits: `Import:MaxFileSizeMb` (default 5) and `Import:MaxRows` (default 5000). Automation rules don't run unless `runAutomation` is true.
 
+## CSV export (`/api/export/{objectKey}`, objectKey:read)
+
+`GET /api/export/{objectKey}?<list filters>` returns `text/csv` (UTF-8 with BOM) as an attachment named `<plural>-<yyyyMMdd>.csv`. Any object, standard or custom.
+
+- **Rows**: the records the caller can read (their read scope), filtered like the lists: `search`, `mine`, `ownerId`, `stage`, `open`, `cf.<key>=value`, equality on standard fields (e.g. `status=Qualified`, `industry=Retail`, `accountId=<id>`) and, for activities, `status=Open|Completed|Overdue`. Newest first. More than `Export:MaxRows` (default 10,000) matches → 400 asking to narrow the filters.
+- **Columns**: `Id`, the standard fields, custom fields (headers are the field labels, so the file can be re-imported), `Owner`, `Created at`, `Updated at`. Linked records (lookups and standard references) are shown by **name**, or by id if the caller can't read them. Stages show their label, yes/no as Yes/No, multi-picklists joined with `; `, dates in ISO format.
+- **Safety**: text starting with `=`, `+`, `-`, `@`, tab or CR is prefixed with `'` so spreadsheets don't run it as a formula (CSV injection). Numbers and dates are left as they are.
+- **Audit**: each export writes an `Exported` audit entry (`entityName` "23 applications", `changes.filters` = the query).
+
+## Careers (`/api/careers/{slug}`, anonymous)
+
+Public endpoints for an organisation's job board. They exist only when the organisation is active, has switched the careers page on (`PUT /api/settings { careersEnabled }`) and has the *position*, *candidate* and *application* objects (Recruitment template). Otherwise every call returns 404.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | `{ organisation, intro, jobs: CareerJob[] }`. Jobs are job openings with `status = Open`, `publish = true` and a closing date that hasn't passed. Rate limit `RateLimiting:CareersPermitPerMinute` per IP (120). |
+| GET | `/jobs/{id}` | `{ organisation, job: { id, title, department, location, employmentType, closingDate, postedAt }, description }`. Internal fields (salary, company, owner) are never exposed. |
+| POST | `/jobs/{id}/apply` | `multipart/form-data`: `name`*, `email`*, `phone`, `location`, `linkedin` (http(s) URL), `coverNote`, `consent`* (`true`), `cv`* (file), `website` (honeypot, must be empty). → **202** `{ message }`. 400 with field errors. Rate limit `RateLimiting:CareersApplyPermitPerMinute` per IP (5). |
+
+Applying:
+- **CV**: `.pdf`, `.doc`, `.docx`, `.odt` or `.rtf`, at most `Careers:MaxCvSizeMb` (5 MB). The file's first bytes must match its type, so renamed programs or scripts are refused. It's stored on both the candidate and the application.
+- **Candidate**: matched by email (case-insensitive). A new candidate gets name, email, phone, location, LinkedIn, source *Website* and `privacy_consent` (time of consent). An **existing candidate is never changed**: what the applicant typed is kept in a note on the application instead.
+- **Application**: one open application per candidate and job (a repeat adds the new CV and an "Applied again" note), first open stage, source *Website*, cover note, owned by the job's owner, who gets a notification. Automation rules run as usual (e.g. *Acknowledge new applications*). Changes are audited as *Careers site*.
+- The response is the same for new, repeat and honeypot submissions, so the form can't be used to find out who has applied.
+
 ## Diagnostics
 
 | Method | Path | Notes |

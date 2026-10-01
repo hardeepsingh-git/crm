@@ -10,7 +10,7 @@ export type AutomationTrigger = 'Created' | 'Updated' | 'StageChanged' | 'DateRe
 export type ConditionOperator = 'Equals' | 'NotEquals' | 'GreaterThan' | 'LessThan' | 'Contains' | 'IsEmpty' | 'IsNotEmpty' | 'Changed';
 export type AutomationActionType = 'CreateTask' | 'Notify' | 'SetField' | 'SendEmail';
 export type TenantStatus = 'Active' | 'Suspended';
-export type AuditAction = 'Created' | 'Updated' | 'Deleted';
+export type AuditAction = 'Created' | 'Updated' | 'Deleted' | 'Exported';
 export type RecordAction = 'read' | 'create' | 'update' | 'delete';
 export type AdminResource = 'users' | 'roles' | 'groups' | 'customization' | 'settings' | 'audit';
 
@@ -435,6 +435,33 @@ export interface OrganisationSettings {
   selfRegistrationAllowedByPlatform: boolean;
   emailVerification: boolean;
   smsVerification: boolean;
+  careersEnabled: boolean;
+  careersIntro: string | null;
+  careersAvailable: boolean;
+}
+
+// ---------- Careers (public) ----------
+
+export interface CareerJob {
+  id: string;
+  title: string;
+  department: string | null;
+  location: string | null;
+  employmentType: string | null;
+  closingDate: string | null;
+  postedAt: string;
+}
+
+export interface CareersPage {
+  organisation: string;
+  intro: string | null;
+  jobs: CareerJob[];
+}
+
+export interface CareerJobDetail {
+  organisation: string;
+  job: CareerJob;
+  description: string | null;
 }
 
 export type EmailProvider = 'Log' | 'Smtp';

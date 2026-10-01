@@ -10,6 +10,8 @@ export const routes: Routes = [
   { path: 'verify', title: 'Verify | CRM', loadComponent: () => import('./features/auth/registration').then((m) => m.Verify) },
   { path: 'forgot-password', title: 'Forgot password | CRM', loadComponent: () => import('./features/auth/password-reset').then((m) => m.ForgotPassword) },
   { path: 'reset-password', title: 'Reset password | CRM', loadComponent: () => import('./features/auth/password-reset').then((m) => m.ResetPassword) },
+  { path: 'careers/:slug', title: 'Careers', loadComponent: () => import('./features/careers/careers').then((m) => m.CareersPageView) },
+  { path: 'careers/:slug/:jobId', title: 'Careers', loadComponent: () => import('./features/careers/careers').then((m) => m.CareerJobView) },
   {
     path: '',
     canActivate: [authGuard],

@@ -19,6 +19,7 @@ import { AuthService } from '../../core/auth.service';
 import { MetadataService } from '../../core/metadata.service';
 import { PagedResult, RecordItem } from '../../core/models';
 import { CfFilters, CfValue, cfFromQuery } from '../../shared/custom-fields';
+import { ExportButton } from '../../shared/export-button';
 import { ListState, inputValue } from '../../shared/list';
 import { StageChip } from '../../shared/record-widgets';
 import { RecordFormDialog } from './record-form-dialog';
@@ -27,7 +28,7 @@ import { ImportDialog } from './import-dialog';
 /** List page for any tenant-defined object: columns and filters come from its field definitions. */
 @Component({
   selector: 'app-record-list',
-  imports: [DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters, StageChip],
+  imports: [DatePipe, LowerCasePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatSlideToggleModule, MatProgressBarModule, CfValue, CfFilters, ExportButton, StageChip],
   template: `
     @if (object(); as obj) {
       <div class="page-header">
@@ -38,6 +39,9 @@ import { ImportDialog } from './import-dialog';
         }
         @if (auth.can(obj.key, 'create')) {
           <button mat-stroked-button (click)="importCsv()"><mat-icon>upload_file</mat-icon> Import</button>
+        }
+        <app-export-button [objectKey]="obj.key" [params]="exportParams()" />
+        @if (auth.can(obj.key, 'create')) {
           <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ obj.label | lowercase }}</button>
         }
       </div>
@@ -129,10 +133,11 @@ export class RecordList {
     this.object()
       ? {
           url: `/api/records/${this.objectKey()}`,
-          params: this.state.params(this.object()!.hasPipeline ? { stage: this.stage(), open: this.open() } : {}),
+          params: this.exportParams(),
         }
       : undefined,
   );
+  readonly exportParams = computed(() => this.state.params(this.object()?.hasPipeline ? { stage: this.stage(), open: this.open() } : {}));
   private readonly value = stableValue(this.data);
   readonly rows = computed(() => this.value()?.items ?? []);
   readonly total = computed(() => this.value()?.totalCount ?? 0);

@@ -27,6 +27,8 @@ The left navigation is built from **your organisation's configuration and your p
 
 Every list has **search**, **Mine only**, **column sorting**, **paging**, and **filters** for picklist and yes/no fields, and for lookup fields shown in the list (e.g. pick a job opening to see only its applications). Click a row to open the record.
 
+**Export** downloads the list as a CSV file (for Excel), with the filters you've set: only the records you can see, with linked records shown by name. Exports of up to 10,000 rows are allowed, and each export is recorded in the audit log.
+
 ## 3. Working with records
 - **Create**: use *New …* at the top of a list. Required fields are marked with *.
 - **Custom fields** appear in forms, on the detail page and as list columns (if your admin enabled that). Lookup fields show as links to the related record.
@@ -45,6 +47,7 @@ Every list has **search**, **Mine only**, **column sorting**, **paging**, and **
   - Rejecting an application creates a follow-up task to let the candidate know.
   - Ready-made emails: *Application received*, *Interview invitation*, *Application outcome* and *Job offer*. Use them from an application's **Email** button. Your administrator can also switch on automatic acknowledgement and rejection emails.
   - The owner gets a notification a day before each interview (when the application is in the Interview stage and has a *Next interview* date).
+  - **Careers page**: tick *Show on careers page* on an open job opening to list it on your organisation's public careers page (an administrator switches the page on under **Settings → Organisation**). Applicants fill in their details, attach a CV (PDF or Word, up to 5 MB) and agree to the privacy notice. Each application appears in that job's pipeline in *Applied*, with the CV under **Files** on both the application and the candidate, a note with what they typed, and a notification to the job's owner. If the email matches an existing candidate, the application is added to that candidate and their details are left unchanged.
 - **Lead conversion** (if you may create accounts and contacts): *Convert* creates a contact, an account (new or existing) and optionally an opportunity.
 
 What you can edit depends on your role. If you don't see *Edit* or *Delete*, you don't have that permission for this record. The **Owner** picker only appears if you're allowed to assign records to others.
@@ -66,7 +69,7 @@ You see only the areas you're allowed to manage.
 
 | Area | What you can do |
 |---|---|
-| **Organisation** | Organisation name and currency. **Allow self-registration** (only if the platform operator has switched it on) and the shareable sign-up link. |
+| **Organisation** | Organisation name and currency. **Allow self-registration** (only if the platform operator has switched it on) and the shareable sign-up link. For recruitment organisations, **Publish a public careers page**, its introduction text, and the link to share (`/careers/<workspace id>`). |
 | **Users** | Add users with an initial password. Edit names, active status, roles and groups. Reset passwords, which also unlocks accounts. **Awaiting approval** lists self-registered people: check the verified ticks, then **Approve** with at least one role or group, or **Reject**. You also get a notification for each new request. |
 | **Groups** | Teams, regions or departments. Members share records under *Group* scope and inherit the group's roles. |
 | **Roles & permissions** | Define roles as a matrix. **All objects** is the role's default for every object, including ones added later. Set a specific object to override it (choose **None** to hide it). Tick the administration areas the role can manage. The **Administrator** role always has full access. |
@@ -75,7 +78,7 @@ You see only the areas you're allowed to manage.
 | **Automation** | Rules: *When a [object] [is created / is updated / changes stage / reaches a date] and [conditions] → create a task / notify someone / set a field / send an email*. *Reaches a date* runs a set time before or after a date field, such as 1 day before *Next interview* or 7 days after *Updated at*; each record fires once per date, and dates that passed before you saved the rule are ignored. Emails go to the owner, a user, or an email field (also a linked record's, e.g. *Candidate → Email*), using a template or your own text. Use `{{name}}`, `{{stage}}` or `{{cf.fieldkey}}` in text. The toggle switches a rule on or off, and **Runs** shows how often it fired. |
 | **Email templates** | Reusable emails per object. Click a field to insert it, e.g. *Job opening → Job title* becomes `{{cf.position.name}}`. Templates used by rules can't be deleted. |
 | **Email log** | Every email sent, with its status. Failed emails (for example a rejected address) are retried automatically up to 5 times and can be retried by hand; waiting emails can be cancelled. Organisations can send up to 1,000 emails a day. |
-| **Audit log** | Search all changes by object, action, user or record name |
+| **Audit log** | Search all changes by object, action, user or record name. *Exported* entries show who downloaded which list, with which filters. |
 
 Tips:
 - New objects are visible to Administrators straight away. Give other roles access under **Roles**; roles with *All objects* access get it automatically.

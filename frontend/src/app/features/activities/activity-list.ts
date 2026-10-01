@@ -24,17 +24,19 @@ import { NotifyService } from '../../core/notify.service';
 import { ACTIVITY_ICONS, isOverdue } from '../../shared/activity-panel';
 import { confirm } from '../../shared/confirm-dialog';
 import { ListState, inputValue } from '../../shared/list';
+import { ExportButton } from '../../shared/export-button';
 import { ActivityFormDialog } from './activity-form-dialog';
 
 type StatusFilter = 'Open' | 'Overdue' | 'Completed' | null;
 
 @Component({
   selector: 'app-activity-list',
-  imports: [DatePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatCheckboxModule, MatSlideToggleModule, MatProgressBarModule, MatTooltipModule],
+  imports: [DatePipe, RouterLink, MatTableModule, MatPaginatorModule, MatSortModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatIconModule, MatButtonModule, MatButtonToggleModule, MatCheckboxModule, MatSlideToggleModule, MatProgressBarModule, MatTooltipModule, ExportButton],
   template: `
     <div class="page-header">
       <h1>{{ meta.label('activity', true) }}</h1>
       <span class="spacer"></span>
+      <app-export-button objectKey="activity" [params]="state.params({ status: statusFilter(), type: type() })" />
       @if (auth.can('activity', 'create')) {
         <button mat-flat-button (click)="create()"><mat-icon>add</mat-icon> New {{ meta.label('activity').toLowerCase() }}</button>
       }

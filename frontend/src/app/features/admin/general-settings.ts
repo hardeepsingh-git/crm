@@ -56,6 +56,25 @@ import { SettingsBack } from './settings-home';
               }
             }
           </div>
+          @if (org()?.careersAvailable) {
+            <div class="span-2 section">
+              <h3>Careers page</h3>
+              <mat-slide-toggle [checked]="careers()" (change)="careers.set($event.checked)">Publish a public careers page</mat-slide-toggle>
+              <p class="muted">
+                Lists open job openings that have <em>Show on careers page</em> ticked. Candidates apply with their CV; each application
+                appears in the job's pipeline and the job's owner is notified.
+              </p>
+              <mat-form-field appearance="outline" class="full">
+                <mat-label>Introduction</mat-label>
+                <textarea matInput rows="3" maxlength="2000" [value]="careersIntro()" (input)="careersIntro.set(textValue($event))"
+                  placeholder="Who you are and why people love working with you"></textarea>
+              </mat-form-field>
+              @if (careers()) {
+                <p>Your careers page: <a [href]="careersLink()" target="_blank" rel="noopener">{{ careersLink() }}</a>
+                  <button mat-icon-button type="button" (click)="copy(careersLink())" aria-label="Copy careers link"><mat-icon>content_copy</mat-icon></button></p>
+              }
+            </div>
+          }
           <div class="span-2"><button mat-flat-button type="submit" [disabled]="saving()">Save</button></div>
         </form>
       </mat-card-content>
@@ -65,6 +84,7 @@ import { SettingsBack } from './settings-home';
     .narrow { max-width: 720px; }
     .section h3 { margin: 8px 0; }
     .warn { color: var(--mat-sys-error); }
+    .full { width: 100%; }
   `,
 })
 export class GeneralSettings {
@@ -77,6 +97,17 @@ export class GeneralSettings {
   readonly org = computed(() => (this.settings.hasValue() ? this.settings.value() : undefined));
   readonly selfRegistration = linkedSignal(() => this.org()?.selfRegistrationEnabled ?? false);
   readonly registrationLink = computed(() => `${location.origin}/register/${this.meta.data()?.tenant.slug ?? ''}`);
+  readonly careers = linkedSignal(() => this.org()?.careersEnabled ?? false);
+  readonly careersIntro = linkedSignal(() => this.org()?.careersIntro ?? '');
+  readonly careersLink = computed(() => `${location.origin}/careers/${this.meta.data()?.tenant.slug ?? ''}`);
+
+  textValue(event: Event): string {
+    return (event.target as HTMLTextAreaElement).value;
+  }
+
+  copy(text: string): void {
+    void navigator.clipboard?.writeText(text).then(() => this.notify.success('Link copied'));
+  }
 
   verificationSummary(o: OrganisationSettings): string {
     const parts = [o.emailVerification ? 'email' : '', o.smsVerification ? 'mobile (SMS)' : ''].filter(Boolean);
@@ -99,7 +130,12 @@ export class GeneralSettings {
     }
     const v = this.form.getRawValue();
     this.saving.set(true);
-    this.api.saveSettings({ name: v.name, currency: v.currency.toUpperCase(), selfRegistrationEnabled: this.selfRegistration() }).subscribe({
+    this.api.saveSettings({
+      name: v.name,
+      currency: v.currency.toUpperCase(),
+      selfRegistrationEnabled: this.selfRegistration(),
+      ...(this.org()?.careersAvailable ? { careersEnabled: this.careers(), careersIntro: this.careersIntro() } : {}),
+    }).subscribe({
       next: (saved) => {
         this.saving.set(false);
         this.settings.set(saved);

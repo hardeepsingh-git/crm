@@ -34,6 +34,10 @@ Configuration is read in this order: `appsettings.json`, then `appsettings.{Envi
 | `RateLimiting:PasswordResetPermitPerMinute` | | `5` | Forgot-password and reset-password calls per IP per minute |
 | `RateLimiting:ClientErrorPermitPerMinute` | | `30` | Browser error reports per IP per minute |
 | `RateLimiting:EmailSendPermitPerMinute` | | `20` | Emails sent from records, per user per minute |
+| `RateLimiting:CareersPermitPerMinute` | | `120` | Careers page and job views, per IP per minute |
+| `RateLimiting:CareersApplyPermitPerMinute` | | `5` | Careers applications per IP per minute |
+| `Careers:MaxCvSizeMb` | | `5` | Largest CV accepted from the careers page |
+| `Export:MaxRows` | | `10000` | Largest CSV export; larger results must be narrowed with filters |
 | `Email:DailyLimitPerTenant` | | `1000` | Emails each organisation can queue per UTC day; beyond it, sends get 429 and automation emails are logged as Failed |
 | `Email:DispatchIntervalSeconds` | | `15` | How often the outbox is checked (new emails also wake it immediately) |
 | `Automation:ScheduleIntervalSeconds` | | `300` | How often date-based rules are checked |
@@ -141,6 +145,7 @@ cd C:\Users\FBPo48p\CRM;          ./scripts/smoke-test.ps1       # live end-to-e
 | Delete | Suspend first, then **delete** and type the workspace ID. This removes **all** of the tenant's users, records and configuration permanently. It isn't possible for the default tenant or your own. |
 | Back up one tenant | `pg_dump` with `--where` isn't supported. Export per table with `COPY (SELECT * FROM "Accounts" WHERE "TenantId" = '…') TO …`, or back up the whole database. |
 | Template upgrades | Automatic. On startup the API upgrades tenants whose `TemplateVersion` is behind their template, and logs `Upgraded tenant <slug> to <template> template v<n>`. Upgrades only add objects, fields, stages and rules; existing data and settings are untouched, and each version is applied once. Back up before deploying a release that raises a template version. |
+| Careers page | The organisation's administrator switches it on under **Settings → Organisation**; the public address is `https://<host>/careers/<workspace id>`. Behind a reverse proxy, set `ForwardedHeaders:Enabled` so per-IP rate limits see the real client address. Each application is logged as `Careers application <id> for job <id> in tenant <slug>`. |
 
 ## 5. Deployment
 

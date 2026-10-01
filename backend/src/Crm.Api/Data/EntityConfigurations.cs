@@ -26,6 +26,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.Slug).HasMaxLength(64).IsRequired();
         b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         b.Property(x => x.Template).HasMaxLength(32).IsRequired();
+        b.Property(x => x.CareersIntro).HasMaxLength(2000);
         b.HasIndex(x => x.Slug).IsUnique();
     }
 }

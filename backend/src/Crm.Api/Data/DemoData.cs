@@ -244,6 +244,9 @@ public static class DemoData
                 ["status"] = i == Jobs.Length - 1 ? "On hold" : "Open", ["openings"] = j.Openings, ["salary_max"] = j.Salary,
                 ["hiring_company"] = accounts.Count > 0 ? accounts[i % accounts.Count].Id.ToString() : null,
                 ["closing_date"] = today.AddDays(14 + 7 * i).ToString("yyyy-MM-dd"),
+                ["publish"] = i < 4,
+                ["description"] = $"We're looking for a {j.Title} to join our {j.Department} team ({j.Location}, {j.Type.ToLowerInvariant()}).\n\n" +
+                    "You'll work with a friendly, experienced team on meaningful projects, with flexible hours and support to keep learning.",
             }.ToJsonString(),
         }).ToList();
 
