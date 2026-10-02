@@ -18,7 +18,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Crm.Api.Tests;
 
-public sealed class CrmApiFactory : WebApplicationFactory<Program>
+public class CrmApiFactory : WebApplicationFactory<Program>
 {
     public const string AdminEmail = "admin@test.local";
     public const string AdminPassword = "Admin#Pass12345";
@@ -53,6 +53,7 @@ public sealed class CrmApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimiting:CareersPermitPerMinute", "10000");
         builder.UseSetting("RateLimiting:CareersApplyPermitPerMinute", "10000");
         builder.UseSetting("RateLimiting:OfferResponsePermitPerMinute", "10000");
+        builder.UseSetting("RateLimiting:MockResponsePermitPerMinute", "10000");
         builder.ConfigureLogging(l => l.SetMinimumLevel(LogLevel.Error).AddConsole());
         builder.ConfigureServices(services =>
         {

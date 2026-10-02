@@ -15,6 +15,8 @@ public record RefreshRequest([Required] string RefreshToken);
 
 public record ChangePasswordRequest([Required] string CurrentPassword, [Required, MinLength(10)] string NewPassword);
 
+public record PreferencesRequest(ThemePreference Theme);
+
 public static class AuthEndpoints
 {
     public const string RateLimitPolicy = "auth";
@@ -27,6 +29,7 @@ public static class AuthEndpoints
         g.MapPost("/refresh", Refresh).AllowAnonymous().RequireRateLimiting(RefreshRateLimitPolicy);
         g.MapPost("/logout", Logout).AllowAnonymous();
         g.MapGet("/me", Me).RequireAuthorization();
+        g.MapPut("/me/preferences", SavePreferences).RequireAuthorization();
         g.MapPost("/change-password", ChangePassword).RequireAuthorization();
         return api;
     }
@@ -92,6 +95,16 @@ public static class AuthEndpoints
     {
         var info = await tokens.DescribeAsync(access.UserId, ct);
         return info is null ? TypedResults.NotFound() : TypedResults.Ok(info);
+    }
+
+    /// <summary>Personal display settings; they follow the user to every browser they sign in on.</summary>
+    private static async Task<Results<NoContent, ValidationProblem>> SavePreferences(
+        PreferencesRequest req, Access access, CrmDbContext db, CancellationToken ct)
+    {
+        if (!Enum.IsDefined(req.Theme)) return Errors.Validation("theme", "Choose System, Light or Dark.");
+        var userId = access.UserId;
+        await db.Users.Where(u => u.Id == userId).ExecuteUpdateAsync(s => s.SetProperty(u => u.ThemePreference, req.Theme), ct);
+        return TypedResults.NoContent();
     }
 
     private static async Task<Results<NoContent, ValidationProblem, NotFound>> ChangePassword(

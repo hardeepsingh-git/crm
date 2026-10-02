@@ -116,9 +116,9 @@ export class EmailDetailDialog {
     .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
     .warning { background: var(--mat-sys-secondary-container); padding: 8px 12px; border-radius: 8px; }
     .status { padding: 2px 8px; border-radius: 12px; font-size: 12px; background: var(--mat-sys-surface-container-high); }
-    .status.sent { background: #e8f5e9; color: #1b5e20; }
-    .status.failed { background: #ffebee; color: #b71c1c; }
-    .status.pending { background: #fff8e1; color: #8d6e00; }
+    .status.sent { background: var(--crm-success-container); color: var(--crm-on-success-container); }
+    .status.failed { background: var(--crm-danger-container); color: var(--crm-on-danger-container); }
+    .status.pending { background: var(--crm-warning-container); color: var(--crm-on-warning-container); }
     td.actions { text-align: right; white-space: nowrap; }
   `,
 })

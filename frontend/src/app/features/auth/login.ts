@@ -11,12 +11,14 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { RegistrationOptions } from '../../core/models';
 import { errorMessage } from '../../core/notify.service';
+import { ThemeToggle } from '../../shared/theme-toggle';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, RouterLink, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatProgressBarModule],
+  imports: [ReactiveFormsModule, RouterLink, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule, MatIconModule, MatProgressBarModule, ThemeToggle],
   template: `
     <div class="login-page">
+      <div class="theme"><app-theme-toggle /></div>
       <mat-card class="login-card" appearance="outlined">
         @if (busy()) {
           <mat-progress-bar mode="indeterminate" />
@@ -57,9 +59,14 @@ import { errorMessage } from '../../core/notify.service';
     </div>
   `,
   styles: `
-    .login-page { min-height: 100vh; display: grid; place-items: center; background: var(--mat-sys-surface-container); }
-    .login-card { width: min(400px, 92vw); padding-bottom: 8px; }
-    .logo { font-size: 40px; width: 40px; height: 40px; color: var(--mat-sys-primary); }
+    .login-page { min-height: 100vh; display: grid; place-items: center; position: relative;
+      background: radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--mat-sys-primary-container) 70%, transparent), transparent 45%),
+        radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--mat-sys-tertiary-container) 70%, transparent), transparent 45%),
+        var(--mat-sys-surface-container); }
+    .theme { position: absolute; top: 12px; right: 12px; }
+    .login-card { width: min(400px, 92vw); padding: 8px 8px 16px; border-radius: 24px; }
+    .logo { font-size: 28px; width: 40px; height: 40px; display: grid !important; place-items: center; border-radius: 12px;
+      background: linear-gradient(135deg, var(--mat-sys-primary), var(--mat-sys-tertiary)); color: var(--mat-sys-on-primary); }
     form { margin-top: 16px; }
     .error { color: var(--mat-sys-error); margin: 0 0 12px; }
     .register { margin: 16px 0 0; text-align: center; }

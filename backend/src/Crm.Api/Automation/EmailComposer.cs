@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Features.MockInterviews;
 using Crm.Api.Features.Offers;
 using Crm.Api.Messaging;
 using Crm.Api.Security;
@@ -17,6 +18,12 @@ public record EmailField(string Key, string Label);
 public record EmailFieldSet(IReadOnlyList<EmailField> Placeholders, IReadOnlyList<EmailField> Recipients);
 
 public record EmailRecipient(string Label, string Address);
+
+/// <summary>A template email to an application's candidate carrying a personal link, e.g. an offer or a mock interview.</summary>
+/// <param name="What">Used in notes to the sender, e.g. "offer".</param>
+public record CandidateLinkEmail(
+    string TemplateName, string DefaultSubject, string DefaultBody, string LinkKey, string Link, string LinkLine,
+    IEnumerable<KeyValuePair<string, object?>> Values, string What);
 
 public record QueueEmail(
     OwnedEntity Record, string ObjectKey, string To, string Subject, string Body,
@@ -117,7 +124,11 @@ public sealed partial class EmailComposer(IConfiguration config, IHostEnvironmen
         placeholders.Add(new("owner.email", "Owner email"));
         placeholders.Add(new("organisation.name", "Organisation name"));
         placeholders.Add(new("link", "Link to the record"));
-        if (objectKey == OfferKeys.ApplicationKey) placeholders.AddRange(OfferKeys.Placeholders);
+        if (objectKey == OfferKeys.ApplicationKey)
+        {
+            placeholders.AddRange(OfferKeys.Placeholders);
+            placeholders.AddRange(MockKeys.Placeholders);
+        }
         return new EmailFieldSet(placeholders, recipients);
     }
 
@@ -161,6 +172,9 @@ public sealed partial class EmailComposer(IConfiguration config, IHostEnvironmen
             var offer = await db.Offers.AsNoTracking().Where(o => o.ApplicationId == record.Id && o.Status != OfferStatus.Withdrawn)
                 .OrderByDescending(o => o.CreatedAt).FirstOrDefaultAsync(ct);
             foreach (var (key, value) in OfferKeys.Values(offer)) context[key] = value;
+            var mock = await db.MockInterviews.AsNoTracking().Where(m => m.ApplicationId == record.Id && m.Status != MockInterviewStatus.Withdrawn)
+                .OrderByDescending(m => m.CreatedAt).FirstOrDefaultAsync(ct);
+            foreach (var (key, value) in MockKeys.Values(mock)) context[key] = value;
         }
 
         var values = Cf.Parse(record.CustomFields);
@@ -273,6 +287,38 @@ public sealed partial class EmailComposer(IConfiguration config, IHostEnvironmen
         }
         db.OutboundEmails.Add(email);
         return email;
+    }
+
+    /// <summary>
+    /// Queues <paramref name="e"/> to the application's candidate from the sender. The record's timeline gets a copy without
+    /// the link, which answers for the candidate. Returns a note for the sender when it couldn't be queued.
+    /// </summary>
+    public async Task<string?> QueueCandidateLinkAsync(
+        CrmDbContext db, CustomRecord app, string objectKey, EffectivePermissions sender, CandidateLinkEmail e, DateTime now, CancellationToken ct)
+    {
+        var fields = (await FieldsAsync(db, objectKey, ct))!;
+        var fresh = await db.CustomRecords.AsNoTracking().SingleAsync(r => r.Id == app.Id, ct);
+        var context = await ContextAsync(db, fresh, objectKey, sender, ct);
+        foreach (var (key, value) in e.Values) context[key] = value;
+        var to = RecipientsOf(fields, context).FirstOrDefault()?.Address;
+        if (to is null) return $"The candidate has no email address, so the {e.What} wasn't emailed. Share the link with them another way.";
+        if (await DailyLimitReachedAsync(db, now, ct))
+            return $"Your organisation's daily email limit was reached, so the {e.What} wasn't emailed. Share the link with them another way.";
+
+        var template = await db.EmailTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.ObjectKey == objectKey && t.Name == e.TemplateName, ct);
+        var subject = template?.Subject ?? e.DefaultSubject;
+        var body = template?.Body ?? e.DefaultBody;
+        var token = "{{" + e.LinkKey + "}}";
+        if (!body.Contains(token, StringComparison.Ordinal)) body += $"\n\n{e.LinkLine}: {token}";
+
+        var timeline = Render(body, new Dictionary<string, object?>(context) { [e.LinkKey] = "[link sent to the candidate]" });
+        context[e.LinkKey] = e.Link;
+        var user = await db.Users.AsNoTracking().Where(u => u.Id == sender.UserId).Select(u => new { u.Email, u.FirstName, u.LastName }).SingleAsync(ct);
+        await QueueAsync(db, new QueueEmail(fresh, objectKey, to, Render(subject, context), Render(body, context),
+            TemplateId: template?.Id, SentById: sender.UserId, SentByName: $"{user.FirstName} {user.LastName}".Trim(),
+            ReplyTo: EmailText.Address(user.Email), TimelineBody: timeline), now, ct);
+        await db.SaveChangesAsync(ct);
+        return null;
     }
 
     private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max];

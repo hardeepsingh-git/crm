@@ -28,7 +28,8 @@ public record TenantInfo(Guid Id, string Name, string Slug, string Currency, str
 public record UserInfo(
     Guid Id, string Email, string FirstName, string LastName, string FullName,
     IReadOnlyList<string> Roles, TenantInfo Tenant, bool IsAdministrator, bool IsPlatformAdmin,
-    Dictionary<string, Dictionary<string, PermissionScope>> Permissions, IReadOnlyCollection<Guid> TeamUserIds);
+    Dictionary<string, Dictionary<string, PermissionScope>> Permissions, IReadOnlyCollection<Guid> TeamUserIds,
+    ThemePreference Theme = ThemePreference.System);
 
 public record AuthResponse(string AccessToken, DateTime ExpiresAt, string RefreshToken, UserInfo User);
 
@@ -44,7 +45,7 @@ public sealed class TokenService(IOptions<JwtOptions> options, CrmDbContext db, 
         var t = user.Tenant;
         return new UserInfo(user.Id, user.Email!, user.FirstName, user.LastName, user.FullName, effective.RoleNames,
             new TenantInfo(t.Id, t.Name, t.Slug, t.Currency, t.Template), effective.IsAdministrator, effective.IsPlatformAdmin,
-            effective.ToDictionary(), effective.TeamUserIds.ToList());
+            effective.ToDictionary(), effective.TeamUserIds.ToList(), user.ThemePreference);
     }
 
     public async Task<AuthResponse> IssueAsync(AppUser user, CancellationToken ct)

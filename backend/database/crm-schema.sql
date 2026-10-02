@@ -1708,3 +1708,108 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    ALTER TABLE "Tenants" ADD "MockAiInstructions" character varying(4000);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    ALTER TABLE "Tenants" ADD "MockAiReviewEnabled" boolean NOT NULL DEFAULT FALSE;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    ALTER TABLE "Tenants" ADD "MockAiTrigger" character varying(16) NOT NULL DEFAULT 'Manual';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    ALTER TABLE "AspNetUsers" ADD "ThemePreference" character varying(16) NOT NULL DEFAULT 'System';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    CREATE TABLE "MockInterviews" (
+        "Id" uuid NOT NULL,
+        "ApplicationId" uuid NOT NULL,
+        "Status" character varying(16) NOT NULL,
+        "JobTitle" character varying(200) NOT NULL,
+        "Message" character varying(2000),
+        "Questions" jsonb NOT NULL DEFAULT ('[]'),
+        "Answers" jsonb NOT NULL DEFAULT ('{}'),
+        "ExpiresAt" timestamp with time zone NOT NULL,
+        "TokenHash" character varying(64),
+        "SentById" uuid NOT NULL,
+        "SentAt" timestamp with time zone NOT NULL,
+        "StartedAt" timestamp with time zone,
+        "SubmittedAt" timestamp with time zone,
+        "ReviewedById" uuid,
+        "ReviewedAt" timestamp with time zone,
+        "ReadinessRating" integer,
+        "ReviewNotes" character varying(4000),
+        "AiStatus" character varying(16) NOT NULL,
+        "AiRequestedAt" timestamp with time zone,
+        "AiReviewedAt" timestamp with time zone,
+        "AiLockedUntil" timestamp with time zone,
+        "AiModel" character varying(100),
+        "AiScore" numeric(3,1),
+        "AiFeedback" jsonb,
+        "AiError" character varying(1000),
+        "TenantId" uuid NOT NULL,
+        "CreatedAt" timestamp with time zone NOT NULL,
+        "UpdatedAt" timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_MockInterviews" PRIMARY KEY ("Id"),
+        CONSTRAINT "FK_MockInterviews_CustomRecords_ApplicationId" FOREIGN KEY ("ApplicationId") REFERENCES "CustomRecords" ("Id") ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    CREATE INDEX "IX_MockInterviews_AiStatus_AiRequestedAt" ON "MockInterviews" ("AiStatus", "AiRequestedAt");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    CREATE UNIQUE INDEX "IX_MockInterviews_ApplicationId_Open" ON "MockInterviews" ("ApplicationId") WHERE "Status" IN ('Sent', 'InProgress');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    CREATE INDEX "IX_MockInterviews_TenantId_ApplicationId" ON "MockInterviews" ("TenantId", "ApplicationId");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    CREATE UNIQUE INDEX "IX_MockInterviews_TokenHash" ON "MockInterviews" ("TokenHash");
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "MigrationId" = '20261002023140_Phase6MockInterviews') THEN
+    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+    VALUES ('20261002023140_Phase6MockInterviews', '10.0.12');
+    END IF;
+END $EF$;
+COMMIT;
+

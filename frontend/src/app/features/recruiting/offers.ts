@@ -277,11 +277,11 @@ export class WithdrawOfferDialog {
     .body { flex: 1; }
     .title { font-weight: 500; }
     .small { font-size: 13px; margin-top: 2px; }
-    .ok { color: #2e7d32; }
+    .ok { color: var(--crm-success); }
     .status { font-size: 12px; font-weight: normal; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--mat-sys-surface-container-high); }
-    .status[data-s='Accepted'] { background: #d7f5dd; color: #145a24; }
-    .status[data-s='Declined'], .status[data-s='Withdrawn'], .status[data-s='Expired'] { background: #fbdcdc; color: #8a1c1c; }
-    .status[data-s='Sent'] { background: #e3ecfd; color: #1a3d8f; }
+    .status[data-s='Accepted'] { background: var(--crm-success-container); color: var(--crm-on-success-container); }
+    .status[data-s='Declined'], .status[data-s='Withdrawn'], .status[data-s='Expired'] { background: var(--crm-danger-container); color: var(--crm-on-danger-container); }
+    .status[data-s='Sent'] { background: var(--crm-info-container); color: var(--crm-on-info-container); }
   `,
 })
 export class OffersPanel {

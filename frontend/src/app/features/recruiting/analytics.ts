@@ -54,6 +54,14 @@ export const PERIODS = [30, 90, 180, 365];
         <mat-card appearance="outlined" class="kpi"><div class="label">Offers awaiting reply</div>
           <div class="value">{{ r.offers.pending }}</div>
           <div class="muted">{{ r.offers.averageDaysToRespond === null ? 'of ' + r.offers.sent + ' sent' : 'replies take ' + (r.offers.averageDaysToRespond | number: '1.0-1') + ' days' }}</div></mat-card>
+        @if (r.mock && r.mock.sent > 0) {
+          <mat-card appearance="outlined" class="kpi"><div class="label">Mock interviews completed</div>
+            <div class="value">{{ r.mock.completionRate === null ? '–' : (r.mock.completionRate | percent: '1.0-0') }}</div>
+            <div class="muted">{{ r.mock.submitted }} of {{ r.mock.sent }} sent{{ r.mock.averageMinutes === null ? '' : ', ~' + (r.mock.averageMinutes | number: '1.0-0') + ' min each' }}</div></mat-card>
+          <mat-card appearance="outlined" class="kpi"><div class="label">Candidate readiness</div>
+            <div class="value">{{ r.mock.averageReadiness === null ? '–' : (r.mock.averageReadiness | number: '1.1-1') + ' / 5' }}</div>
+            <div class="muted">self-rated confidence {{ r.mock.averageSelfRating === null ? '–' : (r.mock.averageSelfRating | number: '1.1-1') }}</div></mat-card>
+        }
       </section>
 
       <div class="grid">

@@ -227,6 +227,7 @@ Interviews belong to an **application** (recruitment tenants). Reading needs rea
 - `sources[]`: `{ source, applications, hired, hireRate }` by the application's *source*. `jobs[]`: `{ id, title, applications, open, hired, byStage }`.
 - Time to hire: from creation to being closed in a *Won* stage.
 - `offers`: `{ sent, accepted, declined, expired, pending, acceptanceRate, averageDaysToRespond }` for offers sent on those applications; the acceptance rate is accepted / (accepted + declined + expired).
+- `mock`: `{ sent, started, submitted, completionRate, averageMinutes, averageSelfRating, averageReadiness }` for mock interviews on those applications (withdrawn ones excluded).
 
 ## Offers (`/api/offers`)
 
@@ -258,6 +259,43 @@ The candidate's link is `<App:PublicUrl>/offer/<token>` (256-bit random, Base64U
 | POST | `/decline` | `{ reason }` (optional) |
 
 Both answers need the offer to be *Sent* and not past its deadline (400 with an explanation otherwise), add a note to the application and notify the sender and the application's owner. The application isn't moved to *Hired* automatically.
+
+## Mock interviews (`/api/mock-interviews`)
+
+Practice interviews on an **application**; every call needs **update** access to it (403 otherwise; 404 if it can't be read), except the settings, which need `settings:manage`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `?applicationId=` | `{ items: MockInterviewItem[], aiAvailable, aiUnavailableReason }`, newest first. Open sessions past their deadline become *Expired*. An item has the snapshot of questions with each answer (`text, rating, seconds, answeredAt`) and AI feedback, plus `readinessRating`, `reviewNotes`, `aiStatus` (NotRequested/Pending/Completed/Failed), `aiScore`, `aiSummary`, `aiStrengths[]`, `aiImprovements[]`, `aiError`. |
+| GET | `/library?applicationId=` | `{ available, canAdd, questions: [{ id, prompt, competency, minutes, forThisJob }] }`: practice questions for the application's job and for every job, job-specific first, retired ones left out |
+| POST | `/library/starter` | Adds the 10 starter questions the library doesn't have yet (matched by wording), owned by the caller; needs create on `mock_question` → `{ added }` |
+| POST | `/` | `{ applicationId, questionIds[1..20], validDays (1–30, default 7), message }` → `{ interview, link, emailNote }`. Copies the questions, creates the link and emails the *Mock interview invitation* template. 400 if the application already has an open session. The link is returned only here. |
+| POST | `/{id}/resend` | Open sessions only: a new link (the old one stops working) and a new email; answers are kept → `{ interview, link, emailNote }` |
+| POST | `/{id}/withdraw` | `{ reason }`; the link stops working and a note is added to the application |
+| PUT | `/{id}/review` | Submitted sessions only: `{ readinessRating (1–5), notes }` (at least one) |
+| POST | `/{id}/ai-review` | Submitted sessions: queue AI feedback (again). 400 with the reason when AI isn't available or a review is already pending. |
+| GET/PUT | `/settings` | `{ aiReviewEnabled, aiTrigger (Manual/OnSubmit), aiInstructions }` → plus `aiConnectionReady`, `aiConnectionProblem`, `libraryAvailable` |
+
+- **Placeholders** (application emails): `{{mock.job_title}}`, `{{mock.questions}}` (count), `{{mock.expires}}`; `{{mock.link}}` is filled only in the invitation. The Email activity shows `[link sent to the candidate]` instead of the link.
+- **AI feedback** runs in the background (`Ai:ReviewIntervalSeconds`, default 20) only when the server switch `Ai:Enabled`, a platform AI provider and the organisation's opt-in are all on. The model receives the job title, questions, competencies, model answers, answers and self-ratings; never names, emails or ids.
+
+## Mock interview response (`/api/mock-response/{token}`, anonymous)
+
+The candidate's link is `<App:PublicUrl>/mock/<token>` (same scheme as offers). Rate limit `RateLimiting:MockResponsePermitPerMinute` per IP (60). Unknown, withdrawn or replaced links → 404.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/` | `{ organisation, candidateName, jobTitle, message, status, expiresAt, submittedAt, questions: [{ id, prompt, details, competency, minutes, answer, rating, guidance }] }`. `guidance` (model answer and tips) only for answered questions. Expired sessions return no questions or message. |
+| PUT | `/answers/{questionId}` | `{ text (≤5,000), rating (1–5, optional), seconds }`; blank text clears the answer. The first answer starts the session → `{ guidance, answered, total }` |
+| POST | `/submit` | Needs at least one answer. Adds a note to the application, notifies the sender and owner, and queues AI feedback when the organisation chose automatic → `{ message }` |
+
+Answering or submitting a session that is submitted, expired or withdrawn returns 400 with an explanation.
+
+## Preferences
+
+| Method | Path | Notes |
+|---|---|---|
+| PUT | `/api/auth/me/preferences` | `{ theme: System|Light|Dark }` → 204. `/api/auth/me` returns `theme`. |
 
 ## Privacy (`/api/privacy`, settings:manage)
 
@@ -390,7 +428,7 @@ Emails go to an outbox and are sent by a background dispatcher (`Pending` → `S
 | PUT | `/settings` | `PlatformSettings` (validated, e.g. SMTP host and from-address are required for the Smtp provider) |
 | POST | `/settings/test-email`, `/settings/test-sms` | `{ to }`: sends a test message with the saved settings. 400 with the provider error if it fails. |
 
-`PlatformSettings`: `selfRegistrationEnabled`, `emailVerificationEnabled`, `smsVerificationEnabled`, `codeLength` (4–10), `codeTtlMinutes` (1–60), `maxAttempts` (1–10), `resendCooldownSeconds` (0–600), `emailProvider` (`Log`\|`Smtp`), `smtpHost`, `smtpPort`, `smtpUsername`, `smtpUseStartTls`, `emailFromAddress`, `emailFromName`, `smsProvider` (`Log`\|`Http`), `smsGatewayUrl`, `smsSenderId`, `smsAuthHeader`, `smsAuthScheme`. Secrets are never stored or returned: the SMTP password and SMS API key come from configuration (`Email:SmtpPassword`, `Sms:ApiKey`).
+`PlatformSettings`: `selfRegistrationEnabled`, `emailVerificationEnabled`, `smsVerificationEnabled`, `codeLength` (4–10), `codeTtlMinutes` (1–60), `maxAttempts` (1–10), `resendCooldownSeconds` (0–600), `emailProvider` (`Log`\|`Smtp`), `smtpHost`, `smtpPort`, `smtpUsername`, `smtpUseStartTls`, `emailFromAddress`, `emailFromName`, `smsProvider` (`Log`\|`Http`), `smsGatewayUrl`, `smsSenderId`, `smsAuthHeader`, `smsAuthScheme`, `aiProvider` (`None`\|`OpenAI`\|`AzureOpenAI`), `aiEndpoint` (https only), `aiModel` (model or Azure deployment), `aiApiVersion` (Azure), `aiApiKeyName` (letters, digits, `-`, `_`), `aiTimeoutSeconds` (5–120), `aiMaxRetries` (0–5), `aiMaxOutputTokens` (200–4000), `aiTemperature` (0–1). Secrets are never stored or returned: the SMTP password, SMS API key and AI key come from configuration (`Email:SmtpPassword`, `Sms:ApiKey`, `Ai:Keys:<aiApiKeyName>`). The GET/PUT response also has `smtpPasswordConfigured`, `smsApiKeyConfigured`, `aiServerEnabled` (`Ai:Enabled`) and `aiKeyConfigured`.
 
 ## Health
 

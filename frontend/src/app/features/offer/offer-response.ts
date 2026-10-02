@@ -111,7 +111,7 @@ export function answerErrors(err: unknown): string[] {
     .actions { display: flex; gap: 8px; margin-top: 16px; }
     .error { color: var(--mat-sys-error); margin: 8px 0 0; }
     .done { padding: 12px 16px; border-radius: 8px; background: var(--mat-sys-surface-container-high); }
-    .ok { color: #2e7d32; }
+    .ok { color: var(--crm-success); }
     @media print { .no-print { display: none !important; } }
   `,
 })

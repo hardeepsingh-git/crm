@@ -27,6 +27,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.Currency).HasMaxLength(3).IsRequired();
         b.Property(x => x.Template).HasMaxLength(32).IsRequired();
         b.Property(x => x.CareersIntro).HasMaxLength(2000);
+        b.Property(x => x.MockAiInstructions).HasMaxLength(4000);
         b.HasIndex(x => x.Slug).IsUnique();
     }
 }
@@ -359,6 +360,29 @@ public class OfferConfiguration : IEntityTypeConfiguration<Offer>
         // At most one draft or sent offer per application, even under concurrent requests.
         b.HasIndex(x => x.ApplicationId).IsUnique().HasFilter("\"Status\" IN ('Draft', 'Sent')").HasDatabaseName("IX_Offers_ApplicationId_Active");
         b.HasIndex(x => new { x.TenantId, x.ApplicationId });
+    }
+}
+
+public class MockInterviewConfiguration : IEntityTypeConfiguration<MockInterview>
+{
+    public void Configure(EntityTypeBuilder<MockInterview> b)
+    {
+        b.Property(x => x.JobTitle).HasMaxLength(200).IsRequired();
+        b.Property(x => x.Message).HasMaxLength(2000);
+        b.Property(x => x.Questions).IsJson("[]");
+        b.Property(x => x.Answers).IsJson();
+        b.Property(x => x.TokenHash).HasMaxLength(64);
+        b.Property(x => x.ReviewNotes).HasMaxLength(4000);
+        b.Property(x => x.AiModel).HasMaxLength(100);
+        b.Property(x => x.AiScore).HasPrecision(3, 1);
+        b.Property(x => x.AiFeedback).HasColumnType("jsonb");
+        b.Property(x => x.AiError).HasMaxLength(1000);
+        b.HasOne(x => x.Application).WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => x.TokenHash).IsUnique();
+        // At most one open mock interview per application, even under concurrent requests.
+        b.HasIndex(x => x.ApplicationId).IsUnique().HasFilter("\"Status\" IN ('Sent', 'InProgress')").HasDatabaseName("IX_MockInterviews_ApplicationId_Open");
+        b.HasIndex(x => new { x.TenantId, x.ApplicationId });
+        b.HasIndex(x => new { x.AiStatus, x.AiRequestedAt });
     }
 }
 

@@ -16,6 +16,7 @@ using Crm.Api.Features.Dashboard;
 using Crm.Api.Features.Email;
 using Crm.Api.Features.Export;
 using Crm.Api.Features.Interviews;
+using Crm.Api.Features.MockInterviews;
 using Crm.Api.Features.Offers;
 using Crm.Api.Features.Privacy;
 using Crm.Api.Features.Governance;
@@ -64,10 +65,16 @@ services.AddScoped<EmailComposer>();
 services.AddScoped<EmailDispatcher>();
 services.AddScoped<ScheduledAutomation>();
 services.AddSingleton<OutboxSignal>();
+services.AddScoped<AiReviewConfig>();
+services.AddScoped<MockAiReviewProcessor>();
+services.AddScoped<IMockInterviewReviewer, ChatCompletionsReviewer>();
+// Per-attempt timeouts come from Platform settings, so the client itself never times out first.
+services.AddHttpClient(ChatCompletionsReviewer.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan);
 if (builder.Configuration.GetValue("BackgroundJobs:Enabled", true))
 {
     services.AddHostedService<EmailDispatcherService>();
     services.AddHostedService<ScheduledAutomationService>();
+    services.AddHostedService<MockAiReviewService>();
 }
 services.AddScoped<TenantService>();
 services.AddScoped<PlatformSettingsService>();
@@ -136,6 +143,8 @@ services.AddRateLimiter(o =>
     o.AddPolicy(CareersEndpoints.ReadRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:CareersPermitPerMinute", 120));
     o.AddPolicy(CareersEndpoints.ApplyRateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:CareersApplyPermitPerMinute", 5));
     o.AddPolicy(OfferResponseEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:OfferResponsePermitPerMinute", 30));
+    // Answers autosave, so candidates need more headroom than offer responses.
+    o.AddPolicy(MockResponseEndpoints.RateLimitPolicy, ctx => PerIpPerMinute(ctx, "RateLimiting:MockResponsePermitPerMinute", 60));
     o.AddPolicy(EmailEndpoints.SendRateLimitPolicy, ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.User.FindFirst(Claims.Subject)?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
@@ -200,6 +209,7 @@ api.MapRegistration();
 api.MapPasswordReset();
 api.MapCareers();
 api.MapOfferResponses();
+api.MapMockResponses();
 var secured = api.MapGroup("").RequireAuthorization();
 secured.MapDashboard();
 secured.MapAccounts();
@@ -214,6 +224,7 @@ secured.MapExport();
 secured.MapInterviews();
 secured.MapHiringAnalytics();
 secured.MapOffers();
+secured.MapMockInterviews();
 secured.MapPrivacy();
 secured.MapUsers();
 secured.MapSecurity();

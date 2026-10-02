@@ -123,7 +123,7 @@ export function csvCell(value: string): string {
     .sample { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .errors { max-height: 260px; overflow: auto; padding-left: 20px; }
     .error { color: var(--mat-sys-error); }
-    .ok { color: #2e7d32; }
+    .ok { color: var(--crm-success); }
     .small { font-size: 0.85em; margin-top: 0; }
   `,
 })

@@ -6,7 +6,7 @@
 | **Version** | 2.0 (platform release) |
 | **Previous version** | 1.0: single-tenant sales CRM with fixed roles |
 | **Status** | Implemented |
-| **Last updated** | 2026-09-30 |
+| **Last updated** | 2026-10-02 |
 
 ## 1. Summary
 
@@ -247,8 +247,23 @@ Priority: **M** = must, **S** = should, **C** = could. Everything marked M or S 
 | PRIV-3 | **Retention policy** (6–120 months, off by default): preview who would be erased (inactive, all applications closed, never hired), then erase them in batches. | M |
 | ATS-8 | Recruitment template v6 adds the *Offer letter* and *Offer email* templates; demo data includes open and accepted offers. | S |
 
-### 5.17 Future (backlog)
-Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Cloud file storage · Résumé parsing · Careers page branding (logo, colours) and CAPTCHA · Candidate portal and self-scheduling of interview slots · Calendar sync (Outlook/Google) · Qualified e-signatures (DocuSign) and PDF offer documents · Offer approval workflows · Scheduled (automatic) retention runs · Export permission per role · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore.
+### 5.17 Phase 6: mock interviews, AI-ready feedback and appearance (MOCK, UX)
+| ID | Requirement | Pri |
+|---|---|---|
+| MOCK-1 | **Company question library**: practice questions are records of the hiring organisation (*Practice questions*), with competency, suggested minutes, optional detail, a model answer and tips, an optional job opening (blank = every job) and a *Retired* flag. Ten starter questions can be added in one click. | M |
+| MOCK-2 | **Invite a candidate** from an application: choose 1–20 library questions (job-specific ones first), a link lifetime of 1–30 days and an optional message. The questions are copied into the session, the candidate is emailed a personal link from the *Mock interview invitation* template (outbox and its limits), and the link is shown once to the sender. Needs edit access to the application. | M |
+| MOCK-3 | **Candidate practice page** (`/mock/<token>`, no account): introduction, one question at a time with a timer against the suggested minutes, written answer and a 1–5 confidence rating, saved as they go (they can stop and come back), tips revealed after each answer, review and submit, then a printable recap with tips. | M |
+| MOCK-4 | **Submission**: records start and finish times, answers and ratings; adds a note to the application and notifies the sender and owner. | M |
+| MOCK-5 | **Recruiter review**: the hiring team sees every answer, adds a 1–5 readiness rating and private notes. Nothing the team writes is ever returned to the candidate. | M |
+| MOCK-6 | **Safety**: one open session per application (database index), 256-bit token stored only as a hash, never on the timeline, rate-limited, active organisations only; resending replaces the link and keeps answers; withdrawal and expiry stop it working and hide the questions. | M |
+| MOCK-7 | **AI feedback, ready to switch on**: per-answer and overall 1–5 scores, a summary, strengths and areas to improve, run on request or automatically on submission. Three switches: the server (`Ai:Enabled`, off by default), the platform connection (provider, endpoint, model or deployment, API version, key name, timeout, retries, output tokens, temperature; the key itself only in server configuration), and each organisation's opt-in with its own grading guidance. Only the job title, questions, model answers and answers are sent: never names or contact details. | S |
+| MOCK-8 | Mock interview statistics in hiring analytics: sent, started, completed, completion rate, average time, self-rated confidence and readiness. | C |
+| ATS-9 | Recruitment template v7 adds the *Practice questions* object and the *Mock interview invitation* template; demo data includes starter questions, a reviewed session and one awaiting the candidate. | S |
+| UX-1 | **Light, dark or match device** theme for every screen, chosen from the toolbar (and on the sign-in and candidate pages); saved on the user's profile so it follows them, and remembered on the device for public pages. | M |
+| UX-2 | Refreshed visual design: semantic status colours that meet WCAG AA in both themes, rounded surfaces, a clearer navigation rail, avatar initials, a skip-to-content link and visible keyboard focus; motion reduced when the device asks for it. | S |
+
+### 5.18 Future (backlog)
+Field-level security · Sharing rules and territories · Formula and roll-up fields · Webhook automation actions · HTML email and attachments in email · Inbound email (replies on the timeline) · Per-tenant time zones for schedules · Report builder · Custom layouts · SSO (Entra ID) · Tenant (organisation) self sign-up · Billing (Stripe) · Cloud file storage · Résumé parsing · Careers page branding (logo, colours) and CAPTCHA · Candidate portal and self-scheduling of interview slots · Calendar sync (Outlook/Google) · Qualified e-signatures (DocuSign) and PDF offer documents · Offer approval workflows · Scheduled (automatic) retention runs · Export permission per role · Per-tenant rate limits and quotas · Optimistic concurrency (ETags) · Soft delete and restore · Spoken (audio/video) mock interviews with transcription · AI-generated practice questions from a job description · Per-organisation AI providers and usage quotas.
 
 ## 6. Non-functional requirements
 
@@ -281,9 +296,9 @@ Field-level security · Sharing rules and territories · Formula and roll-up fie
 ## 9. Release criteria (v2)
 - [x] All M and S requirements implemented
 - [x] v1 → v2 data migration applied to `CRM` with no data loss (12 accounts, 24 contacts, 14 open deals preserved)
-- [x] API integration tests green (84), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits), date-based rules, the careers page, CSV export, interviews, blind scorecards, hiring analytics, offers (drafting, sending, signing, expiry, withdrawal) and candidate privacy (export, erasure, retention)
-- [x] UI unit tests green (76), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log, the date-rule editor, careers pages, export, interview scheduling, scorecards, the analytics page, offers, the candidate offer page and privacy settings
-- [x] Live smoke test green against PostgreSQL (64 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox, date-based rules, an anonymous careers application, CSV export, interviews with a candidate invitation and scorecard, hiring analytics, an offer signed by the candidate, and a candidate data export and erasure)
+- [x] API integration tests green (89), including tenancy, RBAC override and escalation, customization, automation, audit, self-registration, password reset, attachments, CSV import, the recruitment template, unique fields, template upgrades, email (templates, sending, outbox retries, limits), date-based rules, the careers page, CSV export, interviews, blind scorecards, hiring analytics, offers (drafting, sending, signing, expiry, withdrawal), candidate privacy (export, erasure, retention), mock interviews (library, invitation, practice, submission, review, resend, withdrawal, expiry), AI feedback through a recorded model exchange (switches, retries, no identities sent, failures) and theme preferences
+- [x] UI unit tests green (84), including permission resolution, metadata/custom-field helpers, cross-tab token refresh, registration, password reset, attachments, import, related lists, lookup filters, record naming, email compose, email log, the date-rule editor, careers pages, export, interview scheduling, scorecards, the analytics page, offers, the candidate offer page, privacy settings, the mock interview panel, invitation and review dialogs, the candidate practice page, mock interview settings and the theme service
+- [x] Live smoke test green against PostgreSQL (66 checks, including tenant provisioning, JSONB filters, automation, isolation, self-registration, CSV import, attachments, a recruitment tenant, email delivery through the outbox, date-based rules, an anonymous careers application, CSV export, interviews with a candidate invitation and scorecard, hiring analytics, an offer signed by the candidate, a mock interview practised, submitted and reviewed, a saved theme preference, and a candidate data export and erasure)
 - [x] Browser end-to-end: custom object, fields, records, board, automation, role matrix, rep restrictions, tenant lifecycle
 - [x] Production build with no errors or warnings
 - [ ] UAT sign-off per template (Sales, Help Desk, Recruitment)

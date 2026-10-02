@@ -44,6 +44,18 @@ public sealed record PlatformSettings
     [MaxLength(64)] public string SmsAuthHeader { get; init; } = "Authorization";
     [MaxLength(32)] public string SmsAuthScheme { get; init; } = "Bearer";
 
+    // AI connection for mock interview feedback. The key itself lives in configuration at Ai:Keys:{AiApiKeyName}.
+    public AiProvider AiProvider { get; init; } = AiProvider.None;
+    [MaxLength(500)] public string? AiEndpoint { get; init; }
+    /// <summary>Model name (OpenAI) or deployment name (Azure OpenAI).</summary>
+    [MaxLength(100)] public string? AiModel { get; init; }
+    [MaxLength(32)] public string? AiApiVersion { get; init; }
+    [MaxLength(64)] public string AiApiKeyName { get; init; } = "Default";
+    [Range(5, 120)] public int AiTimeoutSeconds { get; init; } = 30;
+    [Range(0, 5)] public int AiMaxRetries { get; init; } = 2;
+    [Range(200, 4000)] public int AiMaxOutputTokens { get; init; } = 1200;
+    [Range(0.0, 1.0)] public double AiTemperature { get; init; } = 0.2;
+
     public IReadOnlyList<VerificationChannel> RequiredChannels() =>
         [.. EmailVerificationEnabled ? [VerificationChannel.Email] : Array.Empty<VerificationChannel>(),
          .. SmsVerificationEnabled ? [VerificationChannel.Sms] : Array.Empty<VerificationChannel>()];
@@ -62,6 +74,16 @@ public sealed record PlatformSettings
             errors[nameof(SmsGatewayUrl)] = ["An absolute http(s) gateway URL is required for the HTTP provider."];
         if (!string.IsNullOrEmpty(SmsAuthHeader) && SmsAuthHeader.Any(c => char.IsWhiteSpace(c) || c == ':'))
             errors[nameof(SmsAuthHeader)] = ["Header names cannot contain spaces or colons."];
+        if (AiProvider != AiProvider.None)
+        {
+            // HTTPS only: the request carries the API key and candidates' answers.
+            if (!(Uri.TryCreate(AiEndpoint, UriKind.Absolute, out var ai) && ai.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(ai.UserInfo)))
+                errors[nameof(AiEndpoint)] = ["An absolute https:// endpoint is required."];
+            if (string.IsNullOrWhiteSpace(AiModel)) errors[nameof(AiModel)] = [AiProvider == AiProvider.AzureOpenAI ? "Enter the deployment name." : "Enter the model name."];
+            if (AiProvider == AiProvider.AzureOpenAI && string.IsNullOrWhiteSpace(AiApiVersion)) errors[nameof(AiApiVersion)] = ["Enter the API version, e.g. 2024-10-21."];
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(AiApiKeyName ?? "", "^[A-Za-z0-9_-]{1,64}$"))
+            errors[nameof(AiApiKeyName)] = ["Use letters, digits, '-' or '_' only."];
         return errors;
     }
 }

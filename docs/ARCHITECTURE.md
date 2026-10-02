@@ -212,6 +212,20 @@ flowchart LR
 - **Erasure** runs in one transaction: bulk-delete emails and notifications, delete activities, applications and the candidate through EF (attachments and stored files follow, and interviews, scorecards and offers cascade in the database), blank `EntityName`/`Changes` on every audit row for the collected ids, then add one anonymous `Erased` row. Retention erases eligible candidates one transaction at a time, at most 100 per run.
 - **Subject access export** streams `data.json` and the stored files into a ZIP. Interviewers are replaced with "Interviewer 1, 2…" to protect colleagues' identities while giving the candidate the substance of the feedback.
 
+### 6.5 Mock interviews and AI feedback
+
+- **Library as metadata.** Practice questions are records of the template object `mock_question`, so lists, forms, import, export, permissions and audit come for free. A job-specific question links to a job opening; blank means every job.
+- **Snapshot, not reference.** Inviting copies the chosen questions (with short ids `q1`, `q2`…) into `MockInterviews.Questions`, and answers live in `Answers` (both jsonb). Library edits never change a session in progress, and no internal ids reach the candidate. `Questions`, `Answers` and `AiFeedback` are excluded from the audit log (bulky personal data); status, review and AI state changes are audited.
+- **Same link model as offers** (§6.4): hashed 256-bit token, active tenants only, `Candidate` actor, separate rate limit (60/min, as answers are saved per question), one open session per application through a filtered unique index (`Status IN ('Sent','InProgress')`), lazy expiry. Tips are returned only for answered questions, and nothing the hiring team writes is ever in the public payload.
+- **AI review pipeline.** Requesting feedback (or submission, if the organisation chose automatic) sets `AiStatus = Pending`. `MockAiReviewService` polls only while `Ai:Enabled` is true; `MockAiReviewProcessor` leases each session (`AiLockedUntil`, safe on several instances), resolves the connection, calls `IMockInterviewReviewer`, validates the reply and notifies the sender. `ChatCompletionsReviewer` speaks OpenAI and Azure OpenAI Chat Completions with JSON output, per-attempt timeouts, and retries with exponential backoff (honouring `Retry-After`) for 408, 429, 5xx, timeouts and unparseable replies.
+- **Prompt design.** A short rule-based system prompt with a fixed JSON reply shape; candidate input is sent as compact JSON data (answers clipped to 3,000 characters, model answers to 1,500) and the prompt tells the model to ignore instructions inside answers. The organisation's guidance is appended but can't change the rules or format. Replies are validated: unknown question ids dropped, scores clamped to 1–5, text trimmed. No names, emails or ids are sent.
+- **Configuration split.** Server: `Ai:Enabled` (kill switch) and `Ai:Keys:<name>` (secret). Platform settings: provider, HTTPS endpoint, model/deployment, API version, key *name*, timeout, retries, output tokens, temperature. Organisation: opt-in, trigger and guidance. Organisations can't point the platform at their own endpoints (no SSRF).
+
+### 6.6 Theming
+
+- One Material 3 theme with `theme-type: color-scheme`: every Material token and the app's semantic tokens (`--crm-success`, `--crm-warning`, `--crm-info`, `--crm-ai-surface`…) use CSS `light-dark()`, and `ThemeService` only toggles `color-scheme` on `<html>`. No duplicated stylesheets, and components never hard-code colours.
+- The preference (System/Light/Dark) is a `linkedSignal` seeded from the signed-in user (`UserInfo.theme`), falling back to the device's saved choice, so public pages and the sign-in screen open in the right theme; changes are saved with `PUT /api/auth/me/preferences`.
+
 ## 7. Frontend design
 
 - **Metadata-driven UI.** `MetadataService` exposes labels, icons, fields, stages, picklists and currency as signals. Navigation, list columns, filters, forms, detail views, stage paths and boards are all generated from it.
@@ -276,3 +290,7 @@ Residual risks:
 | ADR-26 | **Offer acceptance through a hashed capability link** with a typed-name signature | Candidate accounts (sign-up friction for a one-off decision); a third-party e-signature service (outbound calls, cost; kept for the backlog) |
 | ADR-27 | **Erasure deletes and anonymises in place**, keeping an anonymous audit trail | Soft delete (data still held, so not erasure); deleting audit rows (loses the record that changes and the erasure happened) |
 | ADR-28 | **Retention is previewed and run by an administrator**, not on a timer | Automatic scheduled deletion (an irreversible mistake affects many people at once; can be added once customers trust the preview) |
+| ADR-29 | **Mock interview questions snapshotted into the session as JSON** | A join table to library records (library edits would change sessions in flight; internal ids exposed to candidates); a separate answers table (one write per answer either way, more joins) |
+| ADR-30 | **AI provider configured per platform with three switches** (server, platform connection, organisation opt-in); keys only in server configuration | Per-organisation endpoints and keys (SSRF risk, secrets in the database); a single on/off flag (no way for one organisation to decline) |
+| ADR-31 | **AI review runs in the background with a lease**, never in the request | Calling the model while the recruiter waits (slow, ties up request threads, no retry); a message broker (more infrastructure for low volume) |
+| ADR-32 | **Dark mode through `light-dark()` tokens and `color-scheme`** | Two compiled themes swapped by class (double CSS, drift between them); per-component dark overrides (easy to miss) |

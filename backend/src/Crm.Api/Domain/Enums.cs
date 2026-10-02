@@ -36,6 +36,18 @@ public enum OfferStatus { Draft, Sent, Accepted, Declined, Withdrawn, Expired }
 
 public enum PayPeriod { Year, Month, Hour }
 
+/// <summary>Sent and InProgress are open (one per application); the others are final.</summary>
+public enum MockInterviewStatus { Sent, InProgress, Submitted, Expired, Withdrawn }
+
+/// <summary>Pending reviews are picked up by the background reviewer; nothing is sent to a model until one is requested.</summary>
+public enum AiReviewStatus { NotRequested, Pending, Completed, Failed }
+
+public enum AiProvider { None, OpenAI, AzureOpenAI }
+
+public enum AiReviewTrigger { Manual, OnSubmit }
+
+public enum ThemePreference { System, Light, Dark }
+
 /// <summary>Erased: a person's data was removed for privacy (request or retention); the entry itself holds no personal data.</summary>
 public enum AuditAction { Created, Updated, Deleted, Exported, Erased }
 

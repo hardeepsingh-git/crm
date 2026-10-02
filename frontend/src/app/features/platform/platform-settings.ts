@@ -9,7 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { CrmApi } from '../../core/api';
-import { EmailProvider, PlatformSettings, PlatformSettingsView, SmsProvider, VerificationChannel } from '../../core/models';
+import { AiProvider, EmailProvider, PlatformSettings, PlatformSettingsView, SmsProvider, VerificationChannel } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 
 /** Platform-wide feature flags and messaging providers. Secrets stay in server configuration and are only reported as set/not set. */
@@ -112,6 +112,46 @@ import { NotifyService } from '../../core/notify.service';
           </div>
         </mat-card-content>
       </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>AI provider (mock interview feedback)</mat-card-title></mat-card-header>
+        <mat-card-content class="form-grid">
+          <p class="span-2 muted">
+            <mat-icon inline>{{ view.value()?.aiServerEnabled ? 'check_circle' : 'block' }}</mat-icon>
+            AI feedback is {{ view.value()?.aiServerEnabled ? 'allowed' : 'switched off' }} on this server (<code>Ai:Enabled</code>).
+            Nothing is sent to a model unless this is on, a provider is set here, and an organisation opts in.
+          </p>
+          <mat-form-field appearance="outline" class="span-2">
+            <mat-label>Provider</mat-label>
+            <mat-select formControlName="aiProvider">
+              <mat-option value="None">Not configured</mat-option>
+              <mat-option value="OpenAI">OpenAI or compatible (Chat Completions)</mat-option>
+              <mat-option value="AzureOpenAI">Azure OpenAI</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (form.controls.aiProvider.value !== 'None') {
+            <mat-form-field appearance="outline" class="span-2">
+              <mat-label>Endpoint</mat-label>
+              <input matInput formControlName="aiEndpoint" [placeholder]="form.controls.aiProvider.value === 'AzureOpenAI' ? 'https://my-resource.openai.azure.com' : 'https://api.openai.com/v1'" />
+              <mat-hint>HTTPS only</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>{{ form.controls.aiProvider.value === 'AzureOpenAI' ? 'Deployment' : 'Model' }}</mat-label><input matInput formControlName="aiModel" /></mat-form-field>
+            @if (form.controls.aiProvider.value === 'AzureOpenAI') {
+              <mat-form-field appearance="outline"><mat-label>API version</mat-label><input matInput formControlName="aiApiVersion" placeholder="2024-10-21" /></mat-form-field>
+            }
+            <mat-form-field appearance="outline"><mat-label>Key name</mat-label><input matInput formControlName="aiApiKeyName" /><mat-hint>Reads Ai:Keys:&lt;name&gt;</mat-hint></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Timeout (seconds)</mat-label><input matInput type="number" min="5" max="120" formControlName="aiTimeoutSeconds" /></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Retries</mat-label><input matInput type="number" min="0" max="5" formControlName="aiMaxRetries" /></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Max output tokens</mat-label><input matInput type="number" min="200" max="4000" formControlName="aiMaxOutputTokens" /></mat-form-field>
+            <mat-form-field appearance="outline"><mat-label>Temperature</mat-label><input matInput type="number" min="0" max="1" step="0.1" formControlName="aiTemperature" /><mat-hint>Low = consistent scoring</mat-hint></mat-form-field>
+            <p class="span-2 muted">
+              <mat-icon inline>{{ view.value()?.aiKeyConfigured ? 'check_circle' : 'info' }}</mat-icon>
+              API key {{ view.value()?.aiKeyConfigured ? 'is set' : 'is not set' }} in server configuration
+              (<code>Ai:Keys:{{ form.controls.aiApiKeyName.value || 'Default' }}</code>). It is never stored in the database.
+            </p>
+          }
+        </mat-card-content>
+      </mat-card>
     </form>
   `,
   styles: `
@@ -151,6 +191,15 @@ export class PlatformSettingsPage {
     smsSenderId: [''],
     smsAuthHeader: ['Authorization'],
     smsAuthScheme: ['Bearer'],
+    aiProvider: ['None' as AiProvider],
+    aiEndpoint: [''],
+    aiModel: [''],
+    aiApiVersion: [''],
+    aiApiKeyName: ['Default', [Validators.required, Validators.pattern(/^[A-Za-z0-9_-]{1,64}$/)]],
+    aiTimeoutSeconds: [30, [Validators.min(5), Validators.max(120)]],
+    aiMaxRetries: [2, [Validators.min(0), Validators.max(5)]],
+    aiMaxOutputTokens: [1200, [Validators.min(200), Validators.max(4000)]],
+    aiTemperature: [0.2, [Validators.min(0), Validators.max(1)]],
   });
 
   constructor() {
@@ -180,6 +229,14 @@ export class PlatformSettingsPage {
       smsGatewayUrl: blankToNull(v.smsGatewayUrl),
       smsSenderId: blankToNull(v.smsSenderId),
       smsAuthScheme: v.smsAuthScheme.trim(),
+      aiEndpoint: blankToNull(v.aiEndpoint),
+      aiModel: blankToNull(v.aiModel),
+      aiApiVersion: blankToNull(v.aiApiVersion),
+      aiApiKeyName: v.aiApiKeyName.trim(),
+      aiTimeoutSeconds: Number(v.aiTimeoutSeconds),
+      aiMaxRetries: Number(v.aiMaxRetries),
+      aiMaxOutputTokens: Number(v.aiMaxOutputTokens),
+      aiTemperature: Number(v.aiTemperature),
     };
     this.saving.set(true);
     this.api.savePlatformSettings(settings).subscribe({
@@ -215,6 +272,8 @@ export class PlatformSettingsPage {
 
   private toForm(s: PlatformSettings) {
     return { ...s, smtpHost: s.smtpHost ?? '', smtpUsername: s.smtpUsername ?? '', emailFromAddress: s.emailFromAddress ?? '',
-      smsGatewayUrl: s.smsGatewayUrl ?? '', smsSenderId: s.smsSenderId ?? '' };
+      smsGatewayUrl: s.smsGatewayUrl ?? '', smsSenderId: s.smsSenderId ?? '', aiProvider: s.aiProvider ?? 'None', aiEndpoint: s.aiEndpoint ?? '',
+      aiModel: s.aiModel ?? '', aiApiVersion: s.aiApiVersion ?? '', aiApiKeyName: s.aiApiKeyName ?? 'Default', aiTimeoutSeconds: s.aiTimeoutSeconds ?? 30,
+      aiMaxRetries: s.aiMaxRetries ?? 2, aiMaxOutputTokens: s.aiMaxOutputTokens ?? 1200, aiTemperature: s.aiTemperature ?? 0.2 };
   }
 }

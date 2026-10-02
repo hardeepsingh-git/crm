@@ -32,7 +32,9 @@ public record UpdateTenantRequest(
     [Required, StringLength(3, MinimumLength = 3)] string Currency,
     TenantStatus Status);
 
-public record PlatformSettingsView(PlatformSettings Settings, bool SmtpPasswordConfigured, bool SmsApiKeyConfigured);
+/// <param name="AiServerEnabled">The server-side switch <c>Ai:Enabled</c>; AI feedback never runs while it's off.</param>
+public record PlatformSettingsView(
+    PlatformSettings Settings, bool SmtpPasswordConfigured, bool SmsApiKeyConfigured, bool AiServerEnabled = false, bool AiKeyConfigured = false);
 
 public record TestMessageRequest([Required, MaxLength(256)] string To);
 
@@ -110,6 +112,7 @@ public sealed partial class TenantService(
         await db.InterviewParticipants.Where(x => interviewIds.Contains(x.InterviewId)).ExecuteDeleteAsync(ct);
         await db.Interviews.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.Offers.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
+        await db.MockInterviews.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.OutboundEmails.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.ScheduledRuleRuns.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
         await db.EmailTemplates.IgnoreQueryFilters().Where(x => x.TenantId == tenantId).ExecuteDeleteAsync(ct);
@@ -179,7 +182,8 @@ public static class TenantEndpoints
     }
 
     private static PlatformSettingsView View(PlatformSettings s, IConfiguration config) =>
-        new(s, !string.IsNullOrEmpty(config["Email:SmtpPassword"]), !string.IsNullOrEmpty(config["Sms:ApiKey"]));
+        new(s, !string.IsNullOrEmpty(config["Email:SmtpPassword"]), !string.IsNullOrEmpty(config["Sms:ApiKey"]),
+            config.GetValue("Ai:Enabled", false), !string.IsNullOrEmpty(config[$"Ai:Keys:{s.AiApiKeyName}"]));
 
     private static async Task<Results<NoContent, ProblemHttpResult>> TestEmail(TestMessageRequest req, IEmailSender email, CancellationToken ct)
     {

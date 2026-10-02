@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-  Seeds realistic recruitment demo data (job openings, candidates, applications, interviews, scorecards and offers) into a tenant via the API.
+  Seeds realistic recruitment demo data (job openings, candidates, applications, interviews, scorecards, offers and mock interviews) into a tenant via the API.
 .DESCRIPTION
   Signs in as a tenant administrator and creates records through the normal API, so all validation, automation and
   permissions apply. Safe to re-run: candidates are matched by email and existing ones are reused, and it won't
-  create a duplicate application for the same candidate and job, or interviews or offers for an application that has some.
+  create a duplicate application for the same candidate and job, or interviews, offers or mock interviews for an application that has some.
   Records are owned by the signed-in admin, who is also the interviewer.
 .EXAMPLE
   ./scripts/seed-recruitment.ps1 -Email admin@hardeeporg.example
@@ -182,4 +182,32 @@ foreach ($app in @((Api GET '/api/records/application?pageSize=500').items | Whe
     $offers++
 }
 Write-Host "Offers: $offers new (accepted for hires, awaiting a reply at Offer)" -ForegroundColor Cyan
+
+# ---- Mock interviews: starter question library; a completed practice round at Interview, one waiting at Screening ----
+$mocks = 0
+if ($meta.objects | Where-Object key -eq 'mock_question') {
+    $added = (Api POST '/api/mock-interviews/library/starter').added
+    Write-Host "Practice questions: $added starter questions added" -ForegroundColor Cyan
+    $answers = 'I led a migration that cut page load times by 40% by profiling, caching and fixing slow queries.',
+        'I listened to their concerns, agreed on the shared goal and proposed a smaller first step we could both support.',
+        'I break the work into impact versus urgency, agree trade-offs with stakeholders and protect focus time.'
+    $apps = @((Api GET '/api/records/application?pageSize=500').items)
+    foreach ($app in @(($apps | Where-Object stage -eq 'interview' | Select-Object -First 2) + ($apps | Where-Object stage -eq 'screening' | Select-Object -First 1))) {
+        if (@((Api GET "/api/mock-interviews?applicationId=$($app.id)").items).Count -gt 0) { continue }
+        $questions = @((Api GET "/api/mock-interviews/library?applicationId=$($app.id)").questions | Select-Object -First 4)
+        if ($questions.Count -eq 0) { break }
+        $sent = Api POST '/api/mock-interviews' @{ applicationId = $app.id; questionIds = @($questions.id); validDays = 14; message = 'A short practice round to help you prepare.' }
+        if ($app.stage -eq 'interview') {
+            $token = $sent.link.Substring($sent.link.LastIndexOf('/') + 1)
+            for ($q = 0; $q -lt 3; $q++) {
+                Invoke-RestMethod -Method Put -Uri "$BaseUrl/api/mock-response/$token/answers/q$($q + 1)" -ContentType 'application/json' `
+                    -Body (@{ text = $answers[$q]; rating = (Get-Random -Minimum 3 -Maximum 6); seconds = (Get-Random -Minimum 90 -Maximum 300) } | ConvertTo-Json) | Out-Null
+            }
+            Invoke-RestMethod -Method Post -Uri "$BaseUrl/api/mock-response/$token/submit" | Out-Null
+            Api PUT "/api/mock-interviews/$($sent.interview.id)/review" @{ readinessRating = (Get-Random -Minimum 3 -Maximum 6); notes = 'Clear, structured answers. Probe depth in the real interview.' } | Out-Null
+        }
+        $mocks++
+    }
+}
+Write-Host "Mock interviews: $mocks new (completed and reviewed at Interview, waiting at Screening)" -ForegroundColor Cyan
 Write-Host "`nDone. Open Applications, My interviews and Hiring analytics in the app to see the data." -ForegroundColor Green

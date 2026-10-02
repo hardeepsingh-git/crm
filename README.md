@@ -10,6 +10,8 @@ A configurable, **multi-tenant** relationship-management platform. It ships as a
 - **Careers page and export**: a public job board per recruitment organisation where candidates apply with their CV straight into the job's pipeline, and CSV export of any list (filtered, permission-aware, audited).
 - **Interviews and hiring analytics**: schedule interviews with interviewers' calendars, notifications, candidate invitations and .ics files; blind scorecards on configurable criteria; *My interviews*; and a hiring funnel with time to hire, source quality and per-job pipelines.
 - **Offers and candidate privacy**: draft offers from a letter template, send the candidate a secure link to accept (typed-name signature with evidence) or decline, and track acceptance; download or erase a candidate's data on request, and preview and apply a retention policy.
+- **Mock interviews**: a per-organisation practice-question library; from an application, a secure no-account link where candidates rehearse written answers, see tips after each one and submit for the hiring team to review. AI feedback (scores, strengths, areas to improve) is built in and switched on by configuration only; it never sends candidate identities.
+- **Appearance**: light, dark or match-device theme, saved per user, with accessible status colours in both.
 - **Governance**: field-level audit trail, per-record history and in-app notifications.
 - **Files and data loading**: attach résumés, contracts and other documents to any record, and bulk-load custom-object data from CSV with a validated, all-or-nothing import.
 - **Recruitment (ATS)**: a talent pool of candidates, applications that link a candidate to a job and move through hiring stages, a pipeline per job, and unique candidate emails. Related lists on every record page show what links to it. Existing recruitment tenants are upgraded automatically and additively.
@@ -43,9 +45,9 @@ To look up a password: `dotnet user-secrets list` in `backend/src/Crm.Api`. Don'
 
 ## Tests
 ```powershell
-cd backend;  dotnet test                    # 84 API integration tests (stop the API first)
-cd frontend; npx ng test --watch=false      # 76 UI unit tests
-./scripts/smoke-test.ps1                    # 64 live end-to-end checks against PostgreSQL (API running)
+cd backend;  dotnet test                    # 89 API integration tests (stop the API first)
+cd frontend; npx ng test --watch=false      # 84 UI unit tests
+./scripts/smoke-test.ps1                    # 66 live end-to-end checks against PostgreSQL (API running)
 ```
 
 ## Documentation
@@ -63,6 +65,6 @@ cd frontend; npx ng test --watch=false      # 76 UI unit tests
 ```
 backend/   ASP.NET Core API (src/Crm.Api), integration tests, database/crm-schema.sql
 frontend/  Angular app (metadata-driven UI, settings hub, platform console), nginx config
-scripts/   start-dev.ps1 (run locally), smoke-test.ps1 (live end-to-end test), seed-recruitment.ps1 (demo jobs, candidates, applications, interviews and offers for a recruitment organisation), backup-db.ps1 (nightly pg_dump with retention)
+scripts/   start-dev.ps1 (run locally), smoke-test.ps1 (live end-to-end test), seed-recruitment.ps1 (demo jobs, candidates, applications, interviews, offers and mock interviews for a recruitment organisation), backup-db.ps1 (nightly pg_dump with retention)
 docs/      Documentation
 ```

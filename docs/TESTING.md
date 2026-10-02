@@ -7,14 +7,14 @@
 | API integration | xUnit, `WebApplicationFactory`, SQLite in-memory | Full HTTP pipeline: auth, tenancy, RBAC, validation, customization, automation, audit | `backend/tests/Crm.Api.Tests` |
 | UI unit | Vitest, `HttpTestingController` | Session handling, permission resolution, metadata, custom-field forms, list helpers | `frontend/src/**/*.spec.ts` |
 | Build gates | `ng build` (AOT, strict templates), `dotnet build` | Type safety | CI |
-| Live end-to-end | `scripts/smoke-test.ps1` (64 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, recruitment (email, careers, export, interviews, analytics, offers, privacy), clean-up | `scripts/` |
+| Live end-to-end | `scripts/smoke-test.ps1` (66 checks) | Running API + **PostgreSQL**: every module, the sales workflow, RBAC, tenant provisioning, JSONB filters, automation, audit, isolation, CSV import, attachments, password reset, self-registration and approval, recruitment (email, careers, export, interviews, analytics, offers, privacy), clean-up | `scripts/` |
 | Browser end-to-end | Manual/Playwright checklist (§4) | Settings screens, custom objects, role matrix, restricted users, tenant lifecycle | UAT |
 
 The SQLite tests exercise the same EF model and query filters. PostgreSQL-specific behaviour (`jsonb @>` filters) is covered by the live smoke test.
 
 ## 2. Automated test inventory
 
-### API (`dotnet test`): 84 tests
+### API (`dotnet test`): 89 tests
 | Test | Covers |
 |---|---|
 | `Liveness_endpoint_is_anonymous` | NFR-4 |
@@ -91,12 +91,17 @@ The SQLite tests exercise the same EF model and query filters. PostgreSQL-specif
 | `Candidate_data_export_contains_their_records_and_files_without_naming_interviewers` | PRIV-1 |
 | `Erasing_a_candidate_removes_their_data_and_anonymises_the_audit_trail` | PRIV-2 |
 | `Retention_policy_previews_then_erases_only_inactive_closed_candidates` | PRIV-3 |
+| `Mock_interviews_are_sent_answered_submitted_and_reviewed` | MOCK-1, MOCK-2, MOCK-3, MOCK-4, MOCK-5, MOCK-6, MOCK-8 |
+| `Mock_interviews_need_edit_access_and_can_be_resent_withdrawn_or_expire` | MOCK-2, MOCK-6 |
+| `Users_keep_their_theme_preference` | UX-1 |
+| `Ai_feedback_runs_only_when_connected_and_opted_in_and_never_sends_identities` (`AiCrmApiFactory`: model replaced by a recorded HTTP exchange) | MOCK-7 |
+| `Prompt_is_compact_and_replies_are_validated` | MOCK-7 |
 
 The dispatcher and scheduler are switched off in tests (`BackgroundJobs:Enabled=false`) and called directly with explicit times, so retries and due dates are tested without waiting.
 
 The registration tests replace the email and SMS senders with an in-memory capture (`CapturedMessages`), so they read the real codes that were sent.
 
-### UI (`ng test`): 76 tests
+### UI (`ng test`): 84 tests
 | Spec | Tests |
 |---|---|
 | `auth.spec.ts` (10) | login stores session · metadata cleared when the session ends · bearer token added · refresh once on 401 and retry · session cleared on rejected refresh · session kept on 429 · restore keeps the token when the server is down · guard restores the session · refresh serialized across tabs using the latest stored token · no token to non-API URLs |
@@ -109,14 +114,15 @@ The registration tests replace the email and SMS senders with an in-memory captu
 | `phase3.spec.ts` (7) | job facts and applicant-friendly error messages · careers page lists jobs with links · unavailable careers page · application checked in the browser, then sent as multipart with CV, consent and empty honeypot · oversized CV refused before upload, server errors shown · export downloads the filtered list (paging dropped) and explains a too-large export · careers settings saved |
 | `phase4.spec.ts` (8) | feedback offered only to interviewers after the start · interviews panel: schedule button with edit access, meeting link, blind-feedback note, visible scorecards · schedule dialog: required date, payload with ISO time and interviewers, warning when the invitation can't be sent · reschedule with PUT keeps interviewers · scorecard drops retired criteria and submits ratings · My interviews sections · analytics: KPIs, funnel, sources, refetch on filters · interview criteria picklist only for recruitment |
 | `phase5.spec.ts` (8) | open offers, pay periods, typed-name matching, download file names, answer errors · offers panel: status, signature evidence, *Make offer* only without an open offer · offer dialog: suggested terms, currency check, payload · candidate page: letter and terms, client-side checks, accept, then accepted view · expired offer, invalid link and server refusal · erase dialog enabled only by the typed name · retention preview and switching it off · Privacy settings only for recruitment administrators |
+| `phase6.spec.ts` (8) | status labels, tones, score bands, timer and theme resolution · theme follows the signed-in user and saves a new choice · mock panel: status, AI score, readiness, actions · invite: first five pre-selected, library order kept, payload · empty library offers starter questions · review: answers, AI feedback, ask again, save review · candidate page: intro, save answer, tips, navigate, submit, recap · expired session hidden; settings card and AI opt-in payload |
 
-### Live smoke test (`scripts/smoke-test.ps1`): 64 checks
+### Live smoke test (`scripts/smoke-test.ps1`): 66 checks
 1. Health and authentication (7)
 2. Read every module with seeded data (11)
 3. End-to-end sales workflow with tagged records (11)
 4. Standard User permissions (5)
 5. Clean-up (1)
-6. Platform (29): remove test tenants left by interrupted runs · provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · provision a Recruitment tenant with demo jobs, candidates and applications · duplicate candidate email refused (any case) and flagged within an import file · pipeline per job (board and list filtered by job or candidate) · email a candidate from a template, refused for an outside address, delivered by the background dispatcher and logged on the timeline · date-based rule validated and saved · careers page switched on, anonymous application with a PDF CV lands in the job's pipeline, a script upload is refused · CSV export of that candidate's applications, with names and an audit entry · schedule an interview with a candidate invitation, next-interview date, My interviews and a valid .ics, then a scorecard (out-of-range rating refused) · hiring analytics funnel, sources, jobs and this week's interviews · an offer drafted, sent, refused with the wrong signature, accepted with the candidate's name, with the link kept off the timeline · a candidate's data exported as a ZIP, then erased (wrong confirmation refused, audit anonymised) and a retention preview · delete the recruitment tenant · suspend and delete (removes the tenant's files too)
+6. Platform (31): remove test tenants left by interrupted runs · provision a Help Desk tenant with demo data · its own configuration · JSONB custom-field filter · automation task and notification · stage change and audit · tenant isolation · custom field on a standard object · CSV import (bad row reported, then all-or-nothing import) · attachment upload/download/delete and a refused script upload · forgot-password gives the same 202 for known and unknown emails · self-registration needs the platform switch and the organisation opt-in · registered user blocked (403) and admins notified · approval needs a role, then sign-in works · restore platform settings · provision a Recruitment tenant with demo jobs, candidates and applications · duplicate candidate email refused (any case) and flagged within an import file · pipeline per job (board and list filtered by job or candidate) · email a candidate from a template, refused for an outside address, delivered by the background dispatcher and logged on the timeline · date-based rule validated and saved · careers page switched on, anonymous application with a PDF CV lands in the job's pipeline, a script upload is refused · CSV export of that candidate's applications, with names and an audit entry · schedule an interview with a candidate invitation, next-interview date, My interviews and a valid .ics, then a scorecard (out-of-range rating refused) · hiring analytics funnel, sources, jobs and this week's interviews · an offer drafted, sent, refused with the wrong signature, accepted with the candidate's name, with the link kept off the timeline · a mock interview from the library: answered (tips revealed), submitted, AI reported off, reviewed, review and link kept from the candidate and the timeline · theme preference saved and reset · a candidate's data exported as a ZIP, then erased (wrong confirmation refused, audit anonymised) and a retention preview · delete the recruitment tenant · suspend and delete (removes the tenant's files too)
 
 The registration checks temporarily switch on global self-registration (with verification off) and always put the original platform settings back.
 
@@ -179,3 +185,10 @@ VS Code tasks: *CRM: Backend tests*, *CRM: Frontend tests*, *CRM: Smoke test (AP
 | 45 | Send a new link, then open the old one; withdraw an offer | Old link says it isn't valid; withdrawn link too; a note with the reason is on the timeline |
 | 46 | Candidate → **Privacy → Download their data**, then **Erase candidate** | ZIP with data.json and files; erase only after typing the name; the candidate and their applications are gone; the audit log shows *[erased]* and one *Erased* entry |
 | 47 | **Settings → Privacy** → 12 months | Preview lists only inactive, closed, never-hired candidates; *Erase now* asks for confirmation |
+| 48 | **Settings → Mock interviews → Add starter questions**, then open the library and link one question to a job | 10 questions added once; the job-specific question is offered first for that job only |
+| 49 | Application → **Mock interviews → Invite to practise** → keep 5 questions, 7 days → Send | Link shown once; candidate emailed; timeline shows `[link sent to the candidate]` |
+| 50 | Open the link in a private window; answer two questions, leave, come back, submit | Tips appear after each answer; answers survive the reload; recap with tips after submitting; the team is notified |
+| 51 | **Review** the submission: readiness 4 and notes; reload the candidate page | Review saved; nothing from the review appears on the candidate page |
+| 52 | Send a new link, then withdraw; open both links | Old link and withdrawn link are not valid |
+| 53 | With `Ai:Enabled` off, open a submitted session | *Get AI feedback* disabled with the reason; nothing is sent |
+| 54 | Toolbar → **Appearance → Dark**, sign out, sign in on another browser | Whole app (including dialogs, chips and the candidate pages) readable in dark; choice follows the user |

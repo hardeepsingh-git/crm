@@ -20,6 +20,7 @@ import { AuthService } from '../core/auth.service';
 import { MetadataService } from '../core/metadata.service';
 import { NotificationItem, NotificationList } from '../core/models';
 import { ChangePasswordDialog } from '../features/auth/change-password-dialog';
+import { ThemeToggle } from '../shared/theme-toggle';
 
 interface NavItem {
   path: string;
@@ -31,12 +32,13 @@ const NOTIFICATION_POLL_MS = 60_000;
 
 @Component({
   selector: 'app-shell',
-  imports: [DatePipe, RouterOutlet, RouterLink, RouterLinkActive, MatSidenavModule, MatToolbarModule, MatListModule, MatIconModule, MatButtonModule, MatMenuModule, MatDividerModule, MatBadgeModule, MatTooltipModule],
+  imports: [DatePipe, RouterOutlet, RouterLink, RouterLinkActive, MatSidenavModule, MatToolbarModule, MatListModule, MatIconModule, MatButtonModule, MatMenuModule, MatDividerModule, MatBadgeModule, MatTooltipModule, ThemeToggle],
   template: `
+    <a class="skip-link" href="#main" (click)="skip($event)">Skip to content</a>
     <mat-sidenav-container class="shell">
       <mat-sidenav #nav [mode]="isMobile() ? 'over' : 'side'" [opened]="!isMobile()" class="sidenav">
-        <div class="brand"><mat-icon>hub</mat-icon> <span class="brand-name">{{ meta.tenantName() || 'CRM' }}</span></div>
-        <mat-nav-list>
+        <div class="brand"><span class="logo" aria-hidden="true"><mat-icon>hub</mat-icon></span> <span class="brand-name">{{ meta.tenantName() || 'CRM' }}</span></div>
+        <mat-nav-list aria-label="Main">
           @for (item of navItems(); track item.path) {
             <a mat-list-item [routerLink]="item.path" routerLinkActive #rla="routerLinkActive" [activated]="rla.isActive"
               (click)="isMobile() && nav.close()">
@@ -68,6 +70,7 @@ const NOTIFICATION_POLL_MS = 60_000;
             <button mat-icon-button (click)="nav.toggle()" aria-label="Toggle navigation"><mat-icon>menu</mat-icon></button>
           }
           <span class="spacer"></span>
+          <app-theme-toggle />
           <button mat-icon-button [matMenuTriggerFor]="notificationMenu" aria-label="Notifications" matTooltip="Notifications">
             <mat-icon [matBadge]="unread() || null" matBadgeColor="warn" matBadgeSize="small" aria-hidden="false">notifications</mat-icon>
           </button>
@@ -88,8 +91,8 @@ const NOTIFICATION_POLL_MS = 60_000;
               <div class="menu-empty muted">You're all caught up.</div>
             }
           </mat-menu>
-          <button mat-button [matMenuTriggerFor]="userMenu">
-            <mat-icon>account_circle</mat-icon> {{ auth.user()?.fullName }}
+          <button mat-button [matMenuTriggerFor]="userMenu" class="user">
+            <span class="avatar" aria-hidden="true">{{ initials() }}</span> <span class="user-name">{{ auth.user()?.fullName }}</span>
           </button>
           <mat-menu #userMenu="matMenu">
             <div class="menu-info">
@@ -102,7 +105,7 @@ const NOTIFICATION_POLL_MS = 60_000;
             <button mat-menu-item (click)="auth.logout()"><mat-icon>logout</mat-icon> Sign out</button>
           </mat-menu>
         </mat-toolbar>
-        <main class="content">
+        <main class="content" id="main" tabindex="-1">
           <router-outlet />
         </main>
       </mat-sidenav-content>
@@ -110,11 +113,20 @@ const NOTIFICATION_POLL_MS = 60_000;
   `,
   styles: `
     .shell { height: 100vh; }
-    .sidenav { width: 232px; border-right: 1px solid var(--mat-sys-outline-variant); }
-    .brand { display: flex; align-items: center; gap: 8px; padding: 20px 16px; font: var(--mat-sys-title-large); color: var(--mat-sys-primary); }
+    .sidenav { width: 240px; border-right: 1px solid var(--mat-sys-outline-variant); background: var(--mat-sys-surface-container-low);
+      --mat-list-active-indicator-color: var(--mat-sys-secondary-container); --mat-list-active-indicator-shape: 24px; }
+    .sidenav mat-nav-list { padding: 0 8px; }
+    .sidenav a[mat-list-item] { border-radius: 24px; margin-bottom: 2px; }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 20px 16px; font: var(--mat-sys-title-large); color: var(--mat-sys-on-surface); }
+    .logo { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 12px; flex: none;
+      background: linear-gradient(135deg, var(--mat-sys-primary), var(--mat-sys-tertiary)); color: var(--mat-sys-on-primary); }
     .brand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .toolbar { position: sticky; top: 0; z-index: 2; background: var(--mat-sys-surface); border-bottom: 1px solid var(--mat-sys-outline-variant); }
-    .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    .toolbar { position: sticky; top: 0; z-index: 2; gap: 4px; background: color-mix(in srgb, var(--mat-sys-surface) 88%, transparent);
+      backdrop-filter: blur(8px); border-bottom: 1px solid var(--mat-sys-outline-variant); }
+    .content { padding: 24px; max-width: 1400px; margin: 0 auto; outline: none; }
+    .avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 14px; font-size: 12px; font-weight: 600;
+      background: var(--mat-sys-primary-container); color: var(--mat-sys-on-primary-container); margin-right: 6px; }
+    @media (max-width: 600px) { .user-name { display: none; } .content { padding: 16px; } }
     .menu-info { padding: 8px 16px 12px; }
     .menu-header { display: flex; align-items: center; padding: 4px 8px 4px 16px; min-width: 320px; }
     .menu-empty { padding: 16px; }
@@ -156,6 +168,16 @@ export class Shell {
   });
   readonly unread = computed(() => (this.notifications.hasValue() ? this.notifications.value().unreadCount : 0));
   readonly notificationItems = computed(() => (this.notifications.hasValue() ? this.notifications.value().items : []));
+  readonly initials = computed(() => {
+    const u = this.auth.user();
+    return ((u?.firstName?.[0] ?? '') + (u?.lastName?.[0] ?? '')).toUpperCase() || '?';
+  });
+
+  /** Moves keyboard focus past the navigation without changing the route. */
+  skip(event: Event): void {
+    event.preventDefault();
+    document.getElementById('main')?.focus();
+  }
 
   openNotification(n: NotificationItem): void {
     const go = () => n.link && this.router.navigateByUrl(n.link);

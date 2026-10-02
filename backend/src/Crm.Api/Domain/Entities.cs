@@ -33,6 +33,11 @@ public class Tenant
     public string? CareersIntro { get; set; }
     /// <summary>Candidates with no open or hired application and no changes for this long can be erased; null = no policy.</summary>
     public int? CandidateRetentionMonths { get; set; }
+    /// <summary>Organisation opt-in for AI feedback on mock interviews; the connection itself is platform configuration.</summary>
+    public bool MockAiReviewEnabled { get; set; }
+    public AiReviewTrigger MockAiTrigger { get; set; } = AiReviewTrigger.Manual;
+    /// <summary>The organisation's own grading guidance, added to the model's instructions.</summary>
+    public string? MockAiInstructions { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -46,6 +51,7 @@ public class AppUser : IdentityUser<Guid>, ITenantEntity
     /// <summary>Can manage tenants across the whole platform.</summary>
     public bool IsPlatformAdmin { get; set; }
     public RegistrationStatus RegistrationStatus { get; set; } = RegistrationStatus.Approved;
+    public ThemePreference ThemePreference { get; set; } = ThemePreference.System;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string FullName => $"{FirstName} {LastName}".Trim();
 }
@@ -436,6 +442,45 @@ public class Offer : AuditableEntity
     public string? ResponseIp { get; set; }
     public string? ResponseUserAgent { get; set; }
     public string? DeclineReason { get; set; }
+}
+
+/// <summary>
+/// A practice interview a candidate takes on their own through a single-purpose link. The questions are copied from the
+/// organisation's library when sent, so later library edits don't change what the candidate saw.
+/// </summary>
+public class MockInterview : AuditableEntity
+{
+    public Guid ApplicationId { get; set; }
+    public CustomRecord? Application { get; set; }
+    public MockInterviewStatus Status { get; set; } = MockInterviewStatus.Sent;
+    public string JobTitle { get; set; } = "";
+    /// <summary>Optional note from the recruiter, shown to the candidate.</summary>
+    public string? Message { get; set; }
+    /// <summary>JSON array of <c>MockQuestion</c>.</summary>
+    public string Questions { get; set; } = "[]";
+    /// <summary>JSON object: question id -> <c>MockAnswer</c>.</summary>
+    public string Answers { get; set; } = "{}";
+    public DateTime ExpiresAt { get; set; }
+    public string? TokenHash { get; set; }
+    public Guid SentById { get; set; }
+    public DateTime SentAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? SubmittedAt { get; set; }
+    /// <summary>Recruiter review; internal, never shown to the candidate.</summary>
+    public Guid? ReviewedById { get; set; }
+    public DateTime? ReviewedAt { get; set; }
+    public int? ReadinessRating { get; set; }
+    public string? ReviewNotes { get; set; }
+    public AiReviewStatus AiStatus { get; set; } = AiReviewStatus.NotRequested;
+    public DateTime? AiRequestedAt { get; set; }
+    public DateTime? AiReviewedAt { get; set; }
+    /// <summary>Lease so only one API instance reviews a session at a time.</summary>
+    public DateTime? AiLockedUntil { get; set; }
+    public string? AiModel { get; set; }
+    public decimal? AiScore { get; set; }
+    /// <summary>JSON <c>AiFeedback</c>.</summary>
+    public string? AiFeedback { get; set; }
+    public string? AiError { get; set; }
 }
 
 public class Notification : ITenantEntity

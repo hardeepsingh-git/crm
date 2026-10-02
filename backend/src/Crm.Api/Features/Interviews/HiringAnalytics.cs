@@ -20,10 +20,13 @@ public record JobRow(Guid Id, string Title, int Applications, int Open, int Hire
 /// <param name="AcceptanceRate">Accepted share of the offers candidates answered or let expire.</param>
 public record OfferStats(int Sent, int Accepted, int Declined, int Expired, int Pending, double? AcceptanceRate, double? AverageDaysToRespond);
 
+/// <param name="CompletionRate">Submitted share of the mock interviews sent (withdrawn ones excluded).</param>
+public record MockStats(int Sent, int Started, int Submitted, double? CompletionRate, double? AverageMinutes, double? AverageSelfRating, double? AverageReadiness);
+
 public record HiringAnalytics(
     int Days, int Applications, int Open, int Hired, int Rejected, double? AverageDaysToHire, double? MedianDaysToHire,
     IReadOnlyList<FunnelStage> Funnel, IReadOnlyList<SourceRow> Sources, IReadOnlyList<JobRow> Jobs,
-    int InterviewsNext7Days, int FeedbackOutstanding, OfferStats Offers);
+    int InterviewsNext7Days, int FeedbackOutstanding, OfferStats Offers, MockStats? Mock = null);
 
 /// <summary>Recruitment funnel, time to hire, sources and jobs for the applications the caller can read.</summary>
 public static class HiringAnalyticsEndpoints
@@ -125,6 +128,21 @@ public static class HiringAnalyticsEndpoints
         var offerStats = new OfferStats(offers.Count, accepted, declined, expired, offers.Count(o => o.Status == OfferStatus.Sent),
             Rate(accepted, accepted + declined + expired), responseDays.Count == 0 ? null : Math.Round(responseDays.Average(), 1));
 
+        var mocks = new List<(MockInterviewStatus Status, DateTime? StartedAt, DateTime? SubmittedAt, string Answers, int? Readiness)>();
+        foreach (var chunk in ids.Chunk(1000))
+            mocks.AddRange((await db.MockInterviews.AsNoTracking().Where(m => chunk.Contains(m.ApplicationId) && m.Status != MockInterviewStatus.Withdrawn)
+                .Select(m => new { m.Status, m.StartedAt, m.SubmittedAt, m.Answers, m.ReadinessRating }).ToListAsync(ct))
+                .Select(m => (m.Status, m.StartedAt, m.SubmittedAt, m.Answers, m.ReadinessRating)));
+        var submitted = mocks.Where(m => m.Status == MockInterviewStatus.Submitted).ToList();
+        var minutes = submitted.Where(m => m.StartedAt is not null && m.SubmittedAt is not null)
+            .Select(m => (m.SubmittedAt!.Value - m.StartedAt!.Value).TotalMinutes).ToList();
+        var selfRatings = submitted.SelectMany(m => Cf.Parse(m.Answers).Select(a => a.Value?["rating"]?.GetValueKind() == System.Text.Json.JsonValueKind.Number
+            ? (double?)a.Value!["rating"]!.GetValue<double>() : null)).OfType<double>().ToList();
+        var readiness = submitted.Where(m => m.Readiness is not null).Select(m => (double)m.Readiness!.Value).ToList();
+        var mockStats = new MockStats(mocks.Count, mocks.Count(m => m.StartedAt is not null), submitted.Count, Rate(submitted.Count, mocks.Count),
+            minutes.Count == 0 ? null : Math.Round(minutes.Average(), 1), selfRatings.Count == 0 ? null : Math.Round(selfRatings.Average(), 1),
+            readiness.Count == 0 ? null : Math.Round(readiness.Average(), 1));
+
         return TypedResults.Ok(new HiringAnalytics(
             days, apps.Count, apps.Count(a => a.ClosedAt == null), hiredCount,
             apps.Count(a => category.GetValueOrDefault(a.Stage) == StageCategory.Lost),
@@ -132,7 +150,7 @@ public static class HiringAnalyticsEndpoints
             toHire.Count == 0 ? null : Math.Round(toHire.Count % 2 == 1 ? toHire[toHire.Count / 2] : (toHire[toHire.Count / 2 - 1] + toHire[toHire.Count / 2]) / 2, 1),
             funnel, sources, jobs,
             interviews.Count(i => i.Status == InterviewStatus.Scheduled && i.ScheduledAt >= now && i.ScheduledAt < now.AddDays(7)),
-            interviews.Where(i => i.ScheduledAt < now).Sum(i => i.Pending), offerStats));
+            interviews.Where(i => i.ScheduledAt < now).Sum(i => i.Pending), offerStats, mockStats));
     }
 
     private static double? Rate(int part, int whole) => whole == 0 ? null : Math.Round((double)part / whole, 3);

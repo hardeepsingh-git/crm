@@ -335,7 +335,7 @@ if ($adminEmail -and $adminPassword) {
 
     # Recruitment (ATS) tenant: candidates, applications per job, unique emails, pipeline per job.
     $atsSlug = "$slug-ats"
-    Check 'Provision Recruitment tenant (template v6 with demo data)' {
+    Check 'Provision Recruitment tenant (template v7 with demo data)' {
         $script:atsTenant = Api POST '/api/platform/tenants' @{
             name = "E2E Recruiting $slug"; slug = $atsSlug; template = 'recruitment'; currency = 'USD'
             adminEmail = "admin@$atsSlug.test"; adminFirstName = 'Rita'; adminLastName = 'Cruiter'; adminPassword = 'Tenant#Pass123'; seedDemoData = $true
@@ -375,7 +375,7 @@ if ($adminEmail -and $adminPassword) {
     Check 'Email a candidate from a template; outbox delivers it and logs it on the timeline' {
         $templates = @(Api GET '/api/email/templates?objectKey=application' -Token $script:atsToken | ForEach-Object { $_ })
         $invite = $templates | Where-Object name -eq 'Interview invitation'
-        Assert ($templates.Count -eq 6 -and $null -ne $invite) "expected 6 templates, got $($templates.Count)"
+        Assert ($templates.Count -eq 7 -and $null -ne $invite) "expected 7 templates, got $($templates.Count)"
         $appId = $script:atsApplication.id
         $c = Api POST '/api/email/compose' @{ objectKey = 'application'; recordId = $appId; templateId = $invite.id } -Token $script:atsToken
         $to = "smoke.candidate@$atsSlug.test"
@@ -512,6 +512,39 @@ if ($adminEmail -and $adminPassword) {
         $stats = (Api GET '/api/recruiting/analytics?days=90' -Token $script:atsToken).offers
         Assert ($stats.accepted -ge 1) 'accepted offer not counted'
         "sent, signed and accepted; link kept off the timeline; acceptance rate $([math]::Round($stats.acceptanceRate * 100))%"
+    }
+    Check 'Mock interviews: invite from the library, candidate practises and submits, hiring team reviews' {
+        $appId = $script:atsApplication.id
+        $library = Api GET "/api/mock-interviews/library?applicationId=$appId" -Token $script:atsToken
+        $questions = @($library.questions | ForEach-Object { $_ })
+        Assert ($library.available -and $questions.Count -ge 3) "library has $($questions.Count) questions"
+        $sent = Api POST '/api/mock-interviews' @{ applicationId = $appId; questionIds = @($questions[0..2].id); validDays = 7; message = 'Smoke practice' } -Token $script:atsToken
+        Assert ($null -eq $sent.emailNote) "invitation not emailed: $($sent.emailNote)"
+        $token = $sent.link.Substring($sent.link.LastIndexOf('/') + 1)
+        $view = Api GET "/api/mock-response/$token" -Token $null
+        Assert ($view.status -eq 'Sent' -and @($view.questions).Count -eq 3 -and $null -eq $view.questions[0].guidance) 'candidate view wrong'
+        $saved = Api PUT "/api/mock-response/$token/answers/q1" @{ text = 'I led a migration that halved page load times.'; rating = 4; seconds = 120 } -Token $null
+        Assert ($saved.answered -eq 1 -and $saved.guidance) 'answer not saved or tips not revealed'
+        Api POST "/api/mock-response/$token/submit" -Token $null | Out-Null
+        $list = Api GET "/api/mock-interviews?applicationId=$appId" -Token $script:atsToken
+        $item = @($list.items)[0]
+        Assert ($item.status -eq 'Submitted' -and $item.answeredCount -eq 1) "status $($item.status)"
+        Assert (-not $list.aiAvailable -and $list.aiUnavailableReason) 'AI feedback should be off by default'
+        $reviewed = Api PUT "/api/mock-interviews/$($item.id)/review" @{ readinessRating = 4; notes = 'Smoke review' } -Token $script:atsToken
+        Assert ($reviewed.readinessRating -eq 4) 'review not saved'
+        $public = Invoke-WebRequest -Uri "$BaseUrl/api/mock-response/$token" -UseBasicParsing
+        Assert ($public.Content -notlike '*Smoke review*') 'internal review leaked to the candidate'
+        $mails = @((Api GET "/api/activities?customRecordId=$appId&type=Email" -Token $script:atsToken).items)
+        Assert (@($mails | Where-Object { $_.description -like "*$token*" }).Count -eq 0) 'practice link leaked onto the timeline'
+        $stats = (Api GET '/api/recruiting/analytics?days=90' -Token $script:atsToken).mock
+        Assert ($stats.submitted -ge 1) 'mock interview not counted'
+        "3 questions sent; answered, submitted and reviewed; AI off ($($list.aiUnavailableReason))"
+    }
+    Check 'Theme preference follows the user' {
+        Api PUT '/api/auth/me/preferences' @{ theme = 'Dark' } -Token $script:atsToken | Out-Null
+        Assert ((Api GET '/api/auth/me' -Token $script:atsToken).theme -eq 'Dark') 'theme not saved'
+        Api PUT '/api/auth/me/preferences' @{ theme = 'System' } -Token $script:atsToken | Out-Null
+        'Dark saved and reset to System'
     }
     Check 'Privacy: export a candidate''s data, erase them, retention preview' {
         $id = $script:careersCandidate.id

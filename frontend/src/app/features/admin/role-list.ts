@@ -98,10 +98,10 @@ const SCOPE_HELP: Record<PermissionScope, string> = {
     .matrix th { font-weight: 500; text-transform: capitalize; color: var(--mat-sys-on-surface-variant); }
     .matrix tr.wildcard td { font-weight: 600; background: var(--mat-sys-surface-container); }
     .matrix select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--mat-sys-outline-variant); background: var(--mat-sys-surface); color: inherit; min-width: 90px; }
-    .matrix select[data-scope='All'] { border-color: #2e7d32; }
-    .matrix select[data-scope='Group'] { border-color: #00838f; }
-    .matrix select[data-scope='Own'] { border-color: #ef6c00; }
-    .matrix select[data-scope='None'] { border-color: #c62828; }
+    .matrix select[data-scope='All'] { border-color: var(--crm-success); }
+    .matrix select[data-scope='Group'] { border-color: var(--crm-info); }
+    .matrix select[data-scope='Own'] { border-color: var(--crm-warning); }
+    .matrix select[data-scope='None'] { border-color: var(--mat-sys-error); }
     .matrix select[data-scope='Default'] { color: var(--mat-sys-on-surface-variant); }
     .admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 16px; }
     .small { font-size: 13px; }

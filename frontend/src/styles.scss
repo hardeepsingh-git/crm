@@ -1,13 +1,34 @@
 @use '@angular/material' as mat;
 
+// One theme, two colour schemes: Material tokens and our own use light-dark(), driven by color-scheme on <html>.
 html {
   color-scheme: light;
   @include mat.theme((
-    color: (primary: mat.$azure-palette, tertiary: mat.$violet-palette),
-    typography: (plain-family: 'Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif', brand-family: 'Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif'),
+    color: (primary: mat.$azure-palette, tertiary: mat.$violet-palette, theme-type: color-scheme),
+    typography: (plain-family: 'Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif', brand-family: 'Segoe UI Semibold, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif'),
     density: -1,
   ));
+  @include mat.card-overrides((outlined-container-shape: 16px));
+  @include mat.dialog-overrides((container-shape: 20px));
+
+  // Semantic colours (WCAG AA on their containers in both schemes).
+  --crm-success: light-dark(#1b6e2f, #7fd99a);
+  --crm-success-container: light-dark(#d8f3dc, #173d22);
+  --crm-on-success-container: light-dark(#0f4a1f, #b7f0c4);
+  --crm-warning: light-dark(#8a5300, #f5bd64);
+  --crm-warning-container: light-dark(#ffe9c7, #4a3209);
+  --crm-on-warning-container: light-dark(#5b3700, #ffdcaa);
+  --crm-info: light-dark(#1b4f9c, #a8c8ff);
+  --crm-info-container: light-dark(#dde8ff, #1a3460);
+  --crm-on-info-container: light-dark(#123a75, #d6e3ff);
+  --crm-danger-container: var(--mat-sys-error-container);
+  --crm-on-danger-container: var(--mat-sys-on-error-container);
+  --crm-ai-surface: color-mix(in srgb, var(--mat-sys-tertiary-container) 45%, var(--mat-sys-surface));
+  --crm-shadow: light-dark(0 1px 2px rgb(16 24 40 / 6%), 0 1px 2px rgb(0 0 0 / 40%));
+  --crm-radius: 16px;
 }
+
+html.dark-theme { color-scheme: dark; }
 
 html, body { height: 100%; }
 body {
@@ -15,26 +36,35 @@ body {
   font: var(--mat-sys-body-medium);
   background: var(--mat-sys-surface-container-lowest);
   color: var(--mat-sys-on-surface);
+  -webkit-font-smoothing: antialiased;
 }
 
 a { color: var(--mat-sys-primary); }
-h1 { font: var(--mat-sys-headline-small); margin: 0; }
+h1 { font: var(--mat-sys-headline-small); margin: 0; letter-spacing: -0.01em; }
 h3 { font: var(--mat-sys-title-medium); margin: 0; }
+::selection { background: var(--mat-sys-primary-container); color: var(--mat-sys-on-primary-container); }
+:focus-visible { outline: 2px solid var(--mat-sys-primary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+
+.skip-link { position: absolute; left: 8px; top: -48px; z-index: 1000; padding: 8px 16px; border-radius: 8px;
+  background: var(--mat-sys-primary); color: var(--mat-sys-on-primary); text-decoration: none; }
+.skip-link:focus { top: 8px; }
 
 .spacer { flex: 1 1 auto; }
 .full { width: 100%; }
 .muted { color: var(--mat-sys-on-surface-variant); }
 
-.page-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.page-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 20px; }
 .page-header h1 { display: flex; align-items: center; gap: 12px; }
 .back { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; font-size: 13px; margin-bottom: 4px; }
 
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
 .filters .search { flex: 1 1 280px; max-width: 420px; }
 
-.table-wrap { background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: 12px; overflow: auto; }
+mat-card[appearance='outlined'], .mat-mdc-card-outlined { box-shadow: var(--crm-shadow); }
+.table-wrap { background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: var(--crm-radius); overflow: auto; box-shadow: var(--crm-shadow); }
 .table-wrap table, mat-card table { width: 100%; }
-tr.clickable { cursor: pointer; }
+tr.clickable { cursor: pointer; transition: background-color 120ms ease; }
 tr.clickable:hover { background: var(--mat-sys-surface-container-low); }
 td.empty { padding: 24px; text-align: center; color: var(--mat-sys-on-surface-variant); }
 
@@ -57,19 +87,28 @@ td.empty { padding: 24px; text-align: center; color: var(--mat-sys-on-surface-va
 .banner { display: flex; align-items: center; gap: 8px; padding: 12px 16px; margin-bottom: 16px; border-radius: 12px;
   background: var(--mat-sys-tertiary-container); color: var(--mat-sys-on-tertiary-container); }
 
-button.danger { --mat-button-outlined-label-text-color: var(--mat-sys-error); --mat-button-filled-container-color: var(--mat-sys-error); }
-button.success { --mat-button-filled-container-color: #2e7d32; }
+button.danger { --mat-button-outlined-label-text-color: var(--mat-sys-error); --mat-button-filled-container-color: var(--mat-sys-error); --mat-button-filled-label-text-color: var(--mat-sys-on-error); }
+button.success { --mat-button-filled-container-color: var(--crm-success); --mat-button-filled-label-text-color: var(--mat-sys-surface); }
 .snack-error { --mat-snack-bar-container-color: var(--mat-sys-error-container); --mat-snack-bar-supporting-text-color: var(--mat-sys-on-error-container); }
+.text-success { color: var(--crm-success); }
+
+// Status pills keyed by a semantic tone via [attr.data-tone].
+.status-pill { display: inline-flex; align-items: center; gap: 4px; padding: 1px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; line-height: 20px;
+  background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface); }
+.status-pill[data-tone='success'] { background: var(--crm-success-container); color: var(--crm-on-success-container); }
+.status-pill[data-tone='warning'] { background: var(--crm-warning-container); color: var(--crm-on-warning-container); }
+.status-pill[data-tone='info'] { background: var(--crm-info-container); color: var(--crm-on-info-container); }
+.status-pill[data-tone='danger'] { background: var(--crm-danger-container); color: var(--crm-on-danger-container); }
+.status-pill[data-tone='ai'] { background: var(--mat-sys-tertiary-container); color: var(--mat-sys-on-tertiary-container); }
 
 // Status chips keyed by enum value via [attr.data-v].
 .chip { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; line-height: 20px;
   color: var(--chip-fg, var(--mat-sys-on-surface)); background: var(--chip-bg, var(--mat-sys-surface-container-high)); }
-[data-v='New'], [data-v='Prospecting'] { --chip-fg: #1565c0; --chip-bg: #e3f2fd; }
-[data-v='Contacted'], [data-v='Qualification'] { --chip-fg: #6a1b9a; --chip-bg: #f3e5f5; }
-[data-v='Qualified'], [data-v='Proposal'] { --chip-fg: #ef6c00; --chip-bg: #fff3e0; }
-[data-v='Negotiation'] { --chip-fg: #00838f; --chip-bg: #e0f7fa; }
-[data-v='Converted'], [data-v='ClosedWon'], [data-v='Active'] { --chip-fg: #2e7d32; --chip-bg: #e8f5e9; }
-[data-v='Unqualified'], [data-v='ClosedLost'], [data-v='Inactive'], [data-v='Locked'] { --chip-fg: #c62828; --chip-bg: #ffebee; }
-[data-v='High'] { --chip-fg: #c62828; --chip-bg: #ffebee; }
-[data-v='Normal'] { --chip-fg: #455a64; --chip-bg: #eceff1; }
-[data-v='Low'] { --chip-fg: #607d8b; --chip-bg: #f5f5f5; }
+[data-v='New'], [data-v='Prospecting'] { --chip-fg: var(--crm-on-info-container); --chip-bg: var(--crm-info-container); }
+[data-v='Contacted'], [data-v='Qualification'] { --chip-fg: light-dark(#6a1b9a, #e6b8f5); --chip-bg: light-dark(#f3e5f5, #45204f); }
+[data-v='Qualified'], [data-v='Proposal'] { --chip-fg: var(--crm-on-warning-container); --chip-bg: var(--crm-warning-container); }
+[data-v='Negotiation'] { --chip-fg: light-dark(#00636b, #8ce3ec); --chip-bg: light-dark(#d9f4f6, #11444a); }
+[data-v='Converted'], [data-v='ClosedWon'], [data-v='Active'] { --chip-fg: var(--crm-on-success-container); --chip-bg: var(--crm-success-container); }
+[data-v='Unqualified'], [data-v='ClosedLost'], [data-v='Inactive'], [data-v='Locked'], [data-v='High'] { --chip-fg: var(--crm-on-danger-container); --chip-bg: var(--crm-danger-container); }
+[data-v='Normal'] { --chip-fg: var(--mat-sys-on-surface-variant); --chip-bg: var(--mat-sys-surface-container-high); }
+[data-v='Low'] { --chip-fg: var(--mat-sys-on-surface-variant); --chip-bg: var(--mat-sys-surface-container); }

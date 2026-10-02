@@ -6,6 +6,7 @@ import { routes } from './app.routes';
 import { AuthService } from './core/auth.service';
 import { ReportingErrorHandler } from './core/error-reporting';
 import { authInterceptor, errorInterceptor } from './core/http';
+import { ThemeService } from './core/theme.service';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -17,5 +18,7 @@ export const appConfig: ApplicationConfig = {
       inject(MatIconRegistry).setDefaultFontSetClass('material-symbols-outlined');
     }),
     provideAppInitializer(() => inject(AuthService).restore()),
+    // Applies the saved theme before the first screen renders.
+    provideAppInitializer(() => void inject(ThemeService)),
   ]
 };

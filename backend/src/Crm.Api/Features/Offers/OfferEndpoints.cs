@@ -342,33 +342,11 @@ public static class OfferEndpoints
         app.Stage = target.Key;
     }
 
-    private static async Task<string?> EmailCandidateAsync(
-        CrmDbContext db, EmailComposer emails, CustomRecord app, Offer offer, EffectivePermissions p, string link, DateTime now, CancellationToken ct)
-    {
-        var fields = (await emails.FieldsAsync(db, ApplicationKey, ct))!;
-        var fresh = await db.CustomRecords.AsNoTracking().SingleAsync(r => r.Id == app.Id, ct);
-        var context = await emails.ContextAsync(db, fresh, ApplicationKey, p, ct);
-        foreach (var (key, value) in OfferKeys.Values(offer)) context[key] = value;
-        var to = EmailComposer.RecipientsOf(fields, context).FirstOrDefault()?.Address;
-        if (to is null) return "The candidate has no email address, so the offer wasn't emailed. Share the link with them another way.";
-        if (await emails.DailyLimitReachedAsync(db, now, ct))
-            return "Your organisation's daily email limit was reached, so the offer wasn't emailed. Share the link with them another way.";
-
-        var template = await db.EmailTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.ObjectKey == ApplicationKey && t.Name == OfferKeys.EmailTemplate, ct);
-        var subject = template?.Subject ?? OfferKeys.DefaultEmailSubject;
-        var body = template?.Body ?? OfferKeys.DefaultEmailBody;
-        if (!body.Contains("{{offer.link}}", StringComparison.Ordinal)) body += "\n\nView and respond to your offer: {{offer.link}}";
-
-        // The link answers for the candidate, so the timeline (readable by more people) gets a copy without it.
-        var timeline = EmailComposer.Render(body, new Dictionary<string, object?>(context) { [OfferKeys.LinkKey] = "[link sent to the candidate]" });
-        context[OfferKeys.LinkKey] = link;
-        var sender = await db.Users.AsNoTracking().Where(u => u.Id == p.UserId).Select(u => new { u.Email, u.FirstName, u.LastName }).SingleAsync(ct);
-        await emails.QueueAsync(db, new QueueEmail(fresh, ApplicationKey, to, EmailComposer.Render(subject, context), EmailComposer.Render(body, context),
-            TemplateId: template?.Id, SentById: p.UserId, SentByName: $"{sender.FirstName} {sender.LastName}".Trim(),
-            ReplyTo: EmailText.Address(sender.Email), TimelineBody: timeline), now, ct);
-        await db.SaveChangesAsync(ct);
-        return null;
-    }
+    private static Task<string?> EmailCandidateAsync(
+        CrmDbContext db, EmailComposer emails, CustomRecord app, Offer offer, EffectivePermissions p, string link, DateTime now, CancellationToken ct) =>
+        emails.QueueCandidateLinkAsync(db, app, ApplicationKey, p, new CandidateLinkEmail(
+            OfferKeys.EmailTemplate, OfferKeys.DefaultEmailSubject, OfferKeys.DefaultEmailBody, OfferKeys.LinkKey, link,
+            "View and respond to your offer", OfferKeys.Values(offer), "offer"), now, ct);
 
     private static async Task<IResult> Withdraw(Guid id, WithdrawOfferRequest req, Access access, CrmDbContext db, TimeProvider clock, CancellationToken ct)
     {

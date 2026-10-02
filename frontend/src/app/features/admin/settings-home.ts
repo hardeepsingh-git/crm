@@ -27,6 +27,7 @@ const AREAS: SettingsArea[] = [
   { path: 'email-templates', title: 'Email templates', description: 'Reusable emails for records and automation, with placeholders.', icon: 'drafts', resource: 'customization', action: 'manage' },
   { path: 'emails', title: 'Email log', description: 'Every email sent, its delivery status, and retries.', icon: 'outgoing_mail', resource: 'settings', action: 'manage' },
   { path: 'privacy', title: 'Privacy', description: 'How long candidates are kept, and their data requests.', icon: 'privacy_tip', resource: 'settings', action: 'manage', requires: 'candidate' },
+  { path: 'mock-interviews', title: 'Mock interviews', description: 'Practice question library and AI feedback for candidates’ practice rounds.', icon: 'quiz', resource: 'settings', action: 'manage', requires: 'application' },
   { path: 'audit', title: 'Audit log', description: 'Who changed what, and when.', icon: 'history', resource: 'audit', action: 'read' },
 ];
 

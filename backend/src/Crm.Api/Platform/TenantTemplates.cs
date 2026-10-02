@@ -3,6 +3,7 @@ using Crm.Api.Automation;
 using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
+using Crm.Api.Features.MockInterviews;
 using Crm.Api.Features.Offers;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,7 +23,7 @@ public static class TenantTemplates
     [
         new(Sales, "Sales CRM", "Accounts, contacts, leads, opportunity pipeline and sales automation."),
         new(HelpDesk, "Help Desk", "Customers, contacts and a ticket pipeline with priority-based alerts."),
-        new(Recruitment, "Recruitment (ATS)", "Job openings, a public careers page, a candidate talent pool, an application pipeline per job, interviews with scorecards, online offers, hiring analytics, candidate emails and privacy tools."),
+        new(Recruitment, "Recruitment (ATS)", "Job openings, a public careers page, a candidate talent pool, an application pipeline per job, interviews with scorecards, mock interviews for candidates to practise, online offers, hiring analytics, candidate emails and privacy tools."),
         new(Blank, "Blank", "Standard objects and roles only. Build your own configuration."),
     ];
 
@@ -40,7 +41,7 @@ public static class TenantTemplates
     public static readonly string[] DefaultLeadSources = ["Web", "Referral", "Event", "ColdCall", "Advertisement", "Partner", "Other"];
 
     /// <summary>Latest revision of each template. Raising it makes startup apply the template's new pieces to existing tenants once.</summary>
-    public static int CurrentVersion(string template) => template == Recruitment ? 6 : 1;
+    public static int CurrentVersion(string template) => template == Recruitment ? 7 : 1;
 
     /// <summary>
     /// Brings tenants created from an older template revision up to date. Only missing objects, fields, stages and rules are
@@ -197,6 +198,8 @@ public static class TenantTemplates
                     description: "Your talent pool: everyone who has applied or been sourced.");
                 Object("application", "Application", "Applications", "assignment_ind", 20, pipeline: true, standard: false,
                     nameLabel: "Candidate name", description: "A candidate applying for a job opening, moving through your hiring stages.");
+                Object(MockKeys.QuestionObject, "Practice question", "Practice questions", "quiz", 25, standard: false, nameLabel: "Question",
+                    description: "Your organisation's question library for mock interviews that candidates take to prepare.");
                 Object(ObjectKeys.Activity, "Activity", "Activities", "event_note", 90);
                 Stages(ObjectKeys.Opportunity, salesStages);
                 Picklist("interview.criteria", ["Skills", "Experience", "Communication", "Problem solving", "Culture fit"]);
@@ -245,6 +248,16 @@ public static class TenantTemplates
                 Field("application", "interview_date", "Next interview", FieldType.DateTime, 7);
                 Field("application", "feedback", "Interview feedback", FieldType.TextArea, 8);
                 Field("application", "cover_note", "Cover note", FieldType.TextArea, 9);
+
+                const string q = MockKeys.QuestionObject;
+                Field(q, "competency", "Competency", FieldType.Picklist, 1, list: true, options: MockKeys.Competencies);
+                Field(q, "position", "Job opening", FieldType.Lookup, 2, list: true, lookup: "position",
+                    help: "Leave blank to offer this question for every job.");
+                Field(q, "minutes", "Suggested minutes", FieldType.Number, 3, list: true, min: 1, max: 30);
+                Field(q, "details", "More detail", FieldType.TextArea, 4, help: "Optional context shown to the candidate under the question.");
+                Field(q, "guidance", "Model answer and tips", FieldType.TextArea, 5,
+                    help: "Shown to the candidate after they answer, and used to guide AI feedback.");
+                Field(q, "retired", "Retired", FieldType.Boolean, 6, list: true, help: "Retired questions aren't offered for new mock interviews.");
                 Rule("Schedule interview", "application", AutomationTrigger.StageChanged,
                     [new("stage", ConditionOperator.Equals, "interview")],
                     [new(AutomationActionType.CreateTask, Subject: "Schedule interview with {{name}}", DueInDays: 2, Priority: ActivityPriority.High)]);
@@ -273,6 +286,7 @@ public static class TenantTemplates
                     "{{owner.name}} will be in touch shortly with the details." + signOff);
                 Template(OfferKeys.LetterTemplate, "application", "Offer of employment: {{offer.job_title}}", OfferKeys.DefaultLetter);
                 Template(OfferKeys.EmailTemplate, "application", OfferKeys.DefaultEmailSubject, OfferKeys.DefaultEmailBody);
+                Template(MockKeys.EmailTemplate, "application", MockKeys.DefaultEmailSubject, MockKeys.DefaultEmailBody);
 
                 // Emails to candidates start switched off: admins review the wording and turn them on.
                 Rule("Acknowledge new applications", "application", AutomationTrigger.Created, [],

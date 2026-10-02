@@ -8,6 +8,7 @@ using Crm.Api.Common;
 using Crm.Api.Data;
 using Crm.Api.Domain;
 using Crm.Api.Features.Attachments;
+using Crm.Api.Features.MockInterviews;
 using Crm.Api.Features.Offers;
 using Crm.Api.Files;
 using Crm.Api.Messaging;
@@ -112,6 +113,7 @@ public static class PrivacyEndpoints
         var interviews = await db.Interviews.AsNoTracking().Include(i => i.Scorecards).Where(i => appIds.Contains(i.ApplicationId))
             .OrderBy(i => i.ScheduledAt).ToListAsync(ct);
         var offers = await db.Offers.AsNoTracking().Where(o => appIds.Contains(o.ApplicationId)).OrderBy(o => o.CreatedAt).ToListAsync(ct);
+        var mocks = await db.MockInterviews.AsNoTracking().Where(m => appIds.Contains(m.ApplicationId)).OrderBy(m => m.CreatedAt).ToListAsync(ct);
         var activities = await db.Activities.AsNoTracking().Where(a => a.CustomRecordId != null && recordIds.Contains(a.CustomRecordId.Value))
             .OrderBy(a => a.CreatedAt).ToListAsync(ct);
         var email = EmailText.Address(Cf.AsText(Cf.Parse(candidate.CustomFields)["email"]));
@@ -141,6 +143,22 @@ public static class PrivacyEndpoints
                 {
                     o.JobTitle, o.Status, o.Salary, o.Currency, o.PayPeriod, o.StartDate, o.ExpiresAt, o.SentAt, o.RespondedAt, o.SignedName,
                     o.DeclineReason, o.Letter,
+                }),
+                MockInterviews = mocks.Where(m => m.ApplicationId == a.Id).Select(m =>
+                {
+                    var answers = MockJson.Answers(m);
+                    var ai = m.AiStatus == AiReviewStatus.Completed ? MockJson.Feedback(m) : null;
+                    return new
+                    {
+                        m.JobTitle, m.Status, m.SentAt, m.StartedAt, m.SubmittedAt,
+                        Questions = MockJson.Questions(m).Select(q => new
+                        {
+                            q.Prompt, Answer = answers.GetValueOrDefault(q.Id)?.Text, SelfRating = answers.GetValueOrDefault(q.Id)?.Rating,
+                            AiFeedback = ai?.Questions.FirstOrDefault(f => f.Id == q.Id)?.Feedback,
+                        }),
+                        Review = m.ReviewedAt is null ? null : new { Reviewer = "Hiring team", m.ReadinessRating, m.ReviewNotes, m.ReviewedAt },
+                        AiReview = ai is null ? null : new { Score = m.AiScore, ai.Summary, ai.Strengths, ai.Improvements, m.AiReviewedAt },
+                    };
                 }),
             }),
             Activities = activities.Select(a => new { a.Type, a.Subject, a.Description, a.DueAt, a.CompletedAt, a.CreatedAt }),
@@ -183,7 +201,7 @@ public static class PrivacyEndpoints
     }
 
     /// <summary>
-    /// Deletes a candidate with their applications, interviews, scorecards, offers, timeline, files, emails and notifications,
+    /// Deletes a candidate with their applications, interviews, scorecards, offers, mock interviews, timeline, files, emails and notifications,
     /// and blanks their names and values in the audit log, leaving one <see cref="AuditAction.Erased"/> entry without personal data.
     /// </summary>
     public static async Task<ErasureResult> EraseAsync(CrmDbContext db, CustomRecord candidate, string reason, DateTime now, CancellationToken ct)
@@ -195,6 +213,7 @@ public static class PrivacyEndpoints
         var interviewIds = await db.Interviews.Where(i => appIds.Contains(i.ApplicationId)).Select(i => i.Id).ToListAsync(ct);
         var scorecardIds = await db.Scorecards.Where(s => interviewIds.Contains(s.InterviewId)).Select(s => s.Id).ToListAsync(ct);
         var offerIds = await db.Offers.Where(o => appIds.Contains(o.ApplicationId)).Select(o => o.Id).ToListAsync(ct);
+        var mockIds = await db.MockInterviews.Where(m => appIds.Contains(m.ApplicationId)).Select(m => m.Id).ToListAsync(ct);
         var files = await db.Attachments.CountAsync(a => recordIds.Contains(a.RecordId), ct);
         var email = EmailText.Address(Cf.AsText(Cf.Parse(candidate.CustomFields)["email"]));
         var links = recordIds.SelectMany(rid => new[] { $"/o/{CandidateKey}/{rid}", $"/o/{ApplicationKey}/{rid}" }).ToList();
@@ -206,10 +225,10 @@ public static class PrivacyEndpoints
         db.Activities.RemoveRange(activities);
         db.CustomRecords.RemoveRange(apps);
         db.CustomRecords.Remove(candidate);
-        // Files go with their records; interviews, scorecards and offers cascade from the applications.
+        // Files go with their records; interviews, scorecards, offers and mock interviews cascade from the applications.
         await db.SaveChangesAsync(ct);
 
-        var erased = recordIds.Concat(activities.Select(a => a.Id)).Concat(interviewIds).Concat(scorecardIds).Concat(offerIds).ToList();
+        var erased = recordIds.Concat(activities.Select(a => a.Id)).Concat(interviewIds).Concat(scorecardIds).Concat(offerIds).Concat(mockIds).ToList();
         foreach (var chunk in erased.Chunk(1000))
             await db.AuditLogs.Where(a => chunk.Contains(a.EntityId))
                 .ExecuteUpdateAsync(s => s.SetProperty(a => a.EntityName, ErasedName).SetProperty(a => a.Changes, "{}"), ct);

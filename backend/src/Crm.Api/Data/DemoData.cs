@@ -144,7 +144,7 @@ public static class DemoData
         string[] ats = ["position", "candidate", "application"];
         var hasAts = ats.All(Active);
         if (hasAts) customRecords.AddRange(await SeedRecruitmentAsync(db, objects, accounts, owners, rnd, now, ct));
-        foreach (var definition in objects.Where(o => !o.IsStandard && o.IsActive && !(hasAts && ats.Contains(o.Key))).OrderBy(o => o.SortOrder))
+        foreach (var definition in objects.Where(o => !o.IsStandard && o.IsActive && !(hasAts && ats.Contains(o.Key)) && o.Key != Features.MockInterviews.MockKeys.QuestionObject).OrderBy(o => o.SortOrder))
         {
             var stages = await db.PipelineStages.Where(s => s.ObjectKey == definition.Key).OrderBy(s => s.SortOrder).ToListAsync(ct);
             for (var i = 0; i < 8; i++)
@@ -295,7 +295,48 @@ public static class DemoData
         }
         await SeedInterviewsAsync(db, applications, rnd, now, ct);
         await SeedOffersAsync(db, applications, jobs, rnd, now, ct);
-        return [.. jobs, .. people, .. applications];
+        var questions = objects.FirstOrDefault(o => o.Key == Features.MockInterviews.MockKeys.QuestionObject) is { } library
+            ? Features.MockInterviews.MockInterviewEndpoints.StarterRecords(library, owners[0].Id).ToList()
+            : [];
+        if (questions.Count > 0) SeedMockInterviews(db, applications, jobs, rnd, now);
+        return [.. jobs, .. people, .. applications, .. questions];
+    }
+
+    /// <summary>A reviewed practice interview for an application at Interview, and one waiting for a candidate at Screening. Demo links are never usable.</summary>
+    private static void SeedMockInterviews(CrmDbContext db, List<CustomRecord> applications, List<CustomRecord> jobs, Random rnd, DateTime now)
+    {
+        var titles = jobs.ToDictionary(j => j.Id.ToString(), j => j.Name);
+        var questions = Features.MockInterviews.MockKeys.StarterQuestions.Take(4)
+            .Select((q, i) => new Features.MockInterviews.MockQuestion($"q{i + 1}", q.Prompt, null, q.Competency, q.Guidance, q.Minutes)).ToList();
+        string[] sampleAnswers =
+        [
+            "I'm a developer with five years' experience building customer-facing web apps. I recently led a migration that cut page load times by 40%, and I'm keen to bring that focus on users to your team.",
+            "Our nightly billing job kept timing out. I profiled it, found an N+1 query, batched the reads and added an index. Runtime dropped from 3 hours to 12 minutes and we stopped missing invoices.",
+            "A colleague wanted to ship without tests. I listened to the deadline pressure, then proposed covering only the riskiest paths. We shipped on time and caught a bug before release.",
+        ];
+        foreach (var (app, submitted) in new[] { (applications.FirstOrDefault(a => a.Stage == "interview"), true), (applications.FirstOrDefault(a => a.Stage == "screening"), false) })
+        {
+            if (app is null) continue;
+            var sent = now.AddDays(-rnd.Next(2, 6));
+            var mock = new MockInterview
+            {
+                ApplicationId = app.Id, JobTitle = titles.GetValueOrDefault(Cf.AsText(Cf.Parse(app.CustomFields)["position"]) ?? "", "the role"),
+                Questions = Features.MockInterviews.MockJson.Serialize(questions), SentById = app.OwnerId, SentAt = sent, ExpiresAt = sent.AddDays(14),
+                TokenHash = Features.Offers.OfferEndpoints.HashToken(Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N")),
+                Message = "A short practice round to help you prepare. There are no trick questions.",
+            };
+            if (submitted)
+            {
+                mock.Status = MockInterviewStatus.Submitted;
+                mock.StartedAt = sent.AddDays(1);
+                mock.SubmittedAt = mock.StartedAt.Value.AddMinutes(18);
+                mock.Answers = Features.MockInterviews.MockJson.Serialize(sampleAnswers.Select((text, i) => (Id: $"q{i + 1}", text))
+                    .ToDictionary(x => x.Id, x => new Features.MockInterviews.MockAnswer(x.text, rnd.Next(3, 6), rnd.Next(90, 300), mock.SubmittedAt.Value)));
+                (mock.ReadinessRating, mock.ReviewNotes, mock.ReviewedById, mock.ReviewedAt) =
+                    (4, "Structured, concrete answers with measurable results. Probe system design depth in the real interview.", app.OwnerId, mock.SubmittedAt.Value.AddHours(3));
+            }
+            db.MockInterviews.Add(mock);
+        }
     }
 
     /// <summary>An open offer for applications at Offer, and an accepted one for hires. Demo links are never usable.</summary>

@@ -13,6 +13,7 @@ PostgreSQL database **`CRM`**, schema `public`. The schema is created by these E
 | `20261001071143_Phase3CareersAndExport` | `Tenants.CareersEnabled` (default false) and `Tenants.CareersIntro`. No data changes; recruitment tenants then get template v4 at startup. |
 | `20261001081829_Phase4InterviewsAndAnalytics` | New tables `Interviews`, `InterviewParticipants`, `Scorecards`. No changes to existing tables; recruitment tenants then get template v5 at startup. |
 | `20261001091146_Phase5OffersAndPrivacy` | New table `Offers`; `Tenants.CandidateRetentionMonths` (nullable, no policy by default). No data changes; recruitment tenants then get template v6 at startup. |
+| `20261002023140_Phase6MockInterviews` | New table `MockInterviews`; `Tenants.MockAiReviewEnabled` (default false), `Tenants.MockAiTrigger` (default `Manual`), `Tenants.MockAiInstructions` (nullable); `AspNetUsers.ThemePreference` (default `System`). No data changes; recruitment tenants then get template v7 at startup. |
 
 The equivalent idempotent DDL is [`backend/database/crm-schema.sql`](../backend/database/crm-schema.sql).
 
@@ -113,6 +114,7 @@ All have `Id`, `TenantId`, `OwnerId` (FK RESTRICT), **`CustomFields jsonb NOT NU
 | `InterviewParticipants` | PK `(InterviewId, UserId)`, both FK CASCADE; `ActivityId` | The interviewers. `ActivityId` is the *Meeting* activity on the interviewer's calendar (removed when they're taken off or the interview is cancelled). |
 | `Scorecards` | `TenantId`, `InterviewId` FK (CASCADE), `InterviewerId`, `Recommendation` (StrongNo/No/Yes/StrongYes), `Ratings` jsonb, `Notes`(4000), `SubmittedAt` | **Unique `(InterviewId, InterviewerId)`**: one scorecard per interviewer; resubmitting replaces it. |
 | `Offers` | `TenantId`, `ApplicationId` FK to `CustomRecords` (CASCADE), `Status` (Draft/Sent/Accepted/Declined/Withdrawn/Expired), `JobTitle`(200), `Salary` numeric(18,2), `Currency`(3), `PayPeriod` (Year/Month/Hour), `StartDate` date, `ExpiresAt`, `Letter`(20000), `Notes`(2000, internal), `CreatedById`, `TokenHash`(64), `SentAt`, `SentById`, `RespondedAt`, `SignedName`(200), `ResponseIp`(64), `ResponseUserAgent`(500), `DeclineReason`(2000) | **Unique `TokenHash`** (SHA-256 of the candidate's link token; the token itself is never stored). **Filtered unique `ApplicationId` where `Status IN ('Draft','Sent')`** (`IX_Offers_ApplicationId_Active`): at most one open offer per application, even under concurrent requests. Indexes `(TenantId, Status)`, `(TenantId, ApplicationId)`. `TokenHash` is never written to the audit log. |
+| `MockInterviews` | `TenantId`, `ApplicationId` FK to `CustomRecords` (CASCADE), `Status` (Sent/InProgress/Submitted/Expired/Withdrawn), `JobTitle`(200), `Message`(2000), `Questions` jsonb (snapshot: `[{ id, prompt, details, competency, guidance, minutes }]`), `Answers` jsonb (`{ q1: { text, rating, seconds, answeredAt } }`), `ExpiresAt`, `TokenHash`(64), `SentById`, `SentAt`, `StartedAt`, `SubmittedAt`, `ReviewedById`, `ReviewedAt`, `ReadinessRating`, `ReviewNotes`(4000), `AiStatus` (NotRequested/Pending/Completed/Failed), `AiRequestedAt`, `AiReviewedAt`, `AiLockedUntil`, `AiModel`(100), `AiScore` numeric(3,1), `AiFeedback` jsonb (`{ summary, strengths[], improvements[], questions: [{ id, score, feedback }] }`), `AiError`(1000) | **Unique `TokenHash`**. **Filtered unique `ApplicationId` where `Status IN ('Sent','InProgress')`** (`IX_MockInterviews_ApplicationId_Open`). Indexes `(TenantId, ApplicationId)`, `(AiStatus, AiRequestedAt)` for the background reviewer. `Questions`, `Answers`, `AiFeedback`, `AiLockedUntil` and `TokenHash` are never written to the audit log. |
 
 ## 3. JSON columns
 
@@ -166,6 +168,8 @@ CREATE INDEX IF NOT EXISTS "IX_CustomRecords_CustomFields" ON "CustomRecords" US
 | InterviewKind / InterviewStatus | Phone, Video, Onsite / Scheduled, Completed, Cancelled |
 | Recommendation | StrongNo, No, Yes, StrongYes |
 | OfferStatus / PayPeriod | Draft, Sent, Accepted, Declined, Withdrawn, Expired / Year, Month, Hour |
+| MockInterviewStatus / AiReviewStatus | Sent, InProgress, Submitted, Expired, Withdrawn / NotRequested, Pending, Completed, Failed |
+| AiReviewTrigger / ThemePreference | Manual, OnSubmit / System, Light, Dark |
 | LeadStatus | New, Contacted, Qualified, Unqualified, Converted |
 | ActivityType / ActivityPriority | Task, Call, Meeting, Email, Note / Low, Normal, High |
 
@@ -206,9 +210,11 @@ Recruitment **v5** adds the `interview.criteria` picklist (*Skills*, *Experience
 
 Recruitment **v6** adds two application email templates: *Offer letter* (the default letter for new offers) and *Offer email* (sent with the candidate's link). Both can use the offer placeholders `{{offer.job_title}}`, `{{offer.salary}}`, `{{offer.start_date}}`, `{{offer.expires}}` and, in the offer email, `{{offer.link}}`.
 
+Recruitment **v7** adds the *Practice questions* object (`mock_question`: name = the question; fields `competency` picklist, `position` lookup to job openings, `minutes`, `details`, `guidance`, `retired`) and the *Mock interview invitation* email template with `{{mock.job_title}}`, `{{mock.questions}}`, `{{mock.expires}}` and `{{mock.link}}`. The library starts empty in upgraded tenants; **Add starter questions** fills it.
+
 ## 6a. Erasure and the audit log
 
-Erasing a candidate (on request or by the retention policy) deletes the candidate, their applications and everything that cascades from them (interviews, participants, scorecards, offers, activities, attachments and stored files), their outbound emails (by record or address) and notifications linking to them. Audit rows for all of those ids keep their action, user and time but get `EntityName = '[erased]'` and `Changes = '{}'`. One `Erased` row (no personal data) records the reason and counts.
+Erasing a candidate (on request or by the retention policy) deletes the candidate, their applications and everything that cascades from them (interviews, participants, scorecards, offers, mock interviews, activities, attachments and stored files), their outbound emails (by record or address) and notifications linking to them. Audit rows for all of those ids keep their action, user and time but get `EntityName = '[erased]'` and `Changes = '{}'`. One `Erased` row (no personal data) records the reason and counts.
 
 ## 7. Schema changes
 

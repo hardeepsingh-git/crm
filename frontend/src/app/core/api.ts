@@ -56,6 +56,12 @@ import {
   OfferSent,
   RetentionRun,
   RetentionStatus,
+  MockAnswerSaved,
+  MockInterviewItem,
+  MockInviteSent,
+  MockSettings,
+  AiReviewTrigger,
+  ThemePreference,
   VerificationChannel,
   VerifyResponse,
 } from './models';
@@ -491,6 +497,52 @@ export class CrmApi {
 
   runRetention(): Observable<RetentionRun> {
     return this.http.post<RetentionRun>('/api/privacy/retention/run', null);
+  }
+
+  // ---------- Mock interviews ----------
+
+  addStarterQuestions(): Observable<{ added: number }> {
+    return this.http.post<{ added: number }>('/api/mock-interviews/library/starter', null);
+  }
+
+  inviteToMockInterview(body: { applicationId: string; questionIds: string[]; validDays: number; message: string | null }): Observable<MockInviteSent> {
+    return this.http.post<MockInviteSent>('/api/mock-interviews', body);
+  }
+
+  resendMockInterview(id: string): Observable<MockInviteSent> {
+    return this.http.post<MockInviteSent>(`/api/mock-interviews/${id}/resend`, null);
+  }
+
+  withdrawMockInterview(id: string, reason: string | null): Observable<MockInterviewItem> {
+    return this.http.post<MockInterviewItem>(`/api/mock-interviews/${id}/withdraw`, { reason });
+  }
+
+  reviewMockInterview(id: string, body: { readinessRating: number | null; notes: string | null }): Observable<MockInterviewItem> {
+    return this.http.put<MockInterviewItem>(`/api/mock-interviews/${id}/review`, body);
+  }
+
+  requestAiReview(id: string): Observable<MockInterviewItem> {
+    return this.http.post<MockInterviewItem>(`/api/mock-interviews/${id}/ai-review`, null);
+  }
+
+  saveMockSettings(body: { aiReviewEnabled: boolean; aiTrigger: AiReviewTrigger; aiInstructions: string | null }): Observable<MockSettings> {
+    return this.http.put<MockSettings>('/api/mock-interviews/settings', body);
+  }
+
+  // ---------- Mock interview (anonymous) ----------
+
+  saveMockAnswer(token: string, questionId: string, body: { text: string; rating: number | null; seconds: number | null }): Observable<MockAnswerSaved> {
+    return this.http.put<MockAnswerSaved>(`/api/mock-response/${encodeURIComponent(token)}/answers/${encodeURIComponent(questionId)}`, body);
+  }
+
+  submitMockInterview(token: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`/api/mock-response/${encodeURIComponent(token)}/submit`, null);
+  }
+
+  // ---------- Preferences ----------
+
+  savePreferences(body: { theme: ThemePreference }): Observable<void> {
+    return this.http.put<void>('/api/auth/me/preferences', body);
   }
 }
 

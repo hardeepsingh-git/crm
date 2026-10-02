@@ -18,6 +18,7 @@ import { confirm } from '../../shared/confirm-dialog';
 import { CustomFieldsView } from '../../shared/custom-fields';
 import { RecordHistory, StageChip, StagePath } from '../../shared/record-widgets';
 import { InterviewsPanel } from '../recruiting/interviews';
+import { MockInterviewsPanel } from '../recruiting/mock-interviews';
 import { OffersPanel } from '../recruiting/offers';
 import { CandidatePrivacyActions } from '../admin/privacy';
 import { RecordFormDialog } from './record-form-dialog';
@@ -25,7 +26,7 @@ import { RelatedRecords } from './related-records';
 
 @Component({
   selector: 'app-record-detail',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CandidatePrivacyActions, CustomFieldsView, InterviewsPanel, OffersPanel, RecordHistory, RelatedRecords, StageChip, StagePath],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatIconModule, MatProgressBarModule, ActivityPanel, AttachmentsPanel, CandidatePrivacyActions, CustomFieldsView, InterviewsPanel, MockInterviewsPanel, OffersPanel, RecordHistory, RelatedRecords, StageChip, StagePath],
   template: `
     @if (record.isLoading() && !r()) { <mat-progress-bar mode="indeterminate" /> }
     @if (record.error()) { <p class="muted">Record not found or you do not have access to it.</p> }
@@ -82,6 +83,9 @@ import { RelatedRecords } from './related-records';
         </mat-card-content></mat-card>
         @if (auth.canModify(obj.key, r.ownerId)) {
           <mat-card appearance="outlined" class="interviews"><mat-card-content>
+            <app-mock-interviews-panel [applicationId]="r.id" (updated)="interviewsChanged()" />
+          </mat-card-content></mat-card>
+          <mat-card appearance="outlined" class="interviews"><mat-card-content>
             <app-offers-panel [applicationId]="r.id" (updated)="interviewsChanged()" />
           </mat-card-content></mat-card>
         }
@@ -89,6 +93,7 @@ import { RelatedRecords } from './related-records';
       <app-related-records [objectKey]="obj.key" [recordId]="r.id" [recordName]="r.name" />
     }
   `,
+  styles: `.interviews { margin-top: 16px; }`,
 })
 export class RecordDetailPage {
   readonly objectKey = input.required<string>();

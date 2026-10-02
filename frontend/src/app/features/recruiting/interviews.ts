@@ -60,8 +60,8 @@ export function canGiveFeedback(i: InterviewItem, now = new Date()): boolean {
     .card { padding: 8px 0; border-top: 1px dashed var(--mat-sys-outline-variant); }
     .head { display: flex; gap: 8px; align-items: center; }
     .rec { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--mat-sys-surface-container-high); }
-    .rec.StrongYes, .rec.Yes { background: #d7f5dd; color: #145a24; }
-    .rec.StrongNo, .rec.No { background: #fbdcdc; color: #8a1c1c; }
+    .rec.StrongYes, .rec.Yes { background: var(--crm-success-container); color: var(--crm-on-success-container); }
+    .rec.StrongNo, .rec.No { background: var(--crm-danger-container); color: var(--crm-on-danger-container); }
     .ratings { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; margin-top: 4px; }
     .notes { white-space: pre-wrap; margin-top: 4px; font-size: 14px; }
   `,
@@ -332,7 +332,7 @@ abstract class InterviewActions {
     .title { font-weight: 500; }
     .status { font-size: 12px; font-weight: normal; margin-left: 6px; padding: 1px 8px; border-radius: 10px; background: var(--mat-sys-surface-container-high); }
     .small { font-size: 13px; }
-    .ok { color: #2e7d32; vertical-align: middle; }
+    .ok { color: var(--crm-success); vertical-align: middle; }
     .notes { white-space: pre-wrap; font-size: 14px; margin-top: 4px; }
     .blind { margin: 4px 0 0 36px; }
   `,

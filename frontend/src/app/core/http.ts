@@ -32,7 +32,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 /** Surfaces unexpected failures globally. 400 (validation), 401 (auth), auth and public (careers, offer) endpoints are handled by callers. */
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const notify = inject(NotifyService);
-  const quiet = ['/api/auth/', '/api/careers/', '/api/offer-response/'].some((prefix) => req.url.startsWith(prefix));
+  const quiet = ['/api/auth/', '/api/careers/', '/api/offer-response/', '/api/mock-response/'].some((prefix) => req.url.startsWith(prefix));
   return next(req).pipe(
     catchError((err: unknown) => {
       if (err instanceof HttpErrorResponse && err.status !== 400 && err.status !== 401 && !quiet) notify.error(err);

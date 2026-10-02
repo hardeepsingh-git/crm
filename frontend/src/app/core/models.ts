@@ -63,7 +63,10 @@ export interface UserInfo {
   isPlatformAdmin: boolean;
   permissions: Record<string, Record<string, PermissionScope>>;
   teamUserIds: string[];
+  theme?: ThemePreference;
 }
+
+export type ThemePreference = 'System' | 'Light' | 'Dark';
 
 export interface AuthResponse {
   accessToken: string;
@@ -487,12 +490,25 @@ export interface PlatformSettings {
   smsSenderId: string | null;
   smsAuthHeader: string;
   smsAuthScheme: string;
+  aiProvider?: AiProvider;
+  aiEndpoint?: string | null;
+  aiModel?: string | null;
+  aiApiVersion?: string | null;
+  aiApiKeyName?: string;
+  aiTimeoutSeconds?: number;
+  aiMaxRetries?: number;
+  aiMaxOutputTokens?: number;
+  aiTemperature?: number;
 }
+
+export type AiProvider = 'None' | 'OpenAI' | 'AzureOpenAI';
 
 export interface PlatformSettingsView {
   settings: PlatformSettings;
   smtpPasswordConfigured: boolean;
   smsApiKeyConfigured: boolean;
+  aiServerEnabled?: boolean;
+  aiKeyConfigured?: boolean;
 }
 
 export interface Grant {
@@ -821,6 +837,17 @@ export interface HiringAnalytics {
   interviewsNext7Days: number;
   feedbackOutstanding: number;
   offers: OfferStats;
+  mock?: MockStats | null;
+}
+
+export interface MockStats {
+  sent: number;
+  started: number;
+  submitted: number;
+  completionRate: number | null;
+  averageMinutes: number | null;
+  averageSelfRating: number | null;
+  averageReadiness: number | null;
 }
 
 export interface OfferStats {
@@ -936,4 +963,125 @@ export interface RetentionStatus {
 export interface RetentionRun {
   erased: number;
   remaining: number;
+}
+
+// ---------- Mock interviews ----------
+
+export type MockInterviewStatus = 'Sent' | 'InProgress' | 'Submitted' | 'Expired' | 'Withdrawn';
+export type AiReviewStatus = 'NotRequested' | 'Pending' | 'Completed' | 'Failed';
+export type AiReviewTrigger = 'Manual' | 'OnSubmit';
+
+export interface LibraryQuestion {
+  id: string;
+  prompt: string;
+  competency: string | null;
+  minutes: number | null;
+  forThisJob: boolean;
+}
+
+export interface QuestionLibrary {
+  available: boolean;
+  canAdd: boolean;
+  questions: LibraryQuestion[];
+}
+
+export interface MockQuestion {
+  id: string;
+  prompt: string;
+  details: string | null;
+  competency: string | null;
+  guidance: string | null;
+  minutes: number | null;
+}
+
+export interface MockAnswer {
+  text: string;
+  rating: number | null;
+  seconds: number | null;
+  answeredAt: string;
+}
+
+export interface MockQuestionResult {
+  question: MockQuestion;
+  answer: MockAnswer | null;
+  ai: { id: string; score: number; feedback: string } | null;
+}
+
+export interface MockInterviewItem {
+  id: string;
+  applicationId: string;
+  status: MockInterviewStatus;
+  jobTitle: string;
+  message: string | null;
+  sentAt: string;
+  sentByName: string;
+  expiresAt: string;
+  startedAt: string | null;
+  submittedAt: string | null;
+  questionCount: number;
+  answeredCount: number;
+  averageSelfRating: number | null;
+  minutesTaken: number | null;
+  questions: MockQuestionResult[];
+  readinessRating: number | null;
+  reviewNotes: string | null;
+  reviewedByName: string | null;
+  reviewedAt: string | null;
+  aiStatus: AiReviewStatus;
+  aiScore: number | null;
+  aiSummary: string | null;
+  aiStrengths: string[];
+  aiImprovements: string[];
+  aiModel: string | null;
+  aiReviewedAt: string | null;
+  aiError: string | null;
+}
+
+export interface MockInterviewList {
+  items: MockInterviewItem[];
+  aiAvailable: boolean;
+  aiUnavailableReason: string | null;
+}
+
+export interface MockInviteSent {
+  interview: MockInterviewItem;
+  link: string;
+  emailNote: string | null;
+}
+
+export interface MockSettings {
+  aiReviewEnabled: boolean;
+  aiTrigger: AiReviewTrigger;
+  aiInstructions: string | null;
+  aiConnectionReady: boolean;
+  aiConnectionProblem: string | null;
+  libraryAvailable: boolean;
+}
+
+export interface PublicMockQuestion {
+  id: string;
+  prompt: string;
+  details: string | null;
+  competency: string | null;
+  minutes: number | null;
+  answer: string | null;
+  rating: number | null;
+  guidance: string | null;
+}
+
+export interface PublicMockInterview {
+  organisation: string;
+  candidateName: string;
+  jobTitle: string;
+  message: string | null;
+  status: MockInterviewStatus;
+  expiresAt: string;
+  submittedAt: string | null;
+  questions: PublicMockQuestion[];
+}
+
+export interface MockAnswerSaved {
+  guidance: string | null;
+  answered: number;
+  total: number;
 }

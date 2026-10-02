@@ -13,6 +13,7 @@ export const routes: Routes = [
   { path: 'careers/:slug', title: 'Careers', loadComponent: () => import('./features/careers/careers').then((m) => m.CareersPageView) },
   { path: 'careers/:slug/:jobId', title: 'Careers', loadComponent: () => import('./features/careers/careers').then((m) => m.CareerJobView) },
   { path: 'offer/:token', title: 'Your job offer', loadComponent: () => import('./features/offer/offer-response').then((m) => m.OfferResponsePage) },
+  { path: 'mock/:token', title: 'Practice interview', loadComponent: () => import('./features/mock/mock-session').then((m) => m.MockSessionPage) },
   {
     path: '',
     canActivate: [authGuard],
@@ -59,6 +60,7 @@ export const routes: Routes = [
               { path: 'email-templates', title: 'Email templates | CRM', canActivate: [customize], loadComponent: () => import('./features/admin/email-templates').then((m) => m.EmailTemplates) },
               { path: 'emails', title: 'Email log | CRM', canActivate: [permissionGuard('settings', 'manage')], loadComponent: () => import('./features/admin/email-log').then((m) => m.EmailLog) },
               { path: 'privacy', title: 'Privacy | CRM', canActivate: [permissionGuard('settings', 'manage')], loadComponent: () => import('./features/admin/privacy').then((m) => m.PrivacySettings) },
+              { path: 'mock-interviews', title: 'Mock interviews | CRM', canActivate: [permissionGuard('settings', 'manage')], loadComponent: () => import('./features/admin/mock-settings').then((m) => m.MockInterviewSettings) },
               { path: 'audit', title: 'Audit log | CRM', canActivate: [permissionGuard('audit', 'read')], loadComponent: () => import('./features/admin/audit-log').then((m) => m.AuditLog) },
             ],
           },
